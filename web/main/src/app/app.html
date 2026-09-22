@@ -1,1 +1,96 @@
-{{ result() }}
+<div class="page">
+  <header class="toolbar">
+    <div class="toolbar__title">
+      <h1>关系图</h1>
+      <p>{{ workitemTitle() }}</p>
+    </div>
+
+    <div class="toolbar__controls">
+      <div class="control">
+        <span class="control__label">深度</span>
+        <div class="segmented">
+          @for (item of depths; track item) {
+            <button
+              type="button"
+              [class.active]="depth() === item"
+              (click)="setDepth(item)"
+            >
+              {{ item }}
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="control control--relations">
+        <span class="control__label">关系类型</span>
+        <div class="chips">
+          @for (option of relationOptions; track option.value) {
+            <button
+              type="button"
+              class="chip"
+              [class.active]="isRelationEnabled(option.value)"
+              [style.--chip-color]="option.color"
+              (click)="toggleRelation(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="toolbar__actions">
+        <button
+          type="button"
+          class="ghost-btn"
+          [class.active]="highlightCriticalPath()"
+          (click)="toggleCriticalPath()"
+        >
+          关键路径
+        </button>
+        <button type="button" class="ghost-btn" (click)="reload()">刷新</button>
+      </div>
+    </div>
+
+    @if (stats(); as currentStats) {
+      <div class="stats">
+        <span>{{ currentStats.nodes }} 个工作项</span>
+        <span>{{ currentStats.edges }} 条关系</span>
+        <span>关键路径长度 {{ currentStats.criticalLength }}</span>
+      </div>
+    }
+  </header>
+
+  <main class="workspace">
+    @if (loading()) {
+      <div class="state">正在加载关系图…</div>
+    } @else if (error()) {
+      <div class="state state--error">
+        <p>加载失败</p>
+        <pre>{{ error() }}</pre>
+        <button type="button" class="ghost-btn" (click)="reload()">重试</button>
+      </div>
+    } @else if (graph(); as data) {
+      @if (!data.nodes.length) {
+        <div class="state">暂无工作项数据</div>
+      } @else {
+        <app-graph-canvas
+          [graph]="data"
+          [selectedId]="selected()?.id ?? null"
+          [highlightCriticalPath]="highlightCriticalPath()"
+          (selectNode)="onSelectNode($event)"
+          (clearSelection)="clearSelection()"
+        />
+        @if (selected()) {
+          <app-node-detail
+            [item]="selected()"
+            [isRoot]="selectedIsRoot()"
+            [isOnCriticalPath]="selectedOnCritical()"
+            (close)="clearSelection()"
+          />
+        }
+      }
+    } @else {
+      <div class="state">无法获取当前工作项上下文</div>
+    }
+  </main>
+</div>

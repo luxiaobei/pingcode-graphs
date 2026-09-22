@@ -17,6 +17,7 @@
     "@angular/forms": "^22.1.0",
     "@angular/platform-browser": "^22.1.0",
     "@pc-nexus/bridge": "^0.5.0",
+    "cytoscape": "^3.34.3",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },
@@ -24,6 +25,7 @@
     "@angular/build": "^22.1.0",
     "@angular/cli": "^22.1.0",
     "@angular/compiler-cli": "^22.1.0",
+    "@types/cytoscape": "^3.21.9",
     "prettier": "^3.8.1",
     "typescript": "~6.0.3"
   }

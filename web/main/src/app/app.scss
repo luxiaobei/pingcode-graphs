@@ -1,0 +1,174 @@
+:host {
+  display: block;
+  height: 100%;
+  font-family: 'Segoe UI', 'PingFang SC', 'Helvetica Neue', sans-serif;
+  color: #0f172a;
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: #f8fafc;
+}
+
+.toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.toolbar__title h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.toolbar__title p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.toolbar__controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.control__label {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.segmented button {
+  border: none;
+  background: #fff;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #475569;
+}
+
+.segmented button + button {
+  border-left: 1px solid #cbd5e1;
+}
+
+.segmented button.active {
+  background: #2563eb;
+  color: #fff;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  border: 1px solid color-mix(in srgb, var(--chip-color) 45%, #cbd5e1);
+  background: #fff;
+  color: #475569;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.chip.active {
+  background: color-mix(in srgb, var(--chip-color) 14%, #fff);
+  color: var(--chip-color);
+  border-color: var(--chip-color);
+  font-weight: 600;
+}
+
+.toolbar__actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.ghost-btn {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.ghost-btn.active {
+  border-color: #dc2626;
+  color: #b91c1c;
+  background: #fef2f2;
+}
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+
+.state {
+  margin: auto;
+  text-align: center;
+  color: #64748b;
+  padding: 24px;
+}
+
+.state--error {
+  color: #b91c1c;
+}
+
+.state--error pre {
+  max-width: 640px;
+  white-space: pre-wrap;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 12px;
+  color: #7f1d1d;
+}
+
+@media (max-width: 900px) {
+  .toolbar__actions {
+    margin-left: 0;
+  }
+
+  app-node-detail {
+    position: absolute;
+    inset: 0 0 0 auto;
+    z-index: 2;
+    box-shadow: -8px 0 24px rgb(15 23 42 / 8%);
+  }
+}

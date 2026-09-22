@@ -1,9 +1,14 @@
 import { Resolver } from "@pc-nexus/core";
+import { graphService } from "../services/graph.js";
+import type { DependencyGraph, GetDependencyGraphPayload } from "../types/graph.js";
 
 const resolver = new Resolver();
 
-resolver.define<string, string>("greeting", async (context, payload) => {
-    return `Hello, ${payload}`;
-});
+resolver.define<GetDependencyGraphPayload, DependencyGraph>(
+    "getDependencyGraph",
+    async (context, payload) => {
+        return graphService.getDependencyGraph(context, payload ?? {});
+    },
+);
 
 export { resolver };

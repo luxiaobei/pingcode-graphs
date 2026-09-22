@@ -30,4 +30,8 @@ resources:
   - key: main
     path: web/main/dist
 permissions:
-  scopes: []
+  scopes:
+    - pcp:read:user:token
+    - pcp:read:pjm:workitem
+    - pcp:read:pjm:project
+    - pcp:read:pjm:configuration

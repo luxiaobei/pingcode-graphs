@@ -12,6 +12,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@pc-nexus/core": "^0.5.0"
+    "@pc-nexus/core": "^0.5.0",
+    "@pc-nexus/network": "^0.5.0"
   }
 }

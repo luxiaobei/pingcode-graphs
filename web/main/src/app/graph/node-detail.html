@@ -1,0 +1,45 @@
+@if (item(); as current) {
+  <aside class="panel">
+    <header class="panel__header">
+      <div>
+        <div class="panel__id">{{ current.identifier || current.id }}</div>
+        <h2>{{ current.title || '未命名工作项' }}</h2>
+      </div>
+      <button type="button" class="icon-btn" (click)="close.emit()" aria-label="关闭">×</button>
+    </header>
+
+    <div class="badges">
+      @if (isRoot()) {
+        <span class="badge badge--root">当前工作项</span>
+      }
+      @if (isOnCriticalPath()) {
+        <span class="badge badge--critical">关键路径</span>
+      }
+    </div>
+
+    <dl class="meta">
+      <div>
+        <dt>类型</dt>
+        <dd>{{ typeName() || '—' }}</dd>
+      </div>
+      <div>
+        <dt>状态</dt>
+        <dd>{{ current.state?.name || '—' }}</dd>
+      </div>
+      <div>
+        <dt>优先级</dt>
+        <dd>{{ current.priority?.name || '—' }}</dd>
+      </div>
+      <div>
+        <dt>负责人</dt>
+        <dd>{{ assigneeName() || '—' }}</dd>
+      </div>
+      <div>
+        <dt>项目</dt>
+        <dd>{{ current.project?.name || '—' }}</dd>
+      </div>
+    </dl>
+
+    <button type="button" class="primary-btn" (click)="openWorkItem()">打开工作项</button>
+  </aside>
+}

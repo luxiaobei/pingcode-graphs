@@ -12,12 +12,17 @@ app:
       url: https://pingcode.com/privacy
   id: 7fb5add3-1994-4457-99f7-2535e44b97ab
 extensions:
-  - key: pingcode-graphs-workitem-action
+  - key: pingcode-graphs
+    target: "pcm:pjm:workitem:action"
+    title: 关系图
+    icon: "icons/mind-base"
     resource: main
-    target: pcm:pjm:workitem:action
     resolver:
       function: resolver
-    title: pingcode-graphs
+    type: normal
+    behavior: modal
+    viewport:
+      size: fullscreen
 functions:
   - key: resolver
     handler: index.resolver

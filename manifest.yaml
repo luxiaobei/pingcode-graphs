@@ -1,0 +1,28 @@
+app:
+  version: 1.0.0
+  publisher:
+    name: PingCode 团队
+    email: support@pingcode.com
+    phone: 400-805-1024
+    site: https://pingcode.com
+  links:
+    - title: 服务条款
+      url: https://pingcode.com/terms
+    - title: 隐私政策
+      url: https://pingcode.com/privacy
+  id: 7fb5add3-1994-4457-99f7-2535e44b97ab
+extensions:
+  - key: pingcode-graphs-workitem-action
+    resource: main
+    target: pcm:pjm:workitem:action
+    resolver:
+      function: resolver
+    title: pingcode-graphs
+functions:
+  - key: resolver
+    handler: index.resolver
+resources:
+  - key: main
+    path: web/main/dist
+permissions:
+  scopes: []

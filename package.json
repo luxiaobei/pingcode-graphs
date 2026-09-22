@@ -1,0 +1,17 @@
+{
+  "name": "pingcode-graphs",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "build-web": "cd web/main && npm run build",
+    "build": "tsc && npm run build-web"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@pc-nexus/core": "^0.5.0"
+  }
+}

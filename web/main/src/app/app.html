@@ -3,6 +3,9 @@
     <div class="toolbar__title">
       <h1>关系图</h1>
       <p>{{ workitemTitle() }}</p>
+      @if (usingMockData) {
+        <span class="mock-badge">模拟数据</span>
+      }
     </div>
 
     <div class="toolbar__controls">

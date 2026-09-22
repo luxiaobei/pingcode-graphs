@@ -1,19 +1,12 @@
-import { Component, computed, resource, signal } from '@angular/core';
-import { invoke, view } from '@pc-nexus/bridge';
+import { Component, computed, signal } from '@angular/core';
 import { GraphCanvas } from './graph/graph-canvas';
 import { NodeDetail } from './graph/node-detail';
+import { buildMockGraph } from './graph/mock-graph';
 import {
-  DependencyGraph,
-  GetDependencyGraphPayload,
   GraphWorkItem,
   RELATION_OPTIONS,
   RelationType,
 } from './graph/graph.types';
-
-interface WorkitemActionData {
-  workitem?: { id?: string; identifier?: string; title?: string };
-  project?: { id?: string; name?: string };
-}
 
 @Component({
   selector: 'app-root',
@@ -24,6 +17,7 @@ interface WorkitemActionData {
 export class App {
   protected readonly depths = [1, 2, 3] as const;
   protected readonly relationOptions = RELATION_OPTIONS;
+  protected readonly usingMockData = true;
 
   protected readonly depth = signal<1 | 2 | 3>(2);
   protected readonly enabledRelations = signal<RelationType[]>(
@@ -31,56 +25,25 @@ export class App {
   );
   protected readonly highlightCriticalPath = signal(false);
   protected readonly selected = signal<GraphWorkItem | null>(null);
+
   protected readonly reloadToken = signal(0);
 
-  private readonly context = resource({
-    loader: () => view.getContext<WorkitemActionData>(),
-  });
-
-  protected readonly workitemId = computed(
-    () => this.context.value()?.extension?.data?.workitem?.id,
-  );
-
   protected readonly workitemTitle = computed(() => {
-    const data = this.context.value()?.extension?.data?.workitem;
-    return data?.title || data?.identifier || '工作项关系图';
+    const root = this.graph().nodes.find((node) => node.id === this.graph().rootId);
+    return root ? `${root.identifier} · ${root.title}` : '工作项关系图（模拟数据）';
   });
 
-  protected readonly graphResource = resource({
-    params: () => ({
-      workitemId: this.workitemId(),
-      depth: this.depth(),
-      relationTypes: this.enabledRelations(),
-      reloadToken: this.reloadToken(),
-      contextReady: this.context.hasValue(),
-    }),
-    loader: async ({ params }) => {
-      if (!params.contextReady || !params.workitemId) {
-        return null;
-      }
-
-      const payload: GetDependencyGraphPayload = {
-        workitemId: params.workitemId,
-        depth: params.depth,
-        relationTypes: params.relationTypes,
-      };
-      return invoke<GetDependencyGraphPayload, DependencyGraph>('getDependencyGraph', payload);
-    },
+  protected readonly graph = computed(() => {
+    // Depend on reloadToken so refresh forces a new graph reference.
+    void this.reloadToken();
+    return buildMockGraph(this.depth(), this.enabledRelations());
   });
 
-  protected readonly graph = computed(() => this.graphResource.value() ?? null);
-  protected readonly loading = computed(
-    () => this.context.isLoading() || this.graphResource.isLoading(),
-  );
-  protected readonly error = computed(() => {
-    const err = this.context.error() ?? this.graphResource.error();
-    return err ? String(err) : null;
-  });
+  protected readonly loading = computed(() => false);
+  protected readonly error = computed(() => null);
+
   protected readonly stats = computed(() => {
     const data = this.graph();
-    if (!data) {
-      return null;
-    }
     return {
       nodes: data.nodes.length,
       edges: data.edges.length,
@@ -90,14 +53,12 @@ export class App {
 
   protected readonly selectedIsRoot = computed(() => {
     const selected = this.selected();
-    const graph = this.graph();
-    return !!selected && !!graph && selected.id === graph.rootId;
+    return !!selected && selected.id === this.graph().rootId;
   });
 
   protected readonly selectedOnCritical = computed(() => {
     const selected = this.selected();
-    const graph = this.graph();
-    return !!selected && !!graph && graph.criticalPath.includes(selected.id);
+    return !!selected && this.graph().criticalPath.includes(selected.id);
   });
 
   protected setDepth(value: 1 | 2 | 3): void {
@@ -127,6 +88,7 @@ export class App {
   }
 
   protected reload(): void {
+    this.selected.set(null);
     this.reloadToken.update((value) => value + 1);
   }
 

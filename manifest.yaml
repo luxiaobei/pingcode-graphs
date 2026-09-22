@@ -35,3 +35,6 @@ permissions:
     - pcp:read:pjm:workitem
     - pcp:read:pjm:project
     - pcp:read:pjm:configuration
+  content:
+    styles:
+      - unsafe-inline

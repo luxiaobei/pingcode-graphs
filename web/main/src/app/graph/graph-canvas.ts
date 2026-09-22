@@ -32,6 +32,8 @@ export class GraphCanvas implements AfterViewInit, OnDestroy {
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('cyHost');
   private cy: Core | null = null;
   private viewReady = false;
+  private resizeObserver: ResizeObserver | null = null;
+  private fitTimers: number[] = [];
 
   constructor() {
     effect(() => {
@@ -54,8 +56,10 @@ export class GraphCanvas implements AfterViewInit, OnDestroy {
   }
 
   ngAfterViewInit(): void {
+    const container = this.host().nativeElement;
+
     this.cy = cytoscape({
-      container: this.host().nativeElement,
+      container,
       style: [
         {
           selector: 'node',
@@ -135,8 +139,8 @@ export class GraphCanvas implements AfterViewInit, OnDestroy {
           },
         },
       ],
-      layout: { name: 'cose', animate: false },
-      minZoom: 0.3,
+      layout: { name: 'preset' },
+      minZoom: 0.2,
       maxZoom: 2.5,
       wheelSensitivity: 0.2,
     });
@@ -153,17 +157,29 @@ export class GraphCanvas implements AfterViewInit, OnDestroy {
       }
     });
 
+    this.resizeObserver = new ResizeObserver(() => {
+      this.cy?.resize();
+      if (this.cy && this.cy.nodes().length > 0) {
+        this.cy.fit(undefined, 48);
+      }
+    });
+    this.resizeObserver.observe(container);
+
     this.viewReady = true;
     this.render(this.graph());
   }
 
   ngOnDestroy(): void {
+    this.clearFitTimers();
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     this.cy?.destroy();
     this.cy = null;
   }
 
   protected fit(): void {
-    this.cy?.fit(undefined, 40);
+    this.cy?.resize();
+    this.cy?.fit(undefined, 48);
   }
 
   private render(data: DependencyGraph | null): void {
@@ -171,13 +187,15 @@ export class GraphCanvas implements AfterViewInit, OnDestroy {
       return;
     }
 
+    this.clearFitTimers();
     this.cy.elements().remove();
-    if (!data) {
+    if (!data?.nodes.length) {
       return;
     }
 
     const elements: ElementDefinition[] = [
       ...data.nodes.map((item) => ({
+        group: 'nodes' as const,
         data: {
           id: item.id,
           label: `${item.identifier ?? ''}\n${truncate(item.title ?? '未命名', 28)}\n${workItemTypeName(item)}`,
@@ -186,6 +204,7 @@ export class GraphCanvas implements AfterViewInit, OnDestroy {
         classes: item.id === data.rootId ? 'root' : '',
       })),
       ...data.edges.map((edge) => ({
+        group: 'edges' as const,
         data: {
           id: edge.id,
           source: edge.source,
@@ -198,18 +217,41 @@ export class GraphCanvas implements AfterViewInit, OnDestroy {
     ];
 
     this.cy.add(elements);
+    this.cy.resize();
     this.cy
       .layout({
         name: 'cose',
         animate: false,
-        padding: 40,
-        nodeRepulsion: () => 12000,
-        idealEdgeLength: () => 120,
+        randomize: true,
+        padding: 48,
+        componentSpacing: 80,
+        nodeRepulsion: () => 14000,
+        idealEdgeLength: () => 140,
         nestingFactor: 1.2,
+        fit: true,
       })
       .run();
 
     this.applyHighlights(data, this.selectedId(), this.highlightCriticalPath());
+    this.scheduleFit();
+  }
+
+  private scheduleFit(): void {
+    // Modal / fullscreen host often settles size after first paint.
+    for (const delay of [0, 50, 200, 500]) {
+      const timer = window.setTimeout(() => {
+        this.cy?.resize();
+        this.cy?.fit(undefined, 48);
+      }, delay);
+      this.fitTimers.push(timer);
+    }
+  }
+
+  private clearFitTimers(): void {
+    for (const timer of this.fitTimers) {
+      window.clearTimeout(timer);
+    }
+    this.fitTimers = [];
   }
 
   private applyHighlights(

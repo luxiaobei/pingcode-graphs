@@ -1,14 +1,7 @@
-import type { IdeaKgNode } from "./idea-node.js";
-import type { LibraryKgNode } from "./library-node.js";
-import type { PageKgNode } from "./page-node.js";
-import type { ProductKgNode } from "./product-node.js";
-import type { ProjectKgNode } from "./project-node.js";
-import type { ReleaseKgNode } from "./release-node.js";
-import type { SpaceKgNode } from "./space-node.js";
-import type { SprintKgNode } from "./sprint-node.js";
-import type { TestCaseKgNode } from "./test-case-node.js";
-import type { TicketKgNode } from "./ticket-node.js";
-import type { WorkItemKgNode } from "./work-item-node.js";
+import type { IdeaKgNode, TicketKgNode, ProductKgNode } from "./ship/index.js";
+import type { PageKgNode, SpaceKgNode } from "./wiki/index.js";
+import type { ProjectKgNode, SprintKgNode, ReleaseKgNode, WorkItemKgNode } from "./pjm/index.js";
+import type { LibraryKgNode, TestCaseKgNode } from "./testhub/index.js";
 
 export const KG_NODE_KIND = {
     workItem: "work_item",

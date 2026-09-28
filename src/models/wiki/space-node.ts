@@ -1,12 +1,12 @@
-import { KG_NODE_KIND, assignDefined, createKgNode, joinSummary, type KgNodeBase } from "./pc-kg-node.js";
+import { KG_NODE_KIND, assignDefined, createKgNode, joinSummary, type KgNodeBase } from "../pc-kg-node.js";
 
-export type PageNodeDetail = {
+export interface SpaceNodeDetail {
     type_name?: string;
-};
+}
 
-export interface PageKgNode extends KgNodeBase<typeof KG_NODE_KIND.page, PageNodeDetail> {}
+export interface SpaceKgNode extends KgNodeBase<typeof KG_NODE_KIND.space, SpaceNodeDetail> {}
 
-export interface PageNodeInput {
+export interface SpaceNodeInput {
     refId: string;
     name: string;
     identifier?: string;
@@ -16,12 +16,13 @@ export interface PageNodeInput {
     active?: boolean;
 }
 
-export function createPageNode(input: PageNodeInput): PageKgNode {
-    const detail: PageNodeDetail = {};
+export function createSpaceNode(input: SpaceNodeInput): SpaceKgNode {
+    const detail: SpaceNodeDetail = {};
     assignDefined(detail, "type_name", input.typeName);
+
     const title = [input.identifier, input.name].filter(Boolean).join(" ");
     return createKgNode(
-        KG_NODE_KIND.page,
+        KG_NODE_KIND.space,
         {
             ...input,
             summary: joinSummary([title, input.typeName]),

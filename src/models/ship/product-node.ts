@@ -1,4 +1,4 @@
-import { KG_NODE_KIND, assignDefined, createKgNode, excerptText, joinSummary, type KgNodeBase } from "./pc-kg-node.js";
+import { KG_NODE_KIND, assignDefined, createKgNode, excerptText, joinSummary, type KgNodeBase } from "../pc-kg-node.js";
 
 export interface ProductNodeDetail {
     state_name?: string;

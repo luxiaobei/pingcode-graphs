@@ -1,4 +1,4 @@
-import { KG_NODE_KIND, assignDefined, createKgNode, excerptText, joinSummary, type KgNodeBase } from "./pc-kg-node.js";
+import { KG_NODE_KIND, assignDefined, createKgNode, excerptText, joinSummary, type KgNodeBase } from "../pc-kg-node.js";
 
 /** 负责人、迭代、父项是独立节点，不放在 detail 里。 */
 export interface WorkItemNodeDetail {

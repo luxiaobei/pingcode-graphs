@@ -29,8 +29,86 @@ functions:
 resources:
   - key: main
     path: web/main/dist
+storage:
+  entities:
+    - name: pc_kg_node
+      attributes:
+        - name: id
+          type: string
+          required: true
+        - name: kind
+          type: string
+          required: true
+        - name: ref_id
+          type: string
+          required: true
+        - name: name
+          type: string
+          required: true
+        - name: identifier
+          type: string
+        - name: summary
+          type: string
+        - name: active
+          type: boolean
+          default: true
+        - name: source_updated_at
+          type: number
+        - name: synced_at
+          type: number
+        - name: detail
+          type: object
+      indexes:
+        - name: id_unique
+          keys:
+            - id: 1
+          options:
+            unique: true
+        - name: kind_ref
+          keys:
+            - kind: 1
+            - ref_id: 1
+          options:
+            unique: true
+    - name: pc_kg_edge
+      attributes:
+        - name: id
+          type: string
+          required: true
+        - name: type
+          type: string
+          required: true
+        - name: from_id
+          type: string
+          required: true
+        - name: to_id
+          type: string
+          required: true
+        - name: symmetric
+          type: boolean
+          default: false
+        - name: active
+          type: boolean
+          default: true
+        - name: synced_at
+          type: number
+      indexes:
+        - name: id_unique
+          keys:
+            - id: 1
+          options:
+            unique: true
+        - name: from_type
+          keys:
+            - from_id: 1
+            - type: 1
+        - name: to_type
+          keys:
+            - to_id: 1
+            - type: 1
 permissions:
   scopes:
+    - pcp:storage:app
     - pcp:read:user:token
     - pcp:read:pjm:workitem
     - pcp:read:pjm:project

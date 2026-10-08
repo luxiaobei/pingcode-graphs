@@ -1,7 +1,7 @@
 import type { EdgeData, GraphData, NodeData } from '@antv/g6';
 import type { DependencyGraph, GraphEdge, GraphWorkItem } from '../entities/graph.entity';
 import { GraphNodeKind } from '../enums/graph.enum';
-import { relationColor, truncate, workItemTypeName } from '../utils/graph.util';
+import { relationColor, truncate, workItemTypeName } from './graph.util';
 
 /** Domain → G6 唯一映射入口。 */
 export function toG6Data(graph: DependencyGraph): GraphData {

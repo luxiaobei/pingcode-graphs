@@ -14,7 +14,7 @@ import {
 import { CanvasEvent, Graph, type IElementEvent, NodeEvent } from '@antv/g6';
 import { GRAPH_MIN_SIZE, GRAPH_OPTIONS } from '../constants/graph.constants';
 import type { DependencyGraph, GraphWorkItem } from '../entities/graph.entity';
-import { toG6Data } from './to-g6-data';
+import { toG6Data } from '../utils/to-g6-data';
 
 @Component({
   selector: 'app-graph-canvas',

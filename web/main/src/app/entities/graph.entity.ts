@@ -24,9 +24,13 @@ export interface GraphWorkItem {
     name?: string;
     display_name?: string;
   };
+  /** 相对根节点的跳数（0 = 当前焦点） */
   depth?: number;
+  /** 节点种类：工作项 / 展开占位（more） */
   kind?: GraphNodeKind;
+  /** 尚未展开的邻居数量，用于渲染「N more」 */
   hiddenNeighborCount?: number;
+  /** 拖拽后固定的画布坐标（前端写入） */
   position?: { x: number; y: number };
 }
 
@@ -55,5 +59,6 @@ export interface GetDependencyGraphPayload {
 export interface RelationStyle {
   label: string;
   color: string;
+  /** 反向关系映射到规范边类型，如 blockedBy → block */
   canonical?: string;
 }

@@ -1,4 +1,11 @@
-import { DependencyGraph, GraphEdge, GraphWorkItem, RelationType } from './graph.types';
+import {
+  DependencyGraph,
+  GraphEdge,
+  GraphWorkItem,
+  RelationType,
+  relationLabel,
+  toCanonicalTypes,
+} from './graph.types';
 
 const PROJECT = {
   id: 'proj-demo',
@@ -16,6 +23,7 @@ const nodes: GraphWorkItem[] = [
     priority: { name: '高' },
     assignee: { id: 'u1', display_name: '张三' },
     project: PROJECT,
+    depth: 0,
   },
   {
     id: 'wi-auth',
@@ -26,6 +34,7 @@ const nodes: GraphWorkItem[] = [
     priority: { name: '高' },
     assignee: { id: 'u2', display_name: '李四' },
     project: PROJECT,
+    depth: 1,
   },
   {
     id: 'wi-ui',
@@ -36,6 +45,7 @@ const nodes: GraphWorkItem[] = [
     priority: { name: '中' },
     assignee: { id: 'u3', display_name: '王五' },
     project: PROJECT,
+    depth: 1,
   },
   {
     id: 'wi-api',
@@ -46,6 +56,7 @@ const nodes: GraphWorkItem[] = [
     priority: { name: '高' },
     assignee: { id: 'u1', display_name: '张三' },
     project: PROJECT,
+    depth: 1,
   },
   {
     id: 'wi-sso',
@@ -56,6 +67,7 @@ const nodes: GraphWorkItem[] = [
     priority: { name: '紧急' },
     assignee: { id: 'u2', display_name: '李四' },
     project: PROJECT,
+    depth: 2,
   },
   {
     id: 'wi-mobile',
@@ -66,6 +78,7 @@ const nodes: GraphWorkItem[] = [
     priority: { name: '中' },
     assignee: { id: 'u4', display_name: '赵六' },
     project: PROJECT,
+    depth: 1,
   },
   {
     id: 'wi-audit',
@@ -76,6 +89,7 @@ const nodes: GraphWorkItem[] = [
     priority: { name: '低' },
     assignee: { id: 'u3', display_name: '王五' },
     project: PROJECT,
+    depth: 1,
   },
   {
     id: 'wi-dup',
@@ -86,6 +100,7 @@ const nodes: GraphWorkItem[] = [
     priority: { name: '中' },
     assignee: { id: 'u1', display_name: '张三' },
     project: PROJECT,
+    depth: 1,
   },
   {
     id: 'wi-release',
@@ -96,6 +111,7 @@ const nodes: GraphWorkItem[] = [
     priority: { name: '高' },
     assignee: { id: 'u5', display_name: '陈七' },
     project: PROJECT,
+    depth: 1,
   },
   {
     id: 'wi-perf',
@@ -106,83 +122,38 @@ const nodes: GraphWorkItem[] = [
     priority: { name: '中' },
     assignee: { id: 'u2', display_name: '李四' },
     project: PROJECT,
+    depth: 2,
   },
 ];
+
+function edge(
+  id: string,
+  source: string,
+  target: string,
+  relationType: RelationType,
+): GraphEdge {
+  return {
+    id,
+    source,
+    target,
+    relationType,
+    label: relationLabel(relationType),
+  };
+}
 
 const edges: GraphEdge[] = [
-  {
-    id: 'e1',
-    source: 'wi-auth',
-    target: 'wi-root',
-    relationType: 'block',
-    label: '阻塞',
-  },
-  {
-    id: 'e2',
-    source: 'wi-api',
-    target: 'wi-root',
-    relationType: 'block',
-    label: '阻塞',
-  },
-  {
-    id: 'e3',
-    source: 'wi-sso',
-    target: 'wi-auth',
-    relationType: 'block',
-    label: '阻塞',
-  },
-  {
-    id: 'e4',
-    source: 'wi-root',
-    target: 'wi-mobile',
-    relationType: 'block',
-    label: '阻塞',
-  },
-  {
-    id: 'e5',
-    source: 'wi-root',
-    target: 'wi-release',
-    relationType: 'block',
-    label: '阻塞',
-  },
-  {
-    id: 'e6',
-    source: 'wi-ui',
-    target: 'wi-root',
-    relationType: 'cause',
-    label: '导致',
-  },
-  {
-    id: 'e7',
-    source: 'wi-root',
-    target: 'wi-audit',
-    relationType: 'relate',
-    label: '关联',
-  },
-  {
-    id: 'e8',
-    source: 'wi-root',
-    target: 'wi-dup',
-    relationType: 'duplicate',
-    label: '重复',
-  },
-  {
-    id: 'e9',
-    source: 'wi-api',
-    target: 'wi-perf',
-    relationType: 'cause',
-    label: '导致',
-  },
-  {
-    id: 'e10',
-    source: 'wi-mobile',
-    target: 'wi-release',
-    relationType: 'block',
-    label: '阻塞',
-  },
+  edge('e1', 'wi-auth', 'wi-root', 'block'),
+  edge('e2', 'wi-api', 'wi-root', 'block'),
+  edge('e3', 'wi-sso', 'wi-auth', 'block'),
+  edge('e4', 'wi-root', 'wi-mobile', 'block'),
+  edge('e5', 'wi-root', 'wi-release', 'block'),
+  edge('e6', 'wi-ui', 'wi-root', 'cause'),
+  edge('e7', 'wi-root', 'wi-audit', 'relate'),
+  edge('e8', 'wi-root', 'wi-dup', 'duplicate'),
+  edge('e9', 'wi-api', 'wi-perf', 'cause'),
+  edge('e10', 'wi-mobile', 'wi-release', 'block'),
 ];
 
-/** Full mock graph: root PORTAL-101 with a multi-level dependency neighborhood. */
 export const MOCK_GRAPH: DependencyGraph = {
   rootId: 'wi-root',
   depth: 3,
@@ -191,43 +162,29 @@ export const MOCK_GRAPH: DependencyGraph = {
   criticalPath: ['wi-sso', 'wi-auth', 'wi-root', 'wi-mobile', 'wi-release'],
 };
 
-const NODE_DEPTH: Record<string, number> = {
-  'wi-root': 0,
-  'wi-auth': 1,
-  'wi-ui': 1,
-  'wi-api': 1,
-  'wi-audit': 1,
-  'wi-dup': 1,
-  'wi-mobile': 1,
-  'wi-release': 1,
-  'wi-sso': 2,
-  'wi-perf': 2,
-};
-
 export function buildMockGraph(
   depth: number,
   relationTypes: RelationType[],
 ): DependencyGraph {
-  const allowed = new Set(relationTypes);
-  const filteredEdges = MOCK_GRAPH.edges.filter((edge) => {
-    if (!allowed.has(edge.relationType)) {
+  const allowed = toCanonicalTypes(relationTypes);
+  const depthById = new Map(nodes.map((node) => [node.id, node.depth ?? 0]));
+
+  const filteredEdges = edges.filter((item) => {
+    if (!allowed.has(item.relationType)) {
       return false;
     }
-    const sourceDepth = NODE_DEPTH[edge.source] ?? depth;
-    const targetDepth = NODE_DEPTH[edge.target] ?? depth;
-    return sourceDepth <= depth && targetDepth <= depth;
+    return (depthById.get(item.source) ?? 0) <= depth && (depthById.get(item.target) ?? 0) <= depth;
   });
 
   const nodeIds = new Set<string>([MOCK_GRAPH.rootId]);
-  for (const edge of filteredEdges) {
-    nodeIds.add(edge.source);
-    nodeIds.add(edge.target);
+  for (const item of filteredEdges) {
+    nodeIds.add(item.source);
+    nodeIds.add(item.target);
   }
 
-  const filteredNodes = MOCK_GRAPH.nodes.filter(
-    (node) => nodeIds.has(node.id) && (NODE_DEPTH[node.id] ?? 0) <= depth,
+  const filteredNodes = nodes.filter(
+    (node) => nodeIds.has(node.id) && (node.depth ?? 0) <= depth,
   );
-
   const criticalPath = MOCK_GRAPH.criticalPath.filter((id) => nodeIds.has(id));
 
   return {

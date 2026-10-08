@@ -1,10 +1,20 @@
-export type RelationType =
-    | "block"
-    | "blockedBy"
-    | "cause"
-    | "causedBy"
-    | "relate"
-    | "duplicate";
+export type GraphNodeKind = "workitem" | "more";
+
+export type RelationType = string;
+
+export const KNOWN_RELATION_TYPES = [
+    "block",
+    "blockedBy",
+    "cause",
+    "causedBy",
+    "relate",
+    "duplicate",
+] as const;
+
+export type KnownRelationType = (typeof KNOWN_RELATION_TYPES)[number];
+
+/** UI-only; not returned by API. */
+export const EXPAND_RELATION_TYPE = "expand";
 
 export interface GraphWorkItem {
     id: string;
@@ -30,6 +40,10 @@ export interface GraphWorkItem {
         name?: string;
         display_name?: string;
     };
+    depth?: number;
+    kind?: GraphNodeKind;
+    hiddenNeighborCount?: number;
+    position?: { x: number; y: number };
 }
 
 export interface GraphEdge {

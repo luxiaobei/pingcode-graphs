@@ -1,5 +1,7 @@
 import { assignDefined } from "./pc-kg-node.js";
 
+export const KG_EDGE_ENTITY_NAME = "pc_kg_edge";
+
 export const KG_EDGE_TYPE = {
     belongsTo: "belongs_to", // 从属于，例如 workitem 从属于 project
     assignedTo: "assigned_to", // 分配给，例如 workitem 分配给 user

@@ -4,6 +4,8 @@ import type { PageKgNode, SpaceKgNode } from "./wiki/index.js";
 import type { ProjectKgNode, SprintKgNode, ReleaseKgNode, WorkItemKgNode } from "./pjm/index.js";
 import type { LibraryKgNode, TestCaseKgNode } from "./testhub/index.js";
 
+export const KG_NODE_ENTITY_NAME = "pc_kg_node";
+
 export const KG_NODE_KIND = {
     workItem: "work_item",
     testCase: "test_case",

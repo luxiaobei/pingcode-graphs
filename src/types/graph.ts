@@ -13,7 +13,6 @@ export const KNOWN_RELATION_TYPES = [
 
 export type KnownRelationType = (typeof KNOWN_RELATION_TYPES)[number];
 
-/** UI-only; not returned by API. */
 export const EXPAND_RELATION_TYPE = "expand";
 
 export interface GraphWorkItem {

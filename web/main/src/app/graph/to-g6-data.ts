@@ -1,11 +1,7 @@
-import type { GraphData, NodeData, EdgeData } from '@antv/g6';
-import {
-  DependencyGraph,
-  GraphEdge,
-  GraphWorkItem,
-  relationColor,
-  workItemTypeName,
-} from './graph.types';
+import type { EdgeData, GraphData, NodeData } from '@antv/g6';
+import type { DependencyGraph, GraphEdge, GraphWorkItem } from '../entities/graph.entity';
+import { GraphNodeKind } from '../enums/graph.enum';
+import { relationColor, truncate, workItemTypeName } from '../utils/graph.util';
 
 /** Domain → G6 唯一映射入口。 */
 export function toG6Data(graph: DependencyGraph): GraphData {
@@ -16,8 +12,8 @@ export function toG6Data(graph: DependencyGraph): GraphData {
 }
 
 function toG6Node(item: GraphWorkItem, rootId: string): NodeData {
-  const kind = item.kind ?? 'workitem';
-  const isMore = kind === 'more';
+  const kind = item.kind ?? GraphNodeKind.Workitem;
+  const isMore = kind === GraphNodeKind.More;
   const count = item.hiddenNeighborCount ?? 0;
 
   const node: NodeData = {
@@ -56,18 +52,7 @@ function toG6Edge(edge: GraphEdge): EdgeData {
 }
 
 function buildWorkItemLabel(item: GraphWorkItem): string {
-  return [
-    item.identifier ?? '',
-    truncate(item.title ?? '未命名', 28),
-    workItemTypeName(item),
-  ]
+  return [item.identifier ?? '', truncate(item.title ?? '未命名', 28), workItemTypeName(item)]
     .filter(Boolean)
     .join('\n');
-}
-
-function truncate(value: string, max: number): string {
-  if (value.length <= max) {
-    return value;
-  }
-  return `${value.slice(0, max - 1)}…`;
 }

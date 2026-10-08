@@ -2,11 +2,9 @@ import { Component, computed, signal } from '@angular/core';
 import { GraphCanvas } from './graph/graph-canvas';
 import { NodeDetail } from './graph/node-detail';
 import { buildMockGraph } from './graph/mock-graph';
-import {
-  GraphWorkItem,
-  RELATION_OPTIONS,
-  RelationType,
-} from './graph/graph.types';
+import { RELATION_OPTIONS } from './constants/graph.constants';
+import type { GraphWorkItem } from './entities/graph.entity';
+import type { RelationType } from './enums/graph.enum';
 
 @Component({
   selector: 'app-root',
@@ -34,7 +32,6 @@ export class App {
   });
 
   protected readonly graph = computed(() => {
-    // Depend on reloadToken so refresh forces a new graph reference.
     void this.reloadToken();
     return buildMockGraph(this.depth(), this.enabledRelations());
   });

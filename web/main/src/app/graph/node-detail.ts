@@ -1,10 +1,7 @@
 import { Component, computed, input, output } from '@angular/core';
 import { NavigationTarget, router } from '@pc-nexus/bridge';
-import {
-  GraphWorkItem,
-  workItemAssigneeName,
-  workItemTypeName,
-} from './graph.types';
+import type { GraphWorkItem } from '../entities/graph.entity';
+import { workItemAssigneeName, workItemTypeName } from '../utils/graph.util';
 
 @Component({
   selector: 'app-node-detail',

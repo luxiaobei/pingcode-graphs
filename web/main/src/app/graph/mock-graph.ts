@@ -1,11 +1,6 @@
-import {
-  DependencyGraph,
-  GraphEdge,
-  GraphWorkItem,
-  RelationType,
-  relationLabel,
-  toCanonicalTypes,
-} from './graph.types';
+import type { DependencyGraph, GraphEdge, GraphWorkItem } from '../entities/graph.entity';
+import type { RelationType } from '../enums/graph.enum';
+import { relationLabel, toCanonicalTypes } from '../utils/graph.util';
 
 const PROJECT = {
   id: 'proj-demo',

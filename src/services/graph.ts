@@ -35,7 +35,6 @@ function normalizeWorkItem(raw: GraphWorkItem | undefined, fallbackId?: string):
     return {
         ...raw,
         id,
-        kind: raw?.kind ?? "workitem",
     };
 }
 
@@ -133,7 +132,7 @@ export class GraphService {
         const visited = new Set<string>();
 
         const root = await workItemService.fetchWorkItem(context, workitemId);
-        nodes.set(root.id!, { ...(root as GraphWorkItem), kind: "workitem", depth: 0 });
+        nodes.set(root.id!, root as GraphWorkItem);
 
         while (queue.length) {
             const current = queue.shift()!;
@@ -157,19 +156,15 @@ export class GraphService {
                 if (!related.title || !related.identifier) {
                     try {
                         related = await workItemService.fetchWorkItem(context, related.id);
-                        related = { ...related, kind: related.kind ?? "workitem" };
                     } catch {
                         // permission / missing detail
                     }
                 }
 
                 const nextDepth = current.level + 1;
-                const existing = nodes.get(related.id);
                 nodes.set(related.id, {
-                    ...existing,
+                    ...nodes.get(related.id),
                     ...related,
-                    kind: related.kind ?? "workitem",
-                    depth: existing?.depth != null ? Math.min(existing.depth, nextDepth) : nextDepth,
                 });
 
                 const edge = toDirectedEdge(current.id, relation, related);

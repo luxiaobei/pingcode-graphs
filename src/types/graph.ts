@@ -1,5 +1,3 @@
-export type GraphNodeKind = "workitem" | "more";
-
 export type RelationType = string;
 
 export const KNOWN_RELATION_TYPES = [
@@ -13,8 +11,7 @@ export const KNOWN_RELATION_TYPES = [
 
 export type KnownRelationType = (typeof KNOWN_RELATION_TYPES)[number];
 
-export const EXPAND_RELATION_TYPE = "expand";
-
+/** 业务实体节点（服务端下发）；depth/kind/position 等由前端计算 */
 export interface GraphWorkItem {
     id: string;
     identifier?: string;
@@ -39,10 +36,6 @@ export interface GraphWorkItem {
         name?: string;
         display_name?: string;
     };
-    depth?: number;
-    kind?: GraphNodeKind;
-    hiddenNeighborCount?: number;
-    position?: { x: number; y: number };
 }
 
 export interface GraphEdge {

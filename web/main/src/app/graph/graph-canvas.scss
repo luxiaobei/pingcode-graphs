@@ -23,20 +23,65 @@
     linear-gradient(180deg, #f7f9fc 0%, #eef2f7 100%);
 }
 
-.fit-btn {
+.canvas-toolbar {
   position: absolute;
   right: 16px;
   bottom: 16px;
-  border: 1px solid #cbd5e1;
-  background: #fff;
-  color: #334155;
-  border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 13px;
-  cursor: pointer;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 8%);
 }
 
-.fit-btn:hover {
-  background: #f8fafc;
+.canvas-toolbar__btn,
+.canvas-toolbar__fit {
+  border: none;
+  background: transparent;
+  color: #334155;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.canvas-toolbar__btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.canvas-toolbar__fit {
+  padding: 0 10px;
+  height: 28px;
+  font-size: 13px;
+  border-left: 1px solid #e2e8f0;
+  border-radius: 0 6px 6px 0;
+  margin-left: 2px;
+}
+
+.canvas-toolbar__btn:hover:not(:disabled),
+.canvas-toolbar__fit:hover {
+  background: #f1f5f9;
+}
+
+.canvas-toolbar__btn:disabled {
+  color: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.canvas-toolbar__zoom {
+  min-width: 44px;
+  padding: 0 4px;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
+  user-select: none;
 }

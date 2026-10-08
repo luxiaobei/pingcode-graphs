@@ -1,4 +1,27 @@
 <div class="canvas-shell">
   <div #g6Host class="g6-host"></div>
-  <button type="button" class="fit-btn" (click)="fit()" title="适应画布">适应</button>
+  <div class="canvas-toolbar" role="toolbar" aria-label="画布缩放">
+    <button
+      type="button"
+      class="canvas-toolbar__btn"
+      title="缩小"
+      [disabled]="!canZoomOut()"
+      (click)="zoomOut()"
+    >
+      −
+    </button>
+    <span class="canvas-toolbar__zoom" title="当前缩放">{{ zoomPercent() }}%</span>
+    <button
+      type="button"
+      class="canvas-toolbar__btn"
+      title="放大"
+      [disabled]="!canZoomIn()"
+      (click)="zoomIn()"
+    >
+      +
+    </button>
+    <button type="button" class="canvas-toolbar__fit" title="适应画布" (click)="fit()">
+      适应
+    </button>
+  </div>
 </div>

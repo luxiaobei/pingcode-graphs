@@ -1,248 +1,158 @@
 import {
-  AfterViewInit,
   Component,
+  DestroyRef,
   ElementRef,
-  OnDestroy,
+  afterNextRender,
   effect,
+  inject,
   input,
   output,
+  signal,
+  untracked,
   viewChild,
 } from '@angular/core';
-import cytoscape, { type Core, type ElementDefinition, type NodeSingular } from 'cytoscape';
-import {
-  DependencyGraph,
-  EDGE_COLORS,
-  GraphWorkItem,
-  workItemTypeName,
-} from './graph.types';
+import { CanvasEvent, Graph, type IElementEvent, NodeEvent } from '@antv/g6';
+import { GRAPH_MIN_SIZE, GRAPH_OPTIONS } from '../constants/graph.constants';
+import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
+import { isCriticalRelation } from '../utils/graph.util';
+import { toG6Data } from '../utils/to-g6-data';
 
 @Component({
   selector: 'app-graph-canvas',
   templateUrl: './graph-canvas.html',
   styleUrl: './graph-canvas.scss',
 })
-export class GraphCanvas implements AfterViewInit, OnDestroy {
+export class GraphCanvas {
   readonly graph = input<DependencyGraph | null>(null);
   readonly selectedId = input<string | null>(null);
   readonly highlightCriticalPath = input(false);
 
-  readonly selectNode = output<GraphWorkItem>();
+  readonly selectNode = output<GraphEntity>();
   readonly clearSelection = output<void>();
 
-  private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('cyHost');
-  private cy: Core | null = null;
-  private viewReady = false;
+  private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('g6Host');
+  private readonly destroyRef = inject(DestroyRef);
+
+  private g6: Graph | null = null;
+  private readonly ready = signal(false);
   private resizeObserver: ResizeObserver | null = null;
   private fitTimers: number[] = [];
 
   constructor() {
+    afterNextRender(() => this.initGraph());
+
+    this.destroyRef.onDestroy(() => this.destroyGraph());
+
     effect(() => {
-      const data = this.graph();
-      if (!this.viewReady) {
+      if (!this.ready()) {
         return;
       }
-      this.render(data);
+      void this.render(this.graph());
     });
 
     effect(() => {
+      if (!this.ready()) {
+        return;
+      }
       const selectedId = this.selectedId();
       const highlightCritical = this.highlightCriticalPath();
-      const data = this.graph();
-      if (!this.cy || !data) {
+      const data = untracked(() => this.graph());
+      if (!data) {
         return;
       }
-      this.applyHighlights(data, selectedId, highlightCritical);
+      void this.applyHighlights(data, selectedId, highlightCritical);
     });
-  }
-
-  ngAfterViewInit(): void {
-    const container = this.host().nativeElement;
-
-    this.cy = cytoscape({
-      container,
-      style: [
-        {
-          selector: 'node',
-          style: {
-            label: 'data(label)',
-            'text-wrap': 'wrap',
-            'text-max-width': '120px',
-            'text-valign': 'center',
-            'text-halign': 'center',
-            'font-size': 11,
-            color: '#1f2937',
-            'background-color': '#ffffff',
-            'border-width': 2,
-            'border-color': '#94a3b8',
-            width: 132,
-            height: 56,
-            shape: 'round-rectangle',
-            'overlay-padding': 4,
-          },
-        },
-        {
-          selector: 'node.root',
-          style: {
-            'border-color': '#2563eb',
-            'border-width': 3,
-            'background-color': '#eff6ff',
-          },
-        },
-        {
-          selector: 'node.selected',
-          style: {
-            'border-color': '#0f766e',
-            'border-width': 3,
-            'background-color': '#ecfdf5',
-          },
-        },
-        {
-          selector: 'node.critical',
-          style: {
-            'border-color': '#dc2626',
-            'background-color': '#fef2f2',
-          },
-        },
-        {
-          selector: 'node.dimmed',
-          style: {
-            opacity: 0.25,
-          },
-        },
-        {
-          selector: 'edge',
-          style: {
-            width: 2,
-            'curve-style': 'bezier',
-            'target-arrow-shape': 'triangle',
-            'line-color': 'data(color)',
-            'target-arrow-color': 'data(color)',
-            label: 'data(label)',
-            'font-size': 9,
-            color: '#64748b',
-            'text-rotation': 'autorotate',
-            'text-margin-y': -8,
-          },
-        },
-        {
-          selector: 'edge.critical',
-          style: {
-            width: 3,
-            'line-color': '#dc2626',
-            'target-arrow-color': '#dc2626',
-          },
-        },
-        {
-          selector: 'edge.dimmed',
-          style: {
-            opacity: 0.2,
-          },
-        },
-      ],
-      layout: { name: 'preset' },
-      minZoom: 0.2,
-      maxZoom: 2.5,
-      wheelSensitivity: 0.2,
-    });
-
-    this.cy.on('tap', 'node', (event) => {
-      const node = event.target as NodeSingular;
-      const item = node.data('item') as GraphWorkItem;
-      this.selectNode.emit(item);
-    });
-
-    this.cy.on('tap', (event) => {
-      if (event.target === this.cy) {
-        this.clearSelection.emit();
-      }
-    });
-
-    this.resizeObserver = new ResizeObserver(() => {
-      this.cy?.resize();
-      if (this.cy && this.cy.nodes().length > 0) {
-        this.cy.fit(undefined, 48);
-      }
-    });
-    this.resizeObserver.observe(container);
-
-    this.viewReady = true;
-    this.render(this.graph());
-  }
-
-  ngOnDestroy(): void {
-    this.clearFitTimers();
-    this.resizeObserver?.disconnect();
-    this.resizeObserver = null;
-    this.cy?.destroy();
-    this.cy = null;
   }
 
   protected fit(): void {
-    this.cy?.resize();
-    this.cy?.fit(undefined, 48);
+    void this.g6?.fitView({ when: 'always', direction: 'both' });
   }
 
-  private render(data: DependencyGraph | null): void {
-    if (!this.cy) {
+  private initGraph(): void {
+    const container = this.host().nativeElement;
+    this.g6 = this.createGraph(container);
+    this.bindGraphEvents();
+    this.observeResize(container);
+    this.ready.set(true);
+  }
+
+  private destroyGraph(): void {
+    this.clearFitTimers();
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
+    this.g6?.destroy();
+    this.g6 = null;
+    this.ready.set(false);
+  }
+
+  private createGraph(container: HTMLElement): Graph {
+    const { width, height } = container.getBoundingClientRect();
+    return new Graph({
+      container,
+      width: Math.max(width, GRAPH_MIN_SIZE),
+      height: Math.max(height, GRAPH_MIN_SIZE),
+      ...GRAPH_OPTIONS,
+    });
+  }
+
+  private bindGraphEvents(): void {
+    if (!this.g6) {
+      return;
+    }
+
+    this.g6.on(NodeEvent.CLICK, (event: IElementEvent) => {
+      const id = String(event.target.id);
+      const item = this.g6?.getNodeData(id)?.data?.['item'] as GraphEntity | undefined;
+      if (item) {
+        this.selectNode.emit(item);
+      }
+    });
+
+    this.g6.on(CanvasEvent.CLICK, () => {
+      this.clearSelection.emit();
+    });
+  }
+
+  private observeResize(container: HTMLElement): void {
+    this.resizeObserver = new ResizeObserver(() => this.resizeToHost(container));
+    this.resizeObserver.observe(container);
+  }
+
+  private resizeToHost(container: HTMLElement): void {
+    if (!this.g6) {
+      return;
+    }
+    const rect = container.getBoundingClientRect();
+    this.g6.resize(Math.max(rect.width, GRAPH_MIN_SIZE), Math.max(rect.height, GRAPH_MIN_SIZE));
+    this.fit();
+  }
+
+  private async render(data: DependencyGraph | null): Promise<void> {
+    if (!this.g6) {
       return;
     }
 
     this.clearFitTimers();
-    this.cy.elements().remove();
+
     if (!data?.nodes.length) {
+      this.g6.setData({ nodes: [], edges: [] });
+      await this.g6.render();
       return;
     }
 
-    const elements: ElementDefinition[] = [
-      ...data.nodes.map((item) => ({
-        group: 'nodes' as const,
-        data: {
-          id: item.id,
-          label: `${item.identifier ?? ''}\n${truncate(item.title ?? '未命名', 28)}\n${workItemTypeName(item)}`,
-          item,
-        },
-        classes: item.id === data.rootId ? 'root' : '',
-      })),
-      ...data.edges.map((edge) => ({
-        group: 'edges' as const,
-        data: {
-          id: edge.id,
-          source: edge.source,
-          target: edge.target,
-          label: edge.label,
-          color: EDGE_COLORS[edge.relationType] ?? '#94a3b8',
-          relationType: edge.relationType,
-        },
-      })),
-    ];
-
-    this.cy.add(elements);
-    this.cy.resize();
-    this.cy
-      .layout({
-        name: 'cose',
-        animate: false,
-        randomize: true,
-        padding: 48,
-        componentSpacing: 80,
-        nodeRepulsion: () => 14000,
-        idealEdgeLength: () => 140,
-        nestingFactor: 1.2,
-        fit: true,
-      })
-      .run();
-
-    this.applyHighlights(data, this.selectedId(), this.highlightCriticalPath());
+    this.g6.setData(toG6Data(data));
+    await this.g6.render();
+    await this.applyHighlights(
+      data,
+      untracked(() => this.selectedId()),
+      untracked(() => this.highlightCriticalPath()),
+    );
     this.scheduleFit();
   }
 
   private scheduleFit(): void {
-    // Modal / fullscreen host often settles size after first paint.
     for (const delay of [0, 50, 200, 500]) {
-      const timer = window.setTimeout(() => {
-        this.cy?.resize();
-        this.cy?.fit(undefined, 48);
-      }, delay);
+      const timer = window.setTimeout(() => this.fit(), delay);
       this.fitTimers.push(timer);
     }
   }
@@ -254,47 +164,43 @@ export class GraphCanvas implements AfterViewInit, OnDestroy {
     this.fitTimers = [];
   }
 
-  private applyHighlights(
+  private async applyHighlights(
     data: DependencyGraph,
     selectedId: string | null,
     highlightCritical: boolean,
-  ): void {
-    if (!this.cy) {
+  ): Promise<void> {
+    if (!this.g6) {
       return;
     }
 
     const criticalSet = new Set(highlightCritical ? data.criticalPath : []);
-    this.cy.nodes().forEach((node) => {
-      node.removeClass('selected critical dimmed');
-      if (node.id() === selectedId) {
-        node.addClass('selected');
-      }
-      if (criticalSet.has(node.id())) {
-        node.addClass('critical');
-      }
-      if (highlightCritical && !criticalSet.has(node.id())) {
-        node.addClass('dimmed');
-      }
-    });
+    const stateMap: Record<string, string[]> = {};
 
-    this.cy.edges().forEach((edge) => {
-      edge.removeClass('critical dimmed');
-      const onCritical =
-        criticalSet.has(edge.data('source')) &&
-        criticalSet.has(edge.data('target')) &&
-        edge.data('relationType') === 'block';
-      if (highlightCritical && onCritical) {
-        edge.addClass('critical');
+    for (const node of data.nodes) {
+      const states: string[] = [];
+      if (node.id === data.rootId) {
+        states.push('root');
+      }
+      if (node.id === selectedId) {
+        states.push('selected');
+      }
+      if (criticalSet.has(node.id)) {
+        states.push('critical');
       } else if (highlightCritical) {
-        edge.addClass('dimmed');
+        states.push('dimmed');
       }
-    });
-  }
-}
+      stateMap[node.id] = states;
+    }
 
-function truncate(value: string, max: number): string {
-  if (value.length <= max) {
-    return value;
+    for (const edge of data.edges) {
+      const onCritical =
+        highlightCritical &&
+        isCriticalRelation(edge.relationType) &&
+        criticalSet.has(edge.source) &&
+        criticalSet.has(edge.target);
+      stateMap[edge.id] = onCritical ? ['critical'] : highlightCritical ? ['dimmed'] : [];
+    }
+
+    await this.g6.setElementState(stateMap, false);
   }
-  return `${value.slice(0, max - 1)}…`;
 }

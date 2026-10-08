@@ -3,14 +3,14 @@
     <header class="panel__header">
       <div>
         <div class="panel__id">{{ current.identifier || current.id }}</div>
-        <h2>{{ current.title || '未命名工作项' }}</h2>
+        <h2>{{ current.title || '未命名对象' }}</h2>
       </div>
       <button type="button" class="icon-btn" (click)="close.emit()" aria-label="关闭">×</button>
     </header>
 
     <div class="badges">
       @if (isRoot()) {
-        <span class="badge badge--root">当前工作项</span>
+        <span class="badge badge--root">当前对象</span>
       }
       @if (isOnCriticalPath()) {
         <span class="badge badge--critical">关键路径</span>
@@ -35,11 +35,11 @@
         <dd>{{ assigneeName() || '—' }}</dd>
       </div>
       <div>
-        <dt>项目</dt>
-        <dd>{{ current.project?.name || '—' }}</dd>
+        <dt>所属范围</dt>
+        <dd>{{ scopeName() || '—' }}</dd>
       </div>
     </dl>
 
-    <button type="button" class="primary-btn" (click)="openWorkItem()">打开工作项</button>
+    <button type="button" class="primary-btn" (click)="openEntity()">打开详情</button>
   </aside>
 }

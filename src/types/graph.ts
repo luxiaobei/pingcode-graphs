@@ -1,11 +1,17 @@
-export type RelationType =
-    | "block"
-    | "blockedBy"
-    | "cause"
-    | "causedBy"
-    | "relate"
-    | "duplicate";
+export type RelationType = string;
 
+export const KNOWN_RELATION_TYPES = [
+    "block",
+    "blockedBy",
+    "cause",
+    "causedBy",
+    "relate",
+    "duplicate",
+] as const;
+
+export type KnownRelationType = (typeof KNOWN_RELATION_TYPES)[number];
+
+/** 业务实体节点（服务端下发）；depth/kind/position 等由前端计算 */
 export interface GraphWorkItem {
     id: string;
     identifier?: string;

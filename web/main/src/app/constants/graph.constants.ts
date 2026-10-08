@@ -1,14 +1,17 @@
 import type { GraphOptions } from '@antv/g6';
 import type { RelationStyle } from '../entities/graph.entity';
 import {
+  DEFAULT_RELATION_TYPES,
   EXPAND_RELATION_TYPE,
-  KNOWN_RELATION_TYPES,
   type RelationType,
 } from '../enums/graph.enum';
 
 export const GRAPH_MIN_SIZE = 320;
 
 export const DEFAULT_EDGE_COLOR = '#94a3b8';
+
+/** 参与「关键路径」高亮的规范关系类型（可由接口配置覆盖） */
+export const CRITICAL_PATH_RELATION_TYPES: readonly string[] = ['block'];
 
 export const RELATION_STYLE: Record<string, RelationStyle> = {
   block: { label: '阻塞', color: '#d64545' },
@@ -20,8 +23,9 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
   [EXPAND_RELATION_TYPE]: { label: '展开', color: DEFAULT_EDGE_COLOR },
 };
 
+/** 默认筛选选项；正式环境由接口下发的关系配置覆盖 */
 export const RELATION_OPTIONS: Array<{ value: RelationType; label: string; color: string }> =
-  KNOWN_RELATION_TYPES.map((value) => ({
+  DEFAULT_RELATION_TYPES.map((value) => ({
     value,
     label: RELATION_STYLE[value].label,
     color: RELATION_STYLE[value].color,

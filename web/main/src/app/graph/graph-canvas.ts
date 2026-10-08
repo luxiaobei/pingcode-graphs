@@ -13,7 +13,8 @@ import {
 } from '@angular/core';
 import { CanvasEvent, Graph, type IElementEvent, NodeEvent } from '@antv/g6';
 import { GRAPH_MIN_SIZE, GRAPH_OPTIONS } from '../constants/graph.constants';
-import type { DependencyGraph, GraphWorkItem } from '../entities/graph.entity';
+import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
+import { isCriticalRelation } from '../utils/graph.util';
 import { toG6Data } from '../utils/to-g6-data';
 
 @Component({
@@ -26,7 +27,7 @@ export class GraphCanvas {
   readonly selectedId = input<string | null>(null);
   readonly highlightCriticalPath = input(false);
 
-  readonly selectNode = output<GraphWorkItem>();
+  readonly selectNode = output<GraphEntity>();
   readonly clearSelection = output<void>();
 
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('g6Host');
@@ -101,7 +102,7 @@ export class GraphCanvas {
 
     this.g6.on(NodeEvent.CLICK, (event: IElementEvent) => {
       const id = String(event.target.id);
-      const item = this.g6?.getNodeData(id)?.data?.['item'] as GraphWorkItem | undefined;
+      const item = this.g6?.getNodeData(id)?.data?.['item'] as GraphEntity | undefined;
       if (item) {
         this.selectNode.emit(item);
       }
@@ -194,7 +195,7 @@ export class GraphCanvas {
     for (const edge of data.edges) {
       const onCritical =
         highlightCritical &&
-        edge.relationType === 'block' &&
+        isCriticalRelation(edge.relationType) &&
         criticalSet.has(edge.source) &&
         criticalSet.has(edge.target);
       stateMap[edge.id] = onCritical ? ['critical'] : highlightCritical ? ['dimmed'] : [];

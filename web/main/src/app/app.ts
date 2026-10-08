@@ -1,10 +1,10 @@
 import { Component, computed, signal } from '@angular/core';
-import { GraphCanvas } from './graph/graph-canvas';
-import { NodeDetail } from './graph/node-detail';
-import { buildMockGraph } from './graph/mock-graph';
 import { RELATION_OPTIONS } from './constants/graph.constants';
-import type { GraphWorkItem } from './entities/graph.entity';
+import type { GraphEntity } from './entities/graph.entity';
 import type { RelationType } from './enums/graph.enum';
+import { GraphCanvas } from './graph/graph-canvas';
+import { buildMockGraph } from './graph/mock-graph';
+import { NodeDetail } from './graph/node-detail';
 
 @Component({
   selector: 'app-root',
@@ -22,13 +22,13 @@ export class App {
     RELATION_OPTIONS.map((item) => item.value),
   );
   protected readonly highlightCriticalPath = signal(false);
-  protected readonly selected = signal<GraphWorkItem | null>(null);
+  protected readonly selected = signal<GraphEntity | null>(null);
 
   protected readonly reloadToken = signal(0);
 
-  protected readonly workitemTitle = computed(() => {
+  protected readonly focusTitle = computed(() => {
     const root = this.graph().nodes.find((node) => node.id === this.graph().rootId);
-    return root ? `${root.identifier} · ${root.title}` : '工作项关系图（模拟数据）';
+    return root ? `${root.identifier} · ${root.title}` : '关联关系图（模拟数据）';
   });
 
   protected readonly graph = computed(() => {
@@ -89,7 +89,7 @@ export class App {
     this.reloadToken.update((value) => value + 1);
   }
 
-  protected onSelectNode(item: GraphWorkItem): void {
+  protected onSelectNode(item: GraphEntity): void {
     this.selected.set(item);
   }
 

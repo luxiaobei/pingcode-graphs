@@ -1,7 +1,12 @@
 import { Component, computed, input, output } from '@angular/core';
-import { NavigationTarget, router } from '@pc-nexus/bridge';
-import type { GraphWorkItem } from '../entities/graph.entity';
-import { workItemAssigneeName, workItemTypeName } from '../utils/graph.util';
+import { router } from '@pc-nexus/bridge';
+import type { GraphEntity } from '../entities/graph.entity';
+import {
+  entityAssigneeName,
+  entityScopeName,
+  entityTypeName,
+  resolveNavigationTarget,
+} from '../utils/graph.util';
 
 @Component({
   selector: 'app-node-detail',
@@ -9,19 +14,24 @@ import { workItemAssigneeName, workItemTypeName } from '../utils/graph.util';
   styleUrl: './node-detail.scss',
 })
 export class NodeDetail {
-  readonly item = input<GraphWorkItem | null>(null);
+  readonly item = input<GraphEntity | null>(null);
   readonly isRoot = input(false);
   readonly isOnCriticalPath = input(false);
   readonly close = output<void>();
 
-  protected readonly typeName = computed(() => workItemTypeName(this.item()));
-  protected readonly assigneeName = computed(() => workItemAssigneeName(this.item()));
+  protected readonly typeName = computed(() => entityTypeName(this.item()));
+  protected readonly assigneeName = computed(() => entityAssigneeName(this.item()));
+  protected readonly scopeName = computed(() => entityScopeName(this.item()));
 
-  protected openWorkItem(): void {
-    const id = this.item()?.id;
-    if (!id) {
+  protected openEntity(): void {
+    const current = this.item();
+    if (!current?.id) {
       return;
     }
-    void router.open({ target: NavigationTarget.Workitem, id });
+    const target = resolveNavigationTarget(current);
+    if (!target) {
+      return;
+    }
+    void router.open({ target, id: current.id });
   }
 }

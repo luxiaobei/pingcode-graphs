@@ -8,6 +8,12 @@ import {
 
 export const GRAPH_MIN_SIZE = 320;
 
+/** 工具栏每次缩放倍率 */
+export const GRAPH_ZOOM_STEP = 1.2;
+
+/** 画布缩放区间 [min, max] */
+export const GRAPH_ZOOM_RANGE: [number, number] = [0.2, 3];
+
 export const DEFAULT_EDGE_COLOR = '#94a3b8';
 
 /** 参与「关键路径」高亮的规范关系类型（可由接口配置覆盖） */
@@ -34,6 +40,7 @@ export const RELATION_OPTIONS: Array<{ value: RelationType; label: string; color
 export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'> = {
   autoFit: 'view',
   padding: 48,
+  zoomRange: GRAPH_ZOOM_RANGE,
   animation: false,
   layout: {
     type: 'd3-force',

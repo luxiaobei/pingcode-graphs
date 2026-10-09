@@ -11,8 +11,13 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { CanvasEvent, Graph, type IElementEvent, NodeEvent } from '@antv/g6';
-import { GRAPH_MIN_SIZE, GRAPH_OPTIONS } from '../constants/graph.constants';
+import { CanvasEvent, Graph, GraphEvent, type IElementEvent, NodeEvent } from '@antv/g6';
+import {
+  GRAPH_MIN_SIZE,
+  GRAPH_OPTIONS,
+  GRAPH_ZOOM_RANGE,
+  GRAPH_ZOOM_STEP,
+} from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import { isCriticalRelation } from '../utils/graph.util';
 import { toG6Data } from '../utils/to-g6-data';
@@ -30,6 +35,8 @@ export class GraphCanvas {
   readonly selectNode = output<GraphEntity>();
   readonly clearSelection = output<void>();
 
+  protected readonly zoomPercent = signal(100);
+
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('g6Host');
   private readonly destroyRef = inject(DestroyRef);
 
@@ -37,6 +44,9 @@ export class GraphCanvas {
   private readonly ready = signal(false);
   private resizeObserver: ResizeObserver | null = null;
   private fitTimers: number[] = [];
+
+  private readonly zoomMinPercent = Math.round(GRAPH_ZOOM_RANGE[0] * 100);
+  private readonly zoomMaxPercent = Math.round(GRAPH_ZOOM_RANGE[1] * 100);
 
   constructor() {
     afterNextRender(() => this.initGraph());
@@ -64,8 +74,30 @@ export class GraphCanvas {
     });
   }
 
+  protected canZoomIn(): boolean {
+    return this.zoomPercent() < this.zoomMaxPercent;
+  }
+
+  protected canZoomOut(): boolean {
+    return this.zoomPercent() > this.zoomMinPercent;
+  }
+
+  protected zoomIn(): void {
+    if (!this.g6 || !this.canZoomIn()) {
+      return;
+    }
+    void this.g6.zoomBy(GRAPH_ZOOM_STEP).then(() => this.syncZoomPercent());
+  }
+
+  protected zoomOut(): void {
+    if (!this.g6 || !this.canZoomOut()) {
+      return;
+    }
+    void this.g6.zoomBy(1 / GRAPH_ZOOM_STEP).then(() => this.syncZoomPercent());
+  }
+
   protected fit(): void {
-    void this.g6?.fitView({ when: 'always', direction: 'both' });
+    void this.g6?.fitView({ when: 'always', direction: 'both' }).then(() => this.syncZoomPercent());
   }
 
   private initGraph(): void {
@@ -111,6 +143,15 @@ export class GraphCanvas {
     this.g6.on(CanvasEvent.CLICK, () => {
       this.clearSelection.emit();
     });
+
+    this.g6.on(GraphEvent.AFTER_TRANSFORM, () => {
+      this.syncZoomPercent();
+    });
+  }
+
+  private syncZoomPercent(): void {
+    const zoom = this.g6?.getZoom() ?? 1;
+    this.zoomPercent.set(Math.round(zoom * 100));
   }
 
   private observeResize(container: HTMLElement): void {
@@ -152,7 +193,9 @@ export class GraphCanvas {
 
   private scheduleFit(): void {
     for (const delay of [0, 50, 200, 500]) {
-      const timer = window.setTimeout(() => this.fit(), delay);
+      const timer = window.setTimeout(() => {
+        this.fit();
+      }, delay);
       this.fitTimers.push(timer);
     }
   }

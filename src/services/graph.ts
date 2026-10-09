@@ -27,6 +27,29 @@ const INVERSE_TO_CANONICAL: Record<string, string> = {
     causedBy: "cause",
 };
 
+const LABEL_TO_TYPE: Record<string, string> = Object.fromEntries(
+    Object.entries(RELATION_LABELS).map(([type, label]) => [label, type]),
+);
+
+function readRelationType(value: WorkItemRelation["relation_type"]): string | undefined {
+    if (typeof value === "string") {
+        return value.trim() || undefined;
+    }
+    if (!value || typeof value !== "object") {
+        return undefined;
+    }
+
+    const candidates = [value.key, value.name, value.id]
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean);
+    const matched = candidates.find((item) => item in RELATION_LABELS || item in LABEL_TO_TYPE);
+    if (matched) {
+        return LABEL_TO_TYPE[matched] ?? matched;
+    }
+    return candidates.find((item) => !/^[a-f0-9]{24}$/i.test(item));
+}
+
 function normalizeWorkItem(raw: GraphWorkItem | undefined, fallbackId?: string): GraphWorkItem | null {
     const id = raw?.id ?? fallbackId;
     if (!id) {
@@ -51,7 +74,7 @@ function toDirectedEdge(
     relation: WorkItemRelation,
     related: GraphWorkItem,
 ): GraphEdge | null {
-    const relationType = relation.relation_type?.trim();
+    const relationType = readRelationType(relation.relation_type);
     if (!relationType) {
         return null;
     }
@@ -143,7 +166,7 @@ export class GraphService {
 
             const relations = await workItemService.fetchRelations(context, current.id);
             for (const relation of relations) {
-                const rawType = relation.relation_type?.trim();
+                const rawType = readRelationType(relation.relation_type);
                 if (!rawType || !allowedTypes.has(rawType)) {
                     continue;
                 }

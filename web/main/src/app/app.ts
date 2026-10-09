@@ -1,8 +1,9 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, effect, signal } from '@angular/core';
 import { RELATION_OPTIONS } from './constants/graph.constants';
-import type { GraphEntity } from './entities/graph.entity';
+import type { DependencyGraph, GraphEntity } from './entities/graph.entity';
 import type { RelationType } from './enums/graph.enum';
 import { GraphCanvas } from './graph/graph-canvas';
+import { loadDependencyGraph } from './graph/load-dependency-graph';
 import { buildMockGraph } from './graph/mock-graph';
 import { NodeDetail } from './graph/node-detail';
 
@@ -15,7 +16,7 @@ import { NodeDetail } from './graph/node-detail';
 export class App {
   protected readonly depths = [1, 2, 3] as const;
   protected readonly relationOptions = RELATION_OPTIONS;
-  protected readonly usingMockData = true;
+  protected readonly usingMockData = signal(true);
 
   protected readonly depth = signal<1 | 2 | 3>(2);
   protected readonly enabledRelations = signal<RelationType[]>(
@@ -25,22 +26,52 @@ export class App {
   protected readonly selected = signal<GraphEntity | null>(null);
 
   protected readonly reloadToken = signal(0);
+  private readonly loadedGraph = signal<DependencyGraph | null>(null);
+  protected readonly loading = signal(false);
+  protected readonly error = signal<string | null>(null);
 
-  protected readonly focusTitle = computed(() => {
-    const root = this.graph().nodes.find((node) => node.id === this.graph().rootId);
-    return root ? `${root.identifier} · ${root.title}` : '关联关系图（模拟数据）';
-  });
+  private requestSeq = 0;
+
+  constructor() {
+    effect(() => {
+      if (this.usingMockData()) {
+        this.requestSeq += 1;
+        this.loading.set(false);
+        this.error.set(null);
+        return;
+      }
+      const depth = this.depth();
+      const relationTypes = this.enabledRelations();
+      void this.reloadToken();
+      void this.loadGraph(depth, relationTypes);
+    });
+  }
 
   protected readonly graph = computed(() => {
-    void this.reloadToken();
-    return buildMockGraph(this.depth(), this.enabledRelations());
+    if (this.usingMockData()) {
+      void this.reloadToken();
+      return buildMockGraph(this.depth(), this.enabledRelations());
+    }
+    return this.loadedGraph();
   });
 
-  protected readonly loading = computed(() => false);
-  protected readonly error = computed(() => null);
+  protected readonly focusTitle = computed(() => {
+    const data = this.graph();
+    if (!data) {
+      return this.loading() ? '正在加载…' : '关系图';
+    }
+    const root = data.nodes.find((node) => node.id === data.rootId);
+    if (!root) {
+      return '关系图';
+    }
+    return [root.identifier, root.title].filter(Boolean).join(' · ') || root.id;
+  });
 
   protected readonly stats = computed(() => {
     const data = this.graph();
+    if (!data) {
+      return null;
+    }
     return {
       nodes: data.nodes.length,
       edges: data.edges.length,
@@ -50,12 +81,14 @@ export class App {
 
   protected readonly selectedIsRoot = computed(() => {
     const selected = this.selected();
-    return !!selected && selected.id === this.graph().rootId;
+    const data = this.graph();
+    return !!selected && !!data && selected.id === data.rootId;
   });
 
   protected readonly selectedOnCritical = computed(() => {
     const selected = this.selected();
-    return !!selected && this.graph().criticalPath.includes(selected.id);
+    const data = this.graph();
+    return !!selected && !!data && data.criticalPath.includes(selected.id);
   });
 
   protected setDepth(value: 1 | 2 | 3): void {
@@ -80,6 +113,11 @@ export class App {
     return this.enabledRelations().includes(type);
   }
 
+  protected toggleMockData(): void {
+    this.selected.set(null);
+    this.usingMockData.update((value) => !value);
+  }
+
   protected toggleCriticalPath(): void {
     this.highlightCriticalPath.update((value) => !value);
   }
@@ -95,5 +133,28 @@ export class App {
 
   protected clearSelection(): void {
     this.selected.set(null);
+  }
+
+  private async loadGraph(depth: 1 | 2 | 3, relationTypes: RelationType[]): Promise<void> {
+    const seq = ++this.requestSeq;
+    this.loading.set(true);
+    this.error.set(null);
+    this.loadedGraph.set(null);
+
+    try {
+      const data = await loadDependencyGraph(depth, relationTypes);
+      if (seq !== this.requestSeq) {
+        return;
+      }
+      this.loadedGraph.set(data);
+      this.loading.set(false);
+    } catch (err) {
+      if (seq !== this.requestSeq) {
+        return;
+      }
+      this.loadedGraph.set(null);
+      this.error.set(err instanceof Error ? err.message.trim() : String(err));
+      this.loading.set(false);
+    }
   }
 }

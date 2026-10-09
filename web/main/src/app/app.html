@@ -3,7 +3,7 @@
     <div class="toolbar__title">
       <h1>关系图</h1>
       <p>{{ focusTitle() }}</p>
-      @if (usingMockData) {
+      @if (usingMockData()) {
         <span class="mock-badge">模拟数据</span>
       }
     </div>
@@ -42,6 +42,9 @@
       </div>
 
       <div class="toolbar__actions">
+        <button type="button" class="ghost-btn" (click)="toggleMockData()">
+          {{ usingMockData() ? '切换使用真实数据' : '切换使用模拟数据' }}
+        </button>
         <button
           type="button"
           class="ghost-btn"

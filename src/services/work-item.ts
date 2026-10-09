@@ -11,7 +11,8 @@ interface ListResponse<T> {
 
 export interface WorkItemRelation {
     id?: string;
-    relation_type?: RelationType | string;
+    /** 公开接口是字符串；运行时也可能是 { id, name, key }。 */
+    relation_type?: RelationType | string | { id?: string; name?: string; key?: string };
     target_work_item_id?: string;
     work_item?: GraphWorkItem;
     target_work_item?: GraphWorkItem;

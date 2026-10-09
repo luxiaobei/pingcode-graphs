@@ -1,10 +1,12 @@
 import { Component, computed, signal } from '@angular/core';
 import { RELATION_OPTIONS } from './constants/graph.constants';
-import type { GraphEntity } from './entities/graph.entity';
+import type { DependencyGraph, GraphEntity } from './entities/graph.entity';
 import type { RelationType } from './enums/graph.enum';
 import { GraphCanvas } from './graph/graph-canvas';
-import { buildMockGraph } from './graph/mock-graph';
 import { NodeDetail } from './graph/node-detail';
+import { getDependencyGraph, USING_MOCK_GRAPH } from './services/graph.service';
+import { buildVisibleGraph } from './utils/expand-graph';
+import { filterGraphByRelations } from './utils/graph.util';
 
 @Component({
   selector: 'app-root',
@@ -15,7 +17,7 @@ import { NodeDetail } from './graph/node-detail';
 export class App {
   protected readonly depths = [1, 2, 3] as const;
   protected readonly relationOptions = RELATION_OPTIONS;
-  protected readonly usingMockData = true;
+  protected readonly usingMockData = USING_MOCK_GRAPH;
 
   protected readonly depth = signal<1 | 2 | 3>(2);
   protected readonly enabledRelations = signal<RelationType[]>(
@@ -23,24 +25,36 @@ export class App {
   );
   protected readonly highlightCriticalPath = signal(false);
   protected readonly selected = signal<GraphEntity | null>(null);
+  protected readonly expandedAnchors = signal<readonly string[]>([]);
+  protected readonly collapsedAnchors = signal<readonly string[]>([]);
 
-  protected readonly reloadToken = signal(0);
-
-  protected readonly focusTitle = computed(() => {
-    const root = this.graph().nodes.find((node) => node.id === this.graph().rootId);
-    return root ? `${root.identifier} · ${root.title}` : '关联关系图（模拟数据）';
-  });
+  protected readonly source = signal<DependencyGraph | null>(null);
+  protected readonly loading = signal(true);
+  protected readonly error = signal<string | null>(null);
 
   protected readonly graph = computed(() => {
-    void this.reloadToken();
-    return buildMockGraph(this.depth(), this.enabledRelations());
+    const source = this.source();
+    if (!source) {
+      return null;
+    }
+    const filtered = filterGraphByRelations(source, this.enabledRelations());
+    return buildVisibleGraph(filtered, this.depth(), {
+      expandedIds: new Set(this.expandedAnchors()),
+      collapsedIds: new Set(this.collapsedAnchors()),
+    });
   });
 
-  protected readonly loading = computed(() => false);
-  protected readonly error = computed(() => null);
+  protected readonly focusTitle = computed(() => {
+    const data = this.graph();
+    const root = data?.nodes.find((node) => node.id === data.rootId);
+    return root ? `${root.identifier} · ${root.title}` : '关联关系图';
+  });
 
   protected readonly stats = computed(() => {
     const data = this.graph();
+    if (!data) {
+      return { nodes: 0, edges: 0, criticalLength: 0 };
+    }
     return {
       nodes: data.nodes.length,
       edges: data.edges.length,
@@ -50,16 +64,28 @@ export class App {
 
   protected readonly selectedIsRoot = computed(() => {
     const selected = this.selected();
-    return !!selected && selected.id === this.graph().rootId;
+    const data = this.graph();
+    return !!selected && !!data && selected.id === data.rootId;
   });
 
   protected readonly selectedOnCritical = computed(() => {
     const selected = this.selected();
-    return !!selected && this.graph().criticalPath.includes(selected.id);
+    const data = this.graph();
+    return !!selected && !!data && data.criticalPath.includes(selected.id);
   });
+
+  constructor() {
+    void this.reload();
+  }
+
+  private resetFoldState(): void {
+    this.expandedAnchors.set([]);
+    this.collapsedAnchors.set([]);
+  }
 
   protected setDepth(value: 1 | 2 | 3): void {
     this.depth.set(value);
+    this.resetFoldState();
     this.selected.set(null);
   }
 
@@ -73,6 +99,7 @@ export class App {
     } else {
       this.enabledRelations.set([...current, type]);
     }
+    this.resetFoldState();
     this.selected.set(null);
   }
 
@@ -84,9 +111,24 @@ export class App {
     this.highlightCriticalPath.update((value) => !value);
   }
 
-  protected reload(): void {
+  protected async reload(): Promise<void> {
     this.selected.set(null);
-    this.reloadToken.update((value) => value + 1);
+    this.resetFoldState();
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      this.source.set(
+        await getDependencyGraph({
+          depth: 3,
+          relationTypes: [...this.enabledRelations()],
+        }),
+      );
+    } catch (err) {
+      this.source.set(null);
+      this.error.set(err instanceof Error ? err.message : String(err));
+    } finally {
+      this.loading.set(false);
+    }
   }
 
   protected onSelectNode(item: GraphEntity): void {
@@ -94,6 +136,25 @@ export class App {
   }
 
   protected clearSelection(): void {
+    this.selected.set(null);
+  }
+
+  protected onToggleExpand(anchorId: string): void {
+    const node = this.graph()?.nodes.find((item) => item.id === anchorId);
+    if (!node?.expandToggle) {
+      return;
+    }
+    if (node.expandToggle === 'collapsed') {
+      this.collapsedAnchors.update((list) => list.filter((id) => id !== anchorId));
+      this.expandedAnchors.update((list) =>
+        list.includes(anchorId) ? list : [...list, anchorId],
+      );
+    } else {
+      this.expandedAnchors.update((list) => list.filter((id) => id !== anchorId));
+      this.collapsedAnchors.update((list) =>
+        list.includes(anchorId) ? list : [...list, anchorId],
+      );
+    }
     this.selected.set(null);
   }
 }

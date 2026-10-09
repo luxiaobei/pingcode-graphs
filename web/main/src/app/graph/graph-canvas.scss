@@ -39,7 +39,7 @@
 }
 
 .canvas-toolbar__btn,
-.canvas-toolbar__fit {
+.canvas-toolbar__action {
   border: none;
   background: transparent;
   color: #334155;
@@ -57,7 +57,7 @@
   font-weight: 500;
 }
 
-.canvas-toolbar__fit {
+.canvas-toolbar__action {
   padding: 0 10px;
   height: 28px;
   font-size: 13px;
@@ -67,7 +67,7 @@
 }
 
 .canvas-toolbar__btn:hover:not(:disabled),
-.canvas-toolbar__fit:hover {
+.canvas-toolbar__action:hover {
   background: #f1f5f9;
 }
 

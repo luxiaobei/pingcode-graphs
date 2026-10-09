@@ -1,4 +1,4 @@
-import type { GraphOptions } from '@antv/g6';
+import type { GraphOptions, IElementDragEvent, IPointerEvent } from '@antv/g6';
 import type { RelationStyle } from '../entities/graph.entity';
 import {
   DEFAULT_RELATION_TYPES,
@@ -13,6 +13,9 @@ export const GRAPH_ZOOM_STEP = 1.2;
 
 /** 画布缩放区间 [min, max] */
 export const GRAPH_ZOOM_RANGE: [number, number] = [0.2, 3];
+
+/** 力导向收束后再适应一次的延迟（ms） */
+export const GRAPH_FIT_SETTLE_MS = 300;
 
 export const DEFAULT_EDGE_COLOR = '#94a3b8';
 
@@ -37,19 +40,21 @@ export const RELATION_OPTIONS: Array<{ value: RelationType; label: string; color
     color: RELATION_STYLE[value].color,
   }));
 
+export const GRAPH_FORCE_LAYOUT = {
+  type: 'd3-force' as const,
+  preventOverlap: true,
+  collide: { radius: 80 },
+  link: { distance: 140 },
+  manyBody: { strength: -420 },
+  center: { strength: 0.08 },
+};
+
 export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'> = {
   autoFit: 'view',
   padding: 48,
   zoomRange: GRAPH_ZOOM_RANGE,
   animation: false,
-  layout: {
-    type: 'd3-force',
-    preventOverlap: true,
-    collide: { radius: 80 },
-    link: { distance: 140 },
-    manyBody: { strength: -420 },
-    center: { strength: 0.08 },
-  },
+  layout: GRAPH_FORCE_LAYOUT,
   node: {
     type: 'rect',
     style: {
@@ -92,5 +97,20 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
       dimmed: { opacity: 0.2 },
     },
   },
-  behaviors: ['drag-canvas', 'zoom-canvas', 'drag-element'],
+  // 画布拖拽 / 节点拖拽互斥，避免抢手势
+  behaviors: [
+    {
+      key: 'drag-canvas',
+      type: 'drag-canvas',
+      enable: (event: IPointerEvent) => event.targetType === 'canvas',
+    },
+    { key: 'zoom-canvas', type: 'zoom-canvas' },
+    {
+      key: 'drag-element',
+      type: 'drag-element',
+      enable: (event: IElementDragEvent) => event.targetType === 'node',
+      dropEffect: 'none',
+      animation: false,
+    },
+  ],
 };

@@ -3,18 +3,28 @@ import type { DependencyGraph, GraphEdge, GraphEntity } from '../entities/graph.
 import { GraphNodeKind } from '../enums/graph.enum';
 import { entityTypeName, relationColor, truncate } from './graph.util';
 
-/** Domain → G6 唯一映射入口。 */
-export function toG6Data(graph: DependencyGraph): GraphData {
+export type GraphNodePosition = { x: number; y: number };
+
+/** Domain → G6 唯一映射入口。positions 优先于节点自带 position。 */
+export function toG6Data(
+  graph: DependencyGraph,
+  positions?: ReadonlyMap<string, GraphNodePosition>,
+): GraphData {
   return {
-    nodes: graph.nodes.map((item) => toG6Node(item, graph.rootId)),
+    nodes: graph.nodes.map((item) => toG6Node(item, graph.rootId, positions)),
     edges: graph.edges.map(toG6Edge),
   };
 }
 
-function toG6Node(item: GraphEntity, rootId: string): NodeData {
+function toG6Node(
+  item: GraphEntity,
+  rootId: string,
+  positions?: ReadonlyMap<string, GraphNodePosition>,
+): NodeData {
   const kind = item.kind ?? GraphNodeKind.Entity;
   const isMore = kind === GraphNodeKind.More;
   const count = item.hiddenNeighborCount ?? 0;
+  const position = positions?.get(item.id) ?? item.position;
 
   const node: NodeData = {
     id: item.id,
@@ -28,10 +38,10 @@ function toG6Node(item: GraphEntity, rootId: string): NodeData {
     },
   };
 
-  if (item.position) {
+  if (position) {
     node.style = {
-      x: item.position.x,
-      y: item.position.y,
+      x: position.x,
+      y: position.y,
     };
   }
 

@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { CanvasEvent, Graph, GraphEvent, type IElementEvent, NodeEvent } from '@antv/g6';
 import {
+  GRAPH_FIT_SETTLE_MS,
   GRAPH_MIN_SIZE,
   GRAPH_OPTIONS,
   GRAPH_ZOOM_RANGE,
@@ -20,7 +21,7 @@ import {
 } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import { isCriticalRelation } from '../utils/graph.util';
-import { toG6Data } from '../utils/to-g6-data';
+import { toG6Data, type GraphNodePosition } from '../utils/to-g6-data';
 
 @Component({
   selector: 'app-graph-canvas',
@@ -43,7 +44,10 @@ export class GraphCanvas {
   private g6: Graph | null = null;
   private readonly ready = signal(false);
   private resizeObserver: ResizeObserver | null = null;
-  private fitTimers: number[] = [];
+  private fitTimer: number | null = null;
+  private renderSeq = 0;
+  /** 拖拽后固定坐标；仅当当前全部节点都有坐标时跳过力导向 */
+  private readonly pinnedPositions = new Map<string, GraphNodePosition>();
 
   private readonly zoomMinPercent = Math.round(GRAPH_ZOOM_RANGE[0] * 100);
   private readonly zoomMaxPercent = Math.round(GRAPH_ZOOM_RANGE[1] * 100);
@@ -109,9 +113,10 @@ export class GraphCanvas {
   }
 
   private destroyGraph(): void {
-    this.clearFitTimers();
+    this.clearFitTimer();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.pinnedPositions.clear();
     this.g6?.destroy();
     this.g6 = null;
     this.ready.set(false);
@@ -147,6 +152,47 @@ export class GraphCanvas {
     this.g6.on(GraphEvent.AFTER_TRANSFORM, () => {
       this.syncZoomPercent();
     });
+
+    this.g6.on(NodeEvent.DRAG_START, () => {
+      this.g6?.stopLayout();
+    });
+
+    this.g6.on(NodeEvent.DRAG_END, () => {
+      this.snapshotAllPositions();
+    });
+  }
+
+  private snapshotAllPositions(): void {
+    if (!this.g6) {
+      return;
+    }
+    for (const node of this.g6.getNodeData()) {
+      const id = String(node.id);
+      const [x, y] = this.g6.getElementPosition(id);
+      this.pinnedPositions.set(id, { x, y });
+    }
+  }
+
+  /** 去掉已不在图中的钉住坐标；若有新增未钉住节点则整图放弃钉住并重排 */
+  private resolvePinnedPositions(data: DependencyGraph): ReadonlyMap<string, GraphNodePosition> | null {
+    const nodeIds = new Set(data.nodes.map((node) => node.id));
+    for (const id of [...this.pinnedPositions.keys()]) {
+      if (!nodeIds.has(id)) {
+        this.pinnedPositions.delete(id);
+      }
+    }
+
+    if (!this.pinnedPositions.size) {
+      return null;
+    }
+
+    const allPinned = data.nodes.every((node) => this.pinnedPositions.has(node.id));
+    if (!allPinned) {
+      this.pinnedPositions.clear();
+      return null;
+    }
+
+    return this.pinnedPositions;
   }
 
   private syncZoomPercent(): void {
@@ -165,7 +211,6 @@ export class GraphCanvas {
     }
     const rect = container.getBoundingClientRect();
     this.g6.resize(Math.max(rect.width, GRAPH_MIN_SIZE), Math.max(rect.height, GRAPH_MIN_SIZE));
-    this.fit();
   }
 
   private async render(data: DependencyGraph | null): Promise<void> {
@@ -173,38 +218,51 @@ export class GraphCanvas {
       return;
     }
 
-    this.clearFitTimers();
+    const seq = ++this.renderSeq;
+    this.clearFitTimer();
 
     if (!data?.nodes.length) {
+      this.pinnedPositions.clear();
       this.g6.setData({ nodes: [], edges: [] });
       await this.g6.render();
       return;
     }
 
-    this.g6.setData(toG6Data(data));
-    await this.g6.render();
+    const positions = this.resolvePinnedPositions(data);
+    this.g6.setData(toG6Data(data, positions ?? undefined));
+
+    if (positions) {
+      await this.g6.draw();
+    } else {
+      await this.g6.render();
+      if (seq !== this.renderSeq) {
+        return;
+      }
+      this.fit();
+      // 力导向还会再收束一阵，延迟再适应一次
+      this.fitTimer = window.setTimeout(() => {
+        if (seq === this.renderSeq) {
+          this.fit();
+        }
+      }, GRAPH_FIT_SETTLE_MS);
+    }
+
+    if (seq !== this.renderSeq) {
+      return;
+    }
+
     await this.applyHighlights(
       data,
       untracked(() => this.selectedId()),
       untracked(() => this.highlightCriticalPath()),
     );
-    this.scheduleFit();
   }
 
-  private scheduleFit(): void {
-    for (const delay of [0, 50, 200, 500]) {
-      const timer = window.setTimeout(() => {
-        this.fit();
-      }, delay);
-      this.fitTimers.push(timer);
+  private clearFitTimer(): void {
+    if (this.fitTimer != null) {
+      window.clearTimeout(this.fitTimer);
+      this.fitTimer = null;
     }
-  }
-
-  private clearFitTimers(): void {
-    for (const timer of this.fitTimers) {
-      window.clearTimeout(timer);
-    }
-    this.fitTimers = [];
   }
 
   private async applyHighlights(

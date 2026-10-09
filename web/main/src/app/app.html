@@ -85,6 +85,7 @@
           [highlightCriticalPath]="highlightCriticalPath()"
           (selectNode)="onSelectNode($event)"
           (clearSelection)="clearSelection()"
+          (toggleExpand)="onToggleExpand($event)"
         />
         @if (selected()) {
           <app-node-detail

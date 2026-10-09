@@ -1,11 +1,13 @@
-import { Component, computed, effect, signal } from '@angular/core';
+import { Component, computed, signal } from '@angular/core';
 import { RELATION_OPTIONS } from './constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from './entities/graph.entity';
-import type { RelationType } from './enums/graph.enum';
+import { DEFAULT_RELATION_TYPES, type RelationType } from './enums/graph.enum';
 import { GraphCanvas } from './graph/graph-canvas';
 import { loadDependencyGraph } from './graph/load-dependency-graph';
-import { buildMockGraph } from './graph/mock-graph';
 import { NodeDetail } from './graph/node-detail';
+import { getDependencyGraph } from './services/graph.service';
+import { buildVisibleGraph } from './utils/expand-graph';
+import { filterGraphByRelations } from './utils/graph.util';
 
 @Component({
   selector: 'app-root',
@@ -24,35 +26,25 @@ export class App {
   );
   protected readonly highlightCriticalPath = signal(false);
   protected readonly selected = signal<GraphEntity | null>(null);
+  protected readonly expandedAnchors = signal<readonly string[]>([]);
+  protected readonly collapsedAnchors = signal<readonly string[]>([]);
 
-  protected readonly reloadToken = signal(0);
-  private readonly loadedGraph = signal<DependencyGraph | null>(null);
-  protected readonly loading = signal(false);
+  protected readonly source = signal<DependencyGraph | null>(null);
+  protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
 
   private requestSeq = 0;
 
-  constructor() {
-    effect(() => {
-      if (this.usingMockData()) {
-        this.requestSeq += 1;
-        this.loading.set(false);
-        this.error.set(null);
-        return;
-      }
-      const depth = this.depth();
-      const relationTypes = this.enabledRelations();
-      void this.reloadToken();
-      void this.loadGraph(depth, relationTypes);
-    });
-  }
-
   protected readonly graph = computed(() => {
-    if (this.usingMockData()) {
-      void this.reloadToken();
-      return buildMockGraph(this.depth(), this.enabledRelations());
+    const source = this.source();
+    if (!source) {
+      return null;
     }
-    return this.loadedGraph();
+    const filtered = filterGraphByRelations(source, this.enabledRelations());
+    return buildVisibleGraph(filtered, this.depth(), {
+      expandedIds: new Set(this.expandedAnchors()),
+      collapsedIds: new Set(this.collapsedAnchors()),
+    });
   });
 
   protected readonly focusTitle = computed(() => {
@@ -91,8 +83,18 @@ export class App {
     return !!selected && !!data && data.criticalPath.includes(selected.id);
   });
 
+  constructor() {
+    void this.reload();
+  }
+
+  private resetFoldState(): void {
+    this.expandedAnchors.set([]);
+    this.collapsedAnchors.set([]);
+  }
+
   protected setDepth(value: 1 | 2 | 3): void {
     this.depth.set(value);
+    this.resetFoldState();
     this.selected.set(null);
   }
 
@@ -106,6 +108,7 @@ export class App {
     } else {
       this.enabledRelations.set([...current, type]);
     }
+    this.resetFoldState();
     this.selected.set(null);
   }
 
@@ -116,15 +119,36 @@ export class App {
   protected toggleMockData(): void {
     this.selected.set(null);
     this.usingMockData.update((value) => !value);
+    void this.reload();
   }
 
   protected toggleCriticalPath(): void {
     this.highlightCriticalPath.update((value) => !value);
   }
 
-  protected reload(): void {
+  protected async reload(): Promise<void> {
+    const seq = ++this.requestSeq;
     this.selected.set(null);
-    this.reloadToken.update((value) => value + 1);
+    this.resetFoldState();
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      const data = this.usingMockData()
+        ? await getDependencyGraph()
+        : await loadDependencyGraph(3, [...DEFAULT_RELATION_TYPES]);
+      if (seq !== this.requestSeq) {
+        return;
+      }
+      this.source.set(data);
+      this.loading.set(false);
+    } catch (err) {
+      if (seq !== this.requestSeq) {
+        return;
+      }
+      this.source.set(null);
+      this.error.set(err instanceof Error ? err.message.trim() : String(err));
+      this.loading.set(false);
+    }
   }
 
   protected onSelectNode(item: GraphEntity): void {
@@ -135,26 +159,22 @@ export class App {
     this.selected.set(null);
   }
 
-  private async loadGraph(depth: 1 | 2 | 3, relationTypes: RelationType[]): Promise<void> {
-    const seq = ++this.requestSeq;
-    this.loading.set(true);
-    this.error.set(null);
-    this.loadedGraph.set(null);
-
-    try {
-      const data = await loadDependencyGraph(depth, relationTypes);
-      if (seq !== this.requestSeq) {
-        return;
-      }
-      this.loadedGraph.set(data);
-      this.loading.set(false);
-    } catch (err) {
-      if (seq !== this.requestSeq) {
-        return;
-      }
-      this.loadedGraph.set(null);
-      this.error.set(err instanceof Error ? err.message.trim() : String(err));
-      this.loading.set(false);
+  protected onToggleExpand(anchorId: string): void {
+    const node = this.graph()?.nodes.find((item) => item.id === anchorId);
+    if (!node?.expandToggle) {
+      return;
     }
+    if (node.expandToggle === 'collapsed') {
+      this.collapsedAnchors.update((list) => list.filter((id) => id !== anchorId));
+      this.expandedAnchors.update((list) =>
+        list.includes(anchorId) ? list : [...list, anchorId],
+      );
+    } else {
+      this.expandedAnchors.update((list) => list.filter((id) => id !== anchorId));
+      this.collapsedAnchors.update((list) =>
+        list.includes(anchorId) ? list : [...list, anchorId],
+      );
+    }
+    this.selected.set(null);
   }
 }

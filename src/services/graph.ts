@@ -76,32 +76,27 @@ function readRelationLabel(value: WorkItemRelation["relation_type"]): string | u
     return name || undefined;
 }
 
+const WORK_ITEM_FIELDS = [
+    "identifier",
+    "title",
+    "type",
+    "state",
+    "project",
+    "priority",
+    "assignee",
+] as const satisfies readonly (keyof GraphWorkItem)[];
+
 function normalizeWorkItem(raw: GraphWorkItem | undefined, fallbackId?: string): GraphWorkItem | null {
     const id = raw?.id ?? fallbackId;
     if (!id) {
         return null;
     }
     const item: GraphWorkItem = { id };
-    if (raw?.identifier) {
-        item.identifier = raw.identifier;
-    }
-    if (raw?.title) {
-        item.title = raw.title;
-    }
-    if (raw?.type) {
-        item.type = raw.type;
-    }
-    if (raw?.state) {
-        item.state = raw.state;
-    }
-    if (raw?.project) {
-        item.project = raw.project;
-    }
-    if (raw?.priority) {
-        item.priority = raw.priority;
-    }
-    if (raw?.assignee) {
-        item.assignee = raw.assignee;
+    for (const key of WORK_ITEM_FIELDS) {
+        const value = raw?.[key];
+        if (value) {
+            Object.assign(item, { [key]: value });
+        }
     }
     return item;
 }

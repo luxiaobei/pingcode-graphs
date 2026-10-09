@@ -1,4 +1,5 @@
 import { Component, computed, signal } from '@angular/core';
+import { view } from '@pc-nexus/bridge';
 import { RELATION_OPTIONS } from './constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from './entities/graph.entity';
 import type { RelationType } from './enums/graph.enum';
@@ -109,6 +110,10 @@ export class App {
 
   protected toggleCriticalPath(): void {
     this.highlightCriticalPath.update((value) => !value);
+  }
+
+  protected closeDialog(): void {
+    view.close().catch(() => undefined);
   }
 
   protected async reload(): Promise<void> {

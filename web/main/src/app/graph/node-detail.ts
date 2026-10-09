@@ -1,11 +1,10 @@
 import { Component, computed, input, output } from '@angular/core';
-import { router } from '@pc-nexus/bridge';
 import type { GraphEntity } from '../entities/graph.entity';
 import {
   entityAssigneeName,
   entityScopeName,
   entityTypeName,
-  resolveNavigationTarget,
+  openPivot,
 } from '../utils/graph.util';
 
 @Component({
@@ -25,13 +24,9 @@ export class NodeDetail {
 
   protected openEntity(): void {
     const current = this.item();
-    if (!current?.id) {
+    if (!current) {
       return;
     }
-    const target = resolveNavigationTarget(current);
-    if (!target) {
-      return;
-    }
-    void router.open({ target, id: current.id });
+    openPivot(current);
   }
 }

@@ -1,7 +1,8 @@
 import type { EventHandler } from "@pc-nexus/event";
 import { ces } from "@pc-nexus/storage";
-import { createTestCaseNode } from "../../models/testhub/test-case-node.js";
-import { KG_NODE_ENTITY_NAME, KG_NODE_KIND, type KgNode } from "../../models/pc-kg-node.js";
+import { createTestCaseNode, type TestCaseKgNode } from "../../models/testhub/test-case-node.js";
+import { KG_NODE_ENTITY_NAME, KG_NODE_KIND, kgNodeId, type KgNode } from "../../models/pc-kg-node.js";
+import { createKgEdge, KG_EDGE_ENTITY_NAME, KG_EDGE_TYPE, type KgEdge } from "../../models/pc-kg-edge.js";
 
 export const onTestCaseCreatedHandler: EventHandler = async (context, event) => {
     const testCaseInfo = (event.payload as any)["data"];
@@ -19,6 +20,7 @@ export const onTestCaseCreatedHandler: EventHandler = async (context, event) => 
         active: true,
     });
     await ces.entity(KG_NODE_ENTITY_NAME).insert(testCaseNode);
+    createTestCaseEdges(testCaseNode, testCaseInfo);
 };
 
 export const onTestCaseUpdatedHandler: EventHandler = async (context, event) => {
@@ -40,6 +42,7 @@ export const onTestCaseUpdatedHandler: EventHandler = async (context, event) => 
         cb.field("kind").eq(testCaseNode.kind);
         cb.field("ref_id").eq(testCaseNode.ref_id);
     }, testCaseNode);
+    createTestCaseEdges(testCaseNode, testCaseInfo);
 };
 
 export const onTestCaseDeletedHandler: EventHandler = async (context, event) => {
@@ -49,3 +52,21 @@ export const onTestCaseDeletedHandler: EventHandler = async (context, event) => 
         cb.field("ref_id").eq(testCaseInfo["id"]);
     }, { active: false });
 };
+
+async function createTestCaseEdges(testCaseNode: TestCaseKgNode, testCaseInfo: any) {
+    const edges: KgEdge[] = [];
+    if (testCaseInfo["library"]) {
+        edges.push(createKgEdge({
+            fromId: testCaseNode.id,
+            toId: kgNodeId(KG_NODE_KIND.library, testCaseInfo["library"]?.["id"]),
+            type: KG_EDGE_TYPE.belongsTo,
+        }));
+        await ces.entity<KgEdge>(KG_EDGE_ENTITY_NAME).delete((cb) => {
+            cb.field("from_id").eq(testCaseNode.id);
+            cb.field("type").eq(KG_EDGE_TYPE.belongsTo);
+        });
+    }
+    if (edges.length > 0) {
+        await ces.entity(KG_EDGE_ENTITY_NAME).insert(edges);
+    }
+}

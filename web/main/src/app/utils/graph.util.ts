@@ -1,3 +1,4 @@
+import { idea, page, testcase, ticket, workitem } from '@pc-nexus/capabilities';
 import { NavigationTarget } from '@pc-nexus/bridge';
 import {
   CRITICAL_PATH_RELATION_TYPES,
@@ -57,6 +58,27 @@ export function resolveNavigationTarget(item: GraphEntity): NavigationTarget | n
     return target;
   }
   return null;
+}
+
+const pivotOpeners: Partial<Record<NavigationTarget, (identifier: string) => Promise<void>>> = {
+  [NavigationTarget.Workitem]: (identifier) => workitem.openDetail(identifier),
+  [NavigationTarget.Idea]: (identifier) => idea.openDetail(identifier),
+  [NavigationTarget.Testcase]: (identifier) => testcase.openDetail(identifier),
+  [NavigationTarget.Ticket]: (identifier) => ticket.openDetail(identifier),
+  [NavigationTarget.Page]: (identifier) => page.openDetail(identifier),
+};
+
+/** 通过 SDK 打开对应对象的 pivot 详情。identifier 为编号，如 GRA-3。 */
+export function openPivot(item: GraphEntity): void {
+  const identifier = item.identifier?.trim();
+  if (!identifier) {
+    return;
+  }
+  const open = pivotOpeners[resolveNavigationTarget(item) ?? NavigationTarget.Workitem];
+  if (!open) {
+    return;
+  }
+  void open(identifier).catch(() => undefined);
 }
 
 /** 超长文案截断并加省略号 */

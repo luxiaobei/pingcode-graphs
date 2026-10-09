@@ -1,11 +1,14 @@
 <div class="page">
   <header class="toolbar">
-    <div class="toolbar__title">
-      <h1>关系图</h1>
-      <p>{{ focusTitle() }}</p>
-      @if (usingMockData) {
-        <span class="mock-badge">模拟数据</span>
-      }
+    <div class="toolbar__heading">
+      <div class="toolbar__title">
+        <h1>关系图</h1>
+        <p>{{ focusTitle() }}</p>
+        @if (usingMockData) {
+          <span class="mock-badge">模拟数据</span>
+        }
+      </div>
+      <button type="button" class="close-btn" (click)="closeDialog()" aria-label="关闭">×</button>
     </div>
 
     <div class="toolbar__controls">

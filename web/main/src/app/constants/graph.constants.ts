@@ -1,10 +1,12 @@
-import type { GraphOptions, IElementDragEvent, IPointerEvent } from '@antv/g6';
+import type {
+  EdgeData,
+  GraphOptions,
+  IElementDragEvent,
+  IPointerEvent,
+  NodeData,
+} from '@antv/g6';
 import type { RelationStyle } from '../entities/graph.entity';
-import {
-  DEFAULT_RELATION_TYPES,
-  EXPAND_RELATION_TYPE,
-  type RelationType,
-} from '../enums/graph.enum';
+import { DEFAULT_RELATION_TYPES, type RelationType } from '../enums/graph.enum';
 
 export const GRAPH_MIN_SIZE = 320;
 
@@ -16,6 +18,9 @@ export const GRAPH_ZOOM_RANGE: [number, number] = [0.2, 3];
 
 /** 力导向收束后再适应一次的延迟（ms） */
 export const GRAPH_FIT_SETTLE_MS = 300;
+
+/** 业务节点占位（含间距），展开落点避让用 */
+export const GRAPH_NODE_SLOT = { width: 168, height: 96 } as const;
 
 export const DEFAULT_EDGE_COLOR = '#94a3b8';
 
@@ -29,7 +34,6 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
   causedBy: { label: '由…导致', color: '#c47a1a', canonical: 'cause' },
   relate: { label: '关联', color: '#3b6fd9' },
   duplicate: { label: '重复', color: '#6b7280' },
-  [EXPAND_RELATION_TYPE]: { label: '展开', color: DEFAULT_EDGE_COLOR },
 };
 
 /** 默认筛选选项；正式环境由接口下发的关系配置覆盖 */
@@ -43,10 +47,10 @@ export const RELATION_OPTIONS: Array<{ value: RelationType; label: string; color
 export const GRAPH_FORCE_LAYOUT = {
   type: 'd3-force' as const,
   preventOverlap: true,
-  collide: { radius: 80 },
-  link: { distance: 140 },
-  manyBody: { strength: -420 },
-  center: { strength: 0.08 },
+  collide: { radius: 90 },
+  link: { distance: 180 },
+  manyBody: { strength: -520 },
+  center: { strength: 0.05 },
 };
 
 export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'> = {
@@ -58,12 +62,12 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
   node: {
     type: 'rect',
     style: {
-      size: [132, 56],
+      size: [132, 56] as [number, number],
       radius: 8,
       fill: '#ffffff',
       stroke: '#94a3b8',
       lineWidth: 2,
-      labelText: (d) => (d.data?.['label'] as string) ?? '',
+      labelText: (d: NodeData) => (d.data?.['label'] as string) ?? '',
       labelFill: '#1f2937',
       labelFontSize: 11,
       labelPlacement: 'center',
@@ -79,25 +83,25 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
     },
   },
   edge: {
-    type: 'quadratic',
+    type: 'line',
     style: {
-      stroke: (d) => (d.data?.['color'] as string) ?? '#94a3b8',
-      lineWidth: 2,
+      stroke: (d: EdgeData) => (d.data?.['color'] as string) ?? '#94a3b8',
+      lineWidth: 1.5,
+      lineDash: [6, 4],
       endArrow: true,
-      labelText: (d) => (d.data?.['label'] as string) ?? '',
+      labelText: (d: EdgeData) => (d.data?.['label'] as string) ?? '',
       labelFill: '#64748b',
       labelFontSize: 9,
       labelBackground: true,
       labelBackgroundFill: '#f8fafc',
-      labelBackgroundOpacity: 0.9,
+      labelBackgroundOpacity: 0.95,
       labelPadding: [1, 4],
     },
     state: {
-      critical: { stroke: '#dc2626', lineWidth: 3 },
+      critical: { stroke: '#dc2626', lineWidth: 2.5, lineDash: [0, 0] },
       dimmed: { opacity: 0.2 },
     },
   },
-  // 画布拖拽 / 节点拖拽互斥，避免抢手势
   behaviors: [
     {
       key: 'drag-canvas',

@@ -14,14 +14,25 @@ import {
 import { CanvasEvent, Graph, GraphEvent, type IElementEvent, NodeEvent } from '@antv/g6';
 import {
   GRAPH_FIT_SETTLE_MS,
-  GRAPH_MIN_SIZE,
   GRAPH_OPTIONS,
   GRAPH_ZOOM_RANGE,
   GRAPH_ZOOM_STEP,
 } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
-import { isCriticalRelation } from '../utils/graph.util';
-import { toG6Data, type GraphNodePosition } from '../utils/to-g6-data';
+import {
+  buildElementStates,
+  graphHostSize,
+  isBadgeTarget,
+  nodeItemFromEvent,
+  rememberFoldSides,
+  snapshotGraphPositions,
+} from '../utils/g6-helpers';
+import { visiblePositions } from '../utils/pin-layout';
+import {
+  toG6Data,
+  type FoldPlacement,
+  type GraphNodePosition,
+} from '../utils/to-g6-data';
 
 @Component({
   selector: 'app-graph-canvas',
@@ -35,6 +46,7 @@ export class GraphCanvas {
 
   readonly selectNode = output<GraphEntity>();
   readonly clearSelection = output<void>();
+  readonly toggleExpand = output<string>();
 
   protected readonly zoomPercent = signal(100);
 
@@ -46,35 +58,34 @@ export class GraphCanvas {
   private resizeObserver: ResizeObserver | null = null;
   private fitTimer: number | null = null;
   private renderSeq = 0;
-  /** 拖拽后固定坐标；仅当当前全部节点都有坐标时跳过力导向 */
+  private lastDepth: number | null = null;
   private readonly pinnedPositions = new Map<string, GraphNodePosition>();
+  private readonly foldSideById = new Map<string, FoldPlacement>();
 
   private readonly zoomMinPercent = Math.round(GRAPH_ZOOM_RANGE[0] * 100);
   private readonly zoomMaxPercent = Math.round(GRAPH_ZOOM_RANGE[1] * 100);
 
   constructor() {
     afterNextRender(() => this.initGraph());
-
     this.destroyRef.onDestroy(() => this.destroyGraph());
 
     effect(() => {
-      if (!this.ready()) {
-        return;
+      if (this.ready()) {
+        void this.render(this.graph());
       }
-      void this.render(this.graph());
     });
 
     effect(() => {
-      if (!this.ready()) {
+      if (!this.ready() || !this.g6) {
         return;
       }
-      const selectedId = this.selectedId();
-      const highlightCritical = this.highlightCriticalPath();
       const data = untracked(() => this.graph());
-      if (!data) {
-        return;
+      if (data) {
+        void this.g6.setElementState(
+          buildElementStates(data, this.selectedId(), this.highlightCriticalPath()),
+          false,
+        );
       }
-      void this.applyHighlights(data, selectedId, highlightCritical);
     });
   }
 
@@ -87,17 +98,15 @@ export class GraphCanvas {
   }
 
   protected zoomIn(): void {
-    if (!this.g6 || !this.canZoomIn()) {
-      return;
+    if (this.g6 && this.canZoomIn()) {
+      void this.g6.zoomBy(GRAPH_ZOOM_STEP).then(() => this.syncZoomPercent());
     }
-    void this.g6.zoomBy(GRAPH_ZOOM_STEP).then(() => this.syncZoomPercent());
   }
 
   protected zoomOut(): void {
-    if (!this.g6 || !this.canZoomOut()) {
-      return;
+    if (this.g6 && this.canZoomOut()) {
+      void this.g6.zoomBy(1 / GRAPH_ZOOM_STEP).then(() => this.syncZoomPercent());
     }
-    void this.g6.zoomBy(1 / GRAPH_ZOOM_STEP).then(() => this.syncZoomPercent());
   }
 
   protected fit(): void {
@@ -106,9 +115,16 @@ export class GraphCanvas {
 
   private initGraph(): void {
     const container = this.host().nativeElement;
-    this.g6 = this.createGraph(container);
+    this.g6 = new Graph({ container, ...graphHostSize(container), ...GRAPH_OPTIONS });
     this.bindGraphEvents();
-    this.observeResize(container);
+    this.resizeObserver = new ResizeObserver(() => {
+      if (!this.g6) {
+        return;
+      }
+      const { width, height } = graphHostSize(container);
+      this.g6.resize(width, height);
+    });
+    this.resizeObserver.observe(container);
     this.ready.set(true);
   }
 
@@ -117,19 +133,21 @@ export class GraphCanvas {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.pinnedPositions.clear();
+    this.foldSideById.clear();
     this.g6?.destroy();
     this.g6 = null;
     this.ready.set(false);
   }
 
-  private createGraph(container: HTMLElement): Graph {
-    const { width, height } = container.getBoundingClientRect();
-    return new Graph({
-      container,
-      width: Math.max(width, GRAPH_MIN_SIZE),
-      height: Math.max(height, GRAPH_MIN_SIZE),
-      ...GRAPH_OPTIONS,
-    });
+  private applyGraphData(
+    data: DependencyGraph,
+    positions?: ReadonlyMap<string, GraphNodePosition>,
+  ): void {
+    if (!this.g6) {
+      return;
+    }
+    this.g6.setData(toG6Data(data, positions ?? this.pinnedPositions, this.foldSideById));
+    rememberFoldSides(this.g6, this.foldSideById);
   }
 
   private bindGraphEvents(): void {
@@ -138,79 +156,51 @@ export class GraphCanvas {
     }
 
     this.g6.on(NodeEvent.CLICK, (event: IElementEvent) => {
-      const id = String(event.target.id);
-      const item = this.g6?.getNodeData(id)?.data?.['item'] as GraphEntity | undefined;
-      if (item) {
-        this.selectNode.emit(item);
+      if (!this.g6) {
+        return;
       }
+      const item = nodeItemFromEvent(this.g6, event);
+      if (!item) {
+        return;
+      }
+      if (item.expandToggle && isBadgeTarget(event)) {
+        this.toggleExpand.emit(item.id);
+        return;
+      }
+      this.selectNode.emit(item);
     });
 
-    this.g6.on(CanvasEvent.CLICK, () => {
-      this.clearSelection.emit();
-    });
-
-    this.g6.on(GraphEvent.AFTER_TRANSFORM, () => {
-      this.syncZoomPercent();
-    });
-
-    this.g6.on(NodeEvent.DRAG_START, () => {
-      this.g6?.stopLayout();
-    });
-
+    this.g6.on(CanvasEvent.CLICK, () => this.clearSelection.emit());
+    this.g6.on(GraphEvent.AFTER_TRANSFORM, () => this.syncZoomPercent());
+    this.g6.on(NodeEvent.DRAG_START, () => this.g6?.stopLayout());
     this.g6.on(NodeEvent.DRAG_END, () => {
-      this.snapshotAllPositions();
+      if (!this.g6) {
+        return;
+      }
+      snapshotGraphPositions(this.g6, this.pinnedPositions);
+      const data = untracked(() => this.graph());
+      if (data) {
+        this.applyGraphData(data);
+        void this.g6.draw();
+      }
     });
   }
 
-  private snapshotAllPositions(): void {
-    if (!this.g6) {
-      return;
-    }
-    for (const node of this.g6.getNodeData()) {
-      const id = String(node.id);
-      const [x, y] = this.g6.getElementPosition(id);
-      this.pinnedPositions.set(id, { x, y });
-    }
-  }
-
-  /** 去掉已不在图中的钉住坐标；若有新增未钉住节点则整图放弃钉住并重排 */
-  private resolvePinnedPositions(data: DependencyGraph): ReadonlyMap<string, GraphNodePosition> | null {
-    const nodeIds = new Set(data.nodes.map((node) => node.id));
-    for (const id of [...this.pinnedPositions.keys()]) {
-      if (!nodeIds.has(id)) {
-        this.pinnedPositions.delete(id);
-      }
-    }
-
-    if (!this.pinnedPositions.size) {
-      return null;
-    }
-
-    const allPinned = data.nodes.every((node) => this.pinnedPositions.has(node.id));
-    if (!allPinned) {
+  private preparePositions(data: DependencyGraph): ReadonlyMap<string, GraphNodePosition> | null {
+    if (this.lastDepth !== data.depth) {
       this.pinnedPositions.clear();
+      this.foldSideById.clear();
+      this.lastDepth = data.depth;
       return null;
     }
-
-    return this.pinnedPositions;
+    if (this.g6?.getNodeData().length) {
+      snapshotGraphPositions(this.g6, this.pinnedPositions);
+    }
+    return this.pinnedPositions.size ? visiblePositions(data, this.pinnedPositions) : null;
   }
 
   private syncZoomPercent(): void {
-    const zoom = this.g6?.getZoom() ?? 1;
-    this.zoomPercent.set(Math.round(zoom * 100));
-  }
-
-  private observeResize(container: HTMLElement): void {
-    this.resizeObserver = new ResizeObserver(() => this.resizeToHost(container));
-    this.resizeObserver.observe(container);
-  }
-
-  private resizeToHost(container: HTMLElement): void {
-    if (!this.g6) {
-      return;
-    }
-    const rect = container.getBoundingClientRect();
-    this.g6.resize(Math.max(rect.width, GRAPH_MIN_SIZE), Math.max(rect.height, GRAPH_MIN_SIZE));
+    this.zoomPercent.set(Math.round((this.g6?.getZoom() ?? 1) * 100));
   }
 
   private async render(data: DependencyGraph | null): Promise<void> {
@@ -223,23 +213,30 @@ export class GraphCanvas {
 
     if (!data?.nodes.length) {
       this.pinnedPositions.clear();
+      this.foldSideById.clear();
+      this.lastDepth = null;
       this.g6.setData({ nodes: [], edges: [] });
       await this.g6.render();
       return;
     }
 
-    const positions = this.resolvePinnedPositions(data);
-    this.g6.setData(toG6Data(data, positions ?? undefined));
-
+    const positions = this.preparePositions(data);
     if (positions) {
+      this.applyGraphData(data, positions);
       await this.g6.draw();
     } else {
+      this.g6.setData(toG6Data(data, undefined, this.foldSideById));
       await this.g6.render();
       if (seq !== this.renderSeq) {
         return;
       }
+      snapshotGraphPositions(this.g6, this.pinnedPositions);
+      this.applyGraphData(data, this.pinnedPositions);
+      await this.g6.draw();
+      if (seq !== this.renderSeq) {
+        return;
+      }
       this.fit();
-      // 力导向还会再收束一阵，延迟再适应一次
       this.fitTimer = window.setTimeout(() => {
         if (seq === this.renderSeq) {
           this.fit();
@@ -251,10 +248,13 @@ export class GraphCanvas {
       return;
     }
 
-    await this.applyHighlights(
-      data,
-      untracked(() => this.selectedId()),
-      untracked(() => this.highlightCriticalPath()),
+    await this.g6.setElementState(
+      buildElementStates(
+        data,
+        untracked(() => this.selectedId()),
+        untracked(() => this.highlightCriticalPath()),
+      ),
+      false,
     );
   }
 
@@ -263,45 +263,5 @@ export class GraphCanvas {
       window.clearTimeout(this.fitTimer);
       this.fitTimer = null;
     }
-  }
-
-  private async applyHighlights(
-    data: DependencyGraph,
-    selectedId: string | null,
-    highlightCritical: boolean,
-  ): Promise<void> {
-    if (!this.g6) {
-      return;
-    }
-
-    const criticalSet = new Set(highlightCritical ? data.criticalPath : []);
-    const stateMap: Record<string, string[]> = {};
-
-    for (const node of data.nodes) {
-      const states: string[] = [];
-      if (node.id === data.rootId) {
-        states.push('root');
-      }
-      if (node.id === selectedId) {
-        states.push('selected');
-      }
-      if (criticalSet.has(node.id)) {
-        states.push('critical');
-      } else if (highlightCritical) {
-        states.push('dimmed');
-      }
-      stateMap[node.id] = states;
-    }
-
-    for (const edge of data.edges) {
-      const onCritical =
-        highlightCritical &&
-        isCriticalRelation(edge.relationType) &&
-        criticalSet.has(edge.source) &&
-        criticalSet.has(edge.target);
-      stateMap[edge.id] = onCritical ? ['critical'] : highlightCritical ? ['dimmed'] : [];
-    }
-
-    await this.g6.setElementState(stateMap, false);
   }
 }

@@ -9,12 +9,22 @@ interface ListResponse<T> {
     total?: number;
 }
 
+export interface WorkItemRelationType {
+    id?: string;
+    name?: string;
+    key?: string;
+    /** 稳定类型码，如 relate、clone、cloned_by。 */
+    category?: string;
+}
+
 export interface WorkItemRelation {
     id?: string;
-    /** 公开接口是字符串；运行时也可能是 { id, name, key }。 */
-    relation_type?: RelationType | string | { id?: string; name?: string; key?: string };
+    /** 公开接口可能是字符串、类型对象，或 null。 */
+    relation_type?: RelationType | string | WorkItemRelationType | null;
+    origin_work_item_id?: string;
     target_work_item_id?: string;
     work_item?: GraphWorkItem;
+    origin_work_item?: GraphWorkItem;
     target_work_item?: GraphWorkItem;
 }
 
@@ -36,6 +46,9 @@ function restApiOptions(context: Pick<NexusAppContext, "user">) {
     return options;
 }
 
+const RELATION_PAGE_SIZE = 100;
+const MAX_RELATION_PAGES = 50;
+
 export class WorkItemService {
     async fetchWorkItem(
         context: Pick<NexusAppContext, "user">,
@@ -51,23 +64,57 @@ export class WorkItemService {
     async fetchRelations(
         context: Pick<NexusAppContext, "user">,
         workitemId: string,
-        relationType?: RelationType,
     ): Promise<WorkItemRelation[]> {
-        const params = new URLSearchParams();
-        if (relationType) {
-            params.set("relation_type", relationType);
+        const collected: WorkItemRelation[] = [];
+        const seen = new Set<string>();
+
+        const append = (items: WorkItemRelation[]): number => {
+            const sizeBefore = collected.length;
+            for (const item of items) {
+                if (item.id && seen.has(item.id)) {
+                    continue;
+                }
+                if (item.id) {
+                    seen.add(item.id);
+                }
+                collected.push(item);
+            }
+            return collected.length - sizeBefore;
+        };
+
+        for (let pageIndex = 0; pageIndex < MAX_RELATION_PAGES; pageIndex += 1) {
+            const params = new URLSearchParams({
+                page_size: String(RELATION_PAGE_SIZE),
+                page_index: String(pageIndex),
+            });
+            const path = `/v1/project/work_items/${workitemId}/relations?${params}`;
+            const response = await api.invoke(path, restApiOptions(context));
+            const data = await readJsonResponse<ListResponse<WorkItemRelation> | WorkItemRelation[]>(
+                response,
+                `Failed to load relations: ${workitemId}`,
+            );
+            if (Array.isArray(data)) {
+                const added = append(data);
+                if (data.length < RELATION_PAGE_SIZE || added === 0) {
+                    break;
+                }
+                continue;
+            }
+
+            const values = data.values ?? [];
+            const added = append(values);
+            const pageSize = data.page_size ?? RELATION_PAGE_SIZE;
+            if (
+                values.length === 0 ||
+                added === 0 ||
+                values.length < pageSize ||
+                (typeof data.total === "number" && collected.length >= data.total)
+            ) {
+                break;
+            }
         }
-        const query = params.toString();
-        const path = `/v1/project/work_items/${workitemId}/relations${query ? `?${query}` : ""}`;
-        const response = await api.invoke(path, restApiOptions(context));
-        const data = await readJsonResponse<ListResponse<WorkItemRelation> | WorkItemRelation[]>(
-            response,
-            `Failed to load relations: ${workitemId}`,
-        );
-        if (Array.isArray(data)) {
-            return data;
-        }
-        return data.values ?? [];
+
+        return collected;
     }
 }
 

@@ -20,6 +20,8 @@ const RELATION_LABELS: Record<string, string> = {
     causedBy: "由…导致",
     relate: "关联",
     duplicate: "重复",
+    clone: "拷贝",
+    clonedBy: "副本",
 };
 
 const INVERSE_TO_CANONICAL: Record<string, string> = {
@@ -27,27 +29,51 @@ const INVERSE_TO_CANONICAL: Record<string, string> = {
     causedBy: "cause",
 };
 
+const RELATION_KEY_ALIASES: Record<string, string> = {
+    blocked_by: "blockedBy",
+    caused_by: "causedBy",
+    cloned_by: "clonedBy",
+    拷贝: "clone",
+    副本: "clonedBy",
+};
+
 const LABEL_TO_TYPE: Record<string, string> = Object.fromEntries(
     Object.entries(RELATION_LABELS).map(([type, label]) => [label, type]),
 );
 
+const FILTERABLE_CANONICAL = new Set(
+    KNOWN_RELATION_TYPES.map((type) => INVERSE_TO_CANONICAL[type] ?? type),
+);
+
+function normalizeRelationKey(value: string): string {
+    const trimmed = value.trim();
+    if (!trimmed || /^[a-f0-9]{24}$/i.test(trimmed)) {
+        return "";
+    }
+    return RELATION_KEY_ALIASES[trimmed] ?? LABEL_TO_TYPE[trimmed] ?? trimmed;
+}
+
 function readRelationType(value: WorkItemRelation["relation_type"]): string | undefined {
     if (typeof value === "string") {
-        return value.trim() || undefined;
+        return normalizeRelationKey(value) || undefined;
     }
     if (!value || typeof value !== "object") {
         return undefined;
     }
 
-    const candidates = [value.key, value.name, value.id]
+    const code = [value.category, value.key, value.name]
         .filter((item): item is string => typeof item === "string")
-        .map((item) => item.trim())
-        .filter(Boolean);
-    const matched = candidates.find((item) => item in RELATION_LABELS || item in LABEL_TO_TYPE);
-    if (matched) {
-        return LABEL_TO_TYPE[matched] ?? matched;
+        .map((item) => normalizeRelationKey(item))
+        .find(Boolean);
+    return code;
+}
+
+function readRelationLabel(value: WorkItemRelation["relation_type"]): string | undefined {
+    if (!value || typeof value !== "object") {
+        return undefined;
     }
-    return candidates.find((item) => !/^[a-f0-9]{24}$/i.test(item));
+    const name = value.name?.trim();
+    return name || undefined;
 }
 
 function normalizeWorkItem(raw: GraphWorkItem | undefined, fallbackId?: string): GraphWorkItem | null {
@@ -55,46 +81,100 @@ function normalizeWorkItem(raw: GraphWorkItem | undefined, fallbackId?: string):
     if (!id) {
         return null;
     }
-    return {
-        ...raw,
-        id,
-    };
+    const item: GraphWorkItem = { id };
+    if (raw?.identifier) {
+        item.identifier = raw.identifier;
+    }
+    if (raw?.title) {
+        item.title = raw.title;
+    }
+    if (raw?.type) {
+        item.type = raw.type;
+    }
+    if (raw?.state) {
+        item.state = raw.state;
+    }
+    if (raw?.project) {
+        item.project = raw.project;
+    }
+    if (raw?.priority) {
+        item.priority = raw.priority;
+    }
+    if (raw?.assignee) {
+        item.assignee = raw.assignee;
+    }
+    return item;
 }
 
-function resolveRelatedWorkItem(relation: WorkItemRelation): GraphWorkItem | null {
-    return (
-        normalizeWorkItem(relation.work_item) ??
+function mergeWorkItem(base: GraphWorkItem | undefined, incoming: GraphWorkItem): GraphWorkItem {
+    return normalizeWorkItem({ ...base, ...incoming, id: incoming.id }) ?? incoming;
+}
+
+function resolveEndpoints(
+    currentId: string,
+    relation: WorkItemRelation,
+): { origin: GraphWorkItem; target: GraphWorkItem } | null {
+    const origin =
+        normalizeWorkItem(relation.origin_work_item) ??
+        normalizeWorkItem(undefined, relation.origin_work_item_id);
+    const target =
         normalizeWorkItem(relation.target_work_item) ??
-        normalizeWorkItem(undefined, relation.target_work_item_id)
-    );
+        normalizeWorkItem(relation.work_item) ??
+        normalizeWorkItem(undefined, relation.target_work_item_id);
+
+    if (origin && target) {
+        return origin.id === target.id ? null : { origin, target };
+    }
+    if (target && target.id !== currentId) {
+        return { origin: { id: currentId }, target };
+    }
+    if (origin && origin.id !== currentId) {
+        return { origin: { id: currentId }, target: origin };
+    }
+    return null;
+}
+
+function isRelationIncluded(rawType: string | undefined, allowed: Set<string>): boolean {
+    if (!rawType) {
+        return false;
+    }
+    const canonical = INVERSE_TO_CANONICAL[rawType] ?? rawType;
+    if (!FILTERABLE_CANONICAL.has(canonical)) {
+        return true;
+    }
+    for (const type of allowed) {
+        const normalized = normalizeRelationKey(type);
+        if ((INVERSE_TO_CANONICAL[normalized] ?? normalized) === canonical) {
+            return true;
+        }
+    }
+    return false;
 }
 
 function toDirectedEdge(
-    sourceId: string,
     relation: WorkItemRelation,
-    related: GraphWorkItem,
+    origin: GraphWorkItem,
+    target: GraphWorkItem,
 ): GraphEdge | null {
-    const relationType = readRelationType(relation.relation_type);
-    if (!relationType) {
+    if (origin.id === target.id) {
         return null;
     }
 
-    let from = sourceId;
-    let to = related.id;
-    let canonicalType = INVERSE_TO_CANONICAL[relationType] ?? relationType;
-
-    if (relationType === "blockedBy" || relationType === "causedBy") {
-        from = related.id;
-        to = sourceId;
+    const rawType = readRelationType(relation.relation_type);
+    if (!rawType) {
+        return null;
     }
+    const flip = rawType === "blockedBy" || rawType === "causedBy";
+    const canonicalType = INVERSE_TO_CANONICAL[rawType] ?? rawType;
+    const from = flip ? target.id : origin.id;
+    const to = flip ? origin.id : target.id;
 
-    const edgeId = relation.id ?? `${from}:${canonicalType}:${to}`;
     return {
-        id: edgeId,
+        id: relation.id ?? `${from}:${canonicalType}:${to}`,
         source: from,
         target: to,
         relationType: canonicalType,
-        label: RELATION_LABELS[canonicalType] ?? RELATION_LABELS[relationType] ?? canonicalType,
+        label: RELATION_LABELS[canonicalType] ?? readRelationLabel(relation.relation_type) ?? canonicalType,
     };
 }
 
@@ -165,38 +245,43 @@ export class GraphService {
             visited.add(current.id);
 
             const relations = await workItemService.fetchRelations(context, current.id);
+            const nextDepth = current.level + 1;
             for (const relation of relations) {
                 const rawType = readRelationType(relation.relation_type);
-                if (!rawType || !allowedTypes.has(rawType)) {
+                if (!isRelationIncluded(rawType, allowedTypes)) {
                     continue;
                 }
 
-                let related = resolveRelatedWorkItem(relation);
-                if (!related) {
+                const endpoints = resolveEndpoints(current.id, relation);
+                if (!endpoints) {
                     continue;
                 }
 
-                if (!related.title || !related.identifier) {
-                    try {
-                        related = await workItemService.fetchWorkItem(context, related.id);
-                    } catch {
-                        // permission / missing detail
+                let { origin, target } = endpoints;
+                for (const related of [origin, target]) {
+                    let node = related;
+                    if (node.id !== current.id && (!node.title || !node.identifier)) {
+                        try {
+                            node = normalizeWorkItem(await workItemService.fetchWorkItem(context, node.id)) ?? node;
+                        } catch {
+                            // permission / missing detail
+                        }
+                    }
+                    if (node.id === origin.id) {
+                        origin = node;
+                    }
+                    if (node.id === target.id) {
+                        target = node;
+                    }
+                    nodes.set(node.id, mergeWorkItem(nodes.get(node.id), node));
+                    if (node.id !== current.id && nextDepth < depth && !visited.has(node.id)) {
+                        queue.push({ id: node.id, level: nextDepth });
                     }
                 }
 
-                const nextDepth = current.level + 1;
-                nodes.set(related.id, {
-                    ...nodes.get(related.id),
-                    ...related,
-                });
-
-                const edge = toDirectedEdge(current.id, relation, related);
+                const edge = toDirectedEdge(relation, origin, target);
                 if (edge) {
                     edges.set(edge.id, edge);
-                }
-
-                if (nextDepth < depth && !visited.has(related.id)) {
-                    queue.push({ id: related.id, level: nextDepth });
                 }
             }
         }

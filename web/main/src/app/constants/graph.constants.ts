@@ -29,6 +29,8 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
   causedBy: { label: '由…导致', color: '#c47a1a', canonical: 'cause' },
   relate: { label: '关联', color: '#3b6fd9' },
   duplicate: { label: '重复', color: '#6b7280' },
+  clone: { label: '拷贝', color: '#7c3aed' },
+  clonedBy: { label: '副本', color: '#7c3aed' },
   [EXPAND_RELATION_TYPE]: { label: '展开', color: DEFAULT_EDGE_COLOR },
 };
 

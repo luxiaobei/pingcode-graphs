@@ -75,9 +75,12 @@ export function createKgEdge(input: KgEdgeInput): KgEdge {
     return edge;
 }
 
-export async function deleteEdge(id: string, type: KgEdgeType) {
+export async function deleteEdge(id: string, type: KgEdgeType, toId?: string) {
     await ces.entity<KgEdge>(KG_EDGE_ENTITY_NAME).delete((cb) => {
         cb.field("from_id").eq(id);
         cb.field("type").eq(type);
+        if (toId) {
+            cb.field("to_id").eq(toId);
+        }
     });
 }

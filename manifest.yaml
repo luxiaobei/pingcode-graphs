@@ -217,73 +217,95 @@ event:
         - pce:testhub:library:deleted
       handler:
         function: testhub-library-deleted
+    - key: link-added
+      type: system
+      events:
+        - pce:pjm:workitem:link:added
+        - pce:testhub:testcase:link:added
+        - pce:ship:idea:link:added
+        - pce:ship:ticket:link:added
+      handler:
+        function: link-added
+    - key: link-removed
+      type: system
+      events:
+        - pce:pjm:workitem:link:removed
+        - pce:testhub:testcase:link:removed
+        - pce:ship:idea:link:removed
+        - pce:ship:ticket:link:removed
+      handler:
+        function: link-removed
 functions:
   - key: resolver
     handler: index.resolver
   - key: pjm-workitem-created
-    handler: handlers/pjm/workitem.onWorkitemCreatedHandler
+    handler: index.onWorkItemCreatedHandler
   - key: pjm-workitem-updated
-    handler: handlers/pjm/workitem.onWorkitemUpdatedHandler
+    handler: index.onWorkItemUpdatedHandler
   - key: pjm-workitem-deleted
-    handler: handlers/pjm/workitem.onWorkitemDeletedHandler
+    handler: index.onWorkItemDeletedHandler
   - key: pjm-project-created
-    handler: handlers/pjm/project.onProjectCreatedHandler
+    handler: index.onProjectCreatedHandler
   - key: pjm-project-updated
-    handler: handlers/pjm/project.onProjectUpdatedHandler
+    handler: index.onProjectUpdatedHandler
   - key: pjm-project-deleted
-    handler: handlers/pjm/project.onProjectDeletedHandler
+    handler: index.onProjectDeletedHandler
   - key: pjm-sprint-created
-    handler: handlers/pjm/sprint.onSprintCreatedHandler
+    handler: index.onSprintCreatedHandler
   - key: pjm-sprint-updated
-    handler: handlers/pjm/sprint.onSprintUpdatedHandler
+    handler: index.onSprintUpdatedHandler
   - key: pjm-sprint-deleted
-    handler: handlers/pjm/sprint.onSprintDeletedHandler
+    handler: index.onSprintDeletedHandler
   - key: pjm-release-created
-    handler: handlers/pjm/release.onReleaseCreatedHandler
+    handler: index.onReleaseCreatedHandler
   - key: pjm-release-updated
-    handler: handlers/pjm/release.onReleaseUpdatedHandler
+    handler: index.onReleaseUpdatedHandler
   - key: pjm-release-deleted
-    handler: handlers/pjm/release.onReleaseDeletedHandler
+    handler: index.onReleaseDeletedHandler
   - key: wiki-page-created
-    handler: handlers/wiki/page.onPageCreatedHandler
+    handler: index.onPageCreatedHandler
   - key: wiki-page-updated
-    handler: handlers/wiki/page.onPageUpdatedHandler
+    handler: index.onPageUpdatedHandler
   - key: wiki-page-deleted
-    handler: handlers/wiki/page.onPageDeletedHandler
+    handler: index.onPageDeletedHandler
   - key: wiki-space-created
-    handler: handlers/wiki/space.onSpaceCreatedHandler
+    handler: index.onSpaceCreatedHandler
   - key: wiki-space-updated
-    handler: handlers/wiki/space.onSpaceUpdatedHandler
+    handler: index.onSpaceUpdatedHandler
   - key: wiki-space-deleted
-    handler: handlers/wiki/space.onSpaceDeletedHandler
+    handler: index.onSpaceDeletedHandler
   - key: ship-product-created
-    handler: handlers/ship/product.onProductCreatedHandler
+    handler: index.onProductCreatedHandler
   - key: ship-product-updated
-    handler: handlers/ship/product.onProductUpdatedHandler
+    handler: index.onProductUpdatedHandler
   - key: ship-product-deleted
-    handler: handlers/ship/product.onProductDeletedHandler
+    handler: index.onProductDeletedHandler
   - key: ship-idea-created
-    handler: handlers/ship/idea.onIdeaCreatedHandler
+    handler: index.onIdeaCreatedHandler
   - key: ship-idea-updated
-    handler: handlers/ship/idea.onIdeaUpdatedHandler
+    handler: index.onIdeaUpdatedHandler
   - key: ship-idea-deleted
-    handler: handlers/ship/idea.onIdeaDeletedHandler
+    handler: index.onIdeaDeletedHandler
   - key: ship-ticket-created
-    handler: handlers/ship/ticket.onTicketCreatedHandler
+    handler: index.onTicketCreatedHandler
   - key: ship-ticket-updated
-    handler: handlers/ship/ticket.onTicketUpdatedHandler
+    handler: index.onTicketUpdatedHandler
   - key: testhub-test-case-created
-    handler: handlers/testhub/test-case.onTestCaseCreatedHandler
+    handler: index.onTestCaseCreatedHandler
   - key: testhub-test-case-updated
-    handler: handlers/testhub/test-case.onTestCaseUpdatedHandler
+    handler: index.onTestCaseUpdatedHandler
   - key: testhub-test-case-deleted
-    handler: handlers/testhub/test-case.onTestCaseDeletedHandler
+    handler: index.onTestCaseDeletedHandler
   - key: testhub-library-created
-    handler: handlers/testhub/library.onLibraryCreatedHandler
+    handler: index.onLibraryCreatedHandler
   - key: testhub-library-updated
-    handler: handlers/testhub/library.onLibraryUpdatedHandler
+    handler: index.onLibraryUpdatedHandler
   - key: testhub-library-deleted
-    handler: handlers/testhub/library.onLibraryDeletedHandler
+    handler: index.onLibraryDeletedHandler
+  - key: link-added
+    handler: index.onLinkAddedHandler
+  - key: link-removed
+    handler: index.onLinkRemovedHandler
 resources:
   - key: main
     path: web/main/dist

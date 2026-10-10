@@ -57,7 +57,7 @@ export const onIdeaUpdatedHandler: EventHandler = async (context, event) => {
     if (["assignee"].includes((event.payload as any).changelog.property.id)) {
         createIdeaEdges(ideaNode, ideaInfo);
         if ((event.payload as any).changelog.target === null) {
-            deleteEdge(ideaNode.id, KG_EDGE_TYPE.assignedTo);
+            await deleteEdge(ideaNode.id, KG_EDGE_TYPE.assignedTo);
         }
     }
 };

@@ -50,7 +50,7 @@ export const onTicketUpdatedHandler: EventHandler = async (context, event) => {
     if (["assignee"].includes((event.payload as any).changelog.property.id)) {
         createTicketEdges(ticketNode, (event.payload as any)["data"]);
         if ((event.payload as any).changelog.target === null) {
-            deleteEdge(ticketNode.id, KG_EDGE_TYPE.assignedTo);
+            await deleteEdge(ticketNode.id, KG_EDGE_TYPE.assignedTo);
         }
     }
 };

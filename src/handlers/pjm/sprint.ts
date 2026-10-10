@@ -65,9 +65,9 @@ async function createSprintEdges(sprintNode: SprintKgNode, sprintInfo: any, chan
             toId: kgNodeId(KG_NODE_KIND.project, sprintInfo["project"]?.["id"]),
             type: KG_EDGE_TYPE.belongsTo,
         }));
-        deleteEdge(sprintNode.id, KG_EDGE_TYPE.belongsTo);
+        await deleteEdge(sprintNode.id, KG_EDGE_TYPE.belongsTo);
     } else if (changelog && changelog.target.project === null) {
-        deleteEdge(sprintNode.id, KG_EDGE_TYPE.belongsTo);
+        await deleteEdge(sprintNode.id, KG_EDGE_TYPE.belongsTo);
     }
     if (sprintInfo["assignee"] && (!changelog || changelog.origin.assignee !== changelog.target.assignee)) {
         edges.push(createKgEdge({
@@ -75,9 +75,9 @@ async function createSprintEdges(sprintNode: SprintKgNode, sprintInfo: any, chan
             toId: kgNodeId(KG_NODE_KIND.user, sprintInfo["assignee"]?.["id"]),
             type: KG_EDGE_TYPE.assignedTo,
         }));
-        deleteEdge(sprintNode.id, KG_EDGE_TYPE.assignedTo);
+        await deleteEdge(sprintNode.id, KG_EDGE_TYPE.assignedTo);
     } else if (changelog && changelog.target.assignee === null) {
-        deleteEdge(sprintNode.id, KG_EDGE_TYPE.assignedTo);
+        await deleteEdge(sprintNode.id, KG_EDGE_TYPE.assignedTo);
     }
     if (edges.length > 0) {
         await ces.entity(KG_EDGE_ENTITY_NAME).insert(edges);

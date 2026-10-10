@@ -2,7 +2,7 @@ import type { EventHandler } from "@pc-nexus/event";
 import { ces } from "@pc-nexus/storage";
 import { createTestCaseNode, type TestCaseKgNode } from "../../models/testhub/test-case-node.js";
 import { KG_NODE_ENTITY_NAME, KG_NODE_KIND, kgNodeId, type KgNode } from "../../models/pc-kg-node.js";
-import { createKgEdge, KG_EDGE_ENTITY_NAME, KG_EDGE_TYPE, type KgEdge } from "../../models/pc-kg-edge.js";
+import { createKgEdge, deleteEdge, KG_EDGE_ENTITY_NAME, KG_EDGE_TYPE, type KgEdge } from "../../models/pc-kg-edge.js";
 
 export const onTestCaseCreatedHandler: EventHandler = async (context, event) => {
     const testCaseInfo = (event.payload as any)["data"];
@@ -60,10 +60,7 @@ async function createTestCaseEdges(testCaseNode: TestCaseKgNode, testCaseInfo: a
             toId: kgNodeId(KG_NODE_KIND.library, testCaseInfo["library"]?.["id"]),
             type: KG_EDGE_TYPE.belongsTo,
         }));
-        await ces.entity<KgEdge>(KG_EDGE_ENTITY_NAME).delete((cb) => {
-            cb.field("from_id").eq(testCaseNode.id);
-            cb.field("type").eq(KG_EDGE_TYPE.belongsTo);
-        });
+        await deleteEdge(testCaseNode.id, KG_EDGE_TYPE.belongsTo);
     }
     if (edges.length > 0) {
         await ces.entity(KG_EDGE_ENTITY_NAME).insert(edges);

@@ -66,9 +66,9 @@ async function createProjectEdges(projectNode: ProjectKgNode, projectInfo: any, 
             toId: kgNodeId(KG_NODE_KIND.user, projectInfo["assignee"]?.["id"]),
             type: KG_EDGE_TYPE.assignedTo,
         }));
-        deleteEdge(projectNode.id, KG_EDGE_TYPE.assignedTo);
+        await deleteEdge(projectNode.id, KG_EDGE_TYPE.assignedTo);
     } else if (changelog && changelog.target.assignee === null) {
-        deleteEdge(projectNode.id, KG_EDGE_TYPE.assignedTo);
+        await deleteEdge(projectNode.id, KG_EDGE_TYPE.assignedTo);
     }
     if (edges.length > 0) {
         await ces.entity(KG_EDGE_ENTITY_NAME).insert(edges);

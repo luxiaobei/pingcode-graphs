@@ -236,7 +236,7 @@ event:
       handler:
         function: link-removed
     - key: app-installed
-      type: lifecyc
+      type: lifecycle
       events:
         - pce:nexus:app:install
       handler:

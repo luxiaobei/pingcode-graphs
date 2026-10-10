@@ -1,4 +1,7 @@
+import { ces } from "@pc-nexus/storage";
 import { assignDefined } from "./pc-kg-node.js";
+
+export const KG_EDGE_ENTITY_NAME = "pc_kg_edge";
 
 export const KG_EDGE_TYPE = {
     belongsTo: "belongs_to", // 从属于，例如 workitem 从属于 project
@@ -17,7 +20,24 @@ export const KG_EDGE_TYPE = {
 
 export type KgEdgeType = (typeof KG_EDGE_TYPE)[keyof typeof KG_EDGE_TYPE];
 
+/** 同一 from_id 下每种类型至多一条。替换时先删旧边再插新边，因为边 id 含 to_id。 */
+export const UNIQUE_KG_EDGE_TYPES = [
+    KG_EDGE_TYPE.belongsTo,
+    KG_EDGE_TYPE.assignedTo,
+    KG_EDGE_TYPE.plannedIn,
+    KG_EDGE_TYPE.releasedIn,
+    KG_EDGE_TYPE.parentOf,
+] as const;
+
+export type UniqueKgEdgeType = (typeof UNIQUE_KG_EDGE_TYPES)[number];
+
+const UNIQUE_KG_EDGE_TYPE_SET = new Set<KgEdgeType>(UNIQUE_KG_EDGE_TYPES);
+
 const SYMMETRIC_EDGE_TYPES = new Set<KgEdgeType>([KG_EDGE_TYPE.relates]);
+
+export function isUniqueKgEdgeType(type: KgEdgeType): type is UniqueKgEdgeType {
+    return UNIQUE_KG_EDGE_TYPE_SET.has(type);
+}
 
 export interface KgEdge {
     id: string;
@@ -53,4 +73,14 @@ export function createKgEdge(input: KgEdgeInput): KgEdge {
     };
     assignDefined(edge, "synced_at", input.syncedAt);
     return edge;
+}
+
+export async function deleteEdge(id: string, type: KgEdgeType, toId?: string) {
+    await ces.entity<KgEdge>(KG_EDGE_ENTITY_NAME).delete((cb) => {
+        cb.field("from_id").eq(id);
+        cb.field("type").eq(type);
+        if (toId) {
+            cb.field("to_id").eq(toId);
+        }
+    });
 }

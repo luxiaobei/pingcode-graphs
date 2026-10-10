@@ -23,9 +23,297 @@ extensions:
     behavior: modal
     viewport:
       size: fullscreen
+event:
+  triggers:
+    - key: pjm-workitem-created
+      type: system
+      events:
+        - pce:pjm:workitem:created
+      handler:
+        function: pjm-workitem-created
+    - key: pjm-workitem-updated
+      type: system
+      events:
+        - pce:pjm:workitem:updated
+      handler:
+        function: pjm-workitem-updated
+    - key: pjm-workitem-deleted
+      type: system
+      events:
+        - pce:pjm:workitem:deleted
+      handler:
+        function: pjm-workitem-deleted
+    - key: pjm-project-created
+      type: system
+      events:
+        - pce:pjm:project:created
+      handler:
+        function: pjm-project-created
+    - key: pjm-project-updated
+      type: system
+      events:
+        - pce:pjm:project:updated
+      handler:
+        function: pjm-project-updated
+    - key: pjm-project-deleted
+      type: system
+      events:
+        - pce:pjm:project:deleted
+      handler:
+        function: pjm-project-deleted
+    - key: pjm-sprint-created
+      type: system
+      events:
+        - pce:pjm:sprint:created
+      handler:
+        function: pjm-sprint-created
+    - key: pjm-sprint-updated
+      type: system
+      events:
+        - pce:pjm:sprint:updated
+      handler:
+        function: pjm-sprint-updated
+    - key: pjm-sprint-deleted
+      type: system
+      events:
+        - pce:pjm:sprint:deleted
+      handler:
+        function: pjm-sprint-deleted
+    - key: pjm-release-created
+      type: system
+      events:
+        - pce:pjm:release:created
+      handler:
+        function: pjm-release-created
+    - key: pjm-release-updated
+      type: system
+      events:
+        - pce:pjm:release:updated
+      handler:
+        function: pjm-release-updated
+    - key: pjm-release-deleted
+      type: system
+      events:
+        - pce:pjm:release:deleted
+      handler:
+        function: pjm-release-deleted
+    - key: wiki-page-created
+      type: system
+      events:
+        - pce:wiki:page:created
+      handler:
+        function: wiki-page-created
+    - key: wiki-page-updated
+      type: system
+      events:
+        - pce:wiki:page:updated
+      handler:
+        function: wiki-page-updated
+    - key: wiki-page-deleted
+      type: system
+      events:
+        - pce:wiki:page:deleted
+      handler:
+        function: wiki-page-deleted
+    - key: wiki-space-created
+      type: system
+      events:
+        - pce:wiki:space:created
+      handler:
+        function: wiki-space-created
+    - key: wiki-space-updated
+      type: system
+      events:
+        - pce:wiki:space:updated
+      handler:
+        function: wiki-space-updated
+    - key: wiki-space-deleted
+      type: system
+      events:
+        - pce:wiki:space:deleted
+      handler:
+        function: wiki-space-deleted
+    - key: ship-product-created
+      type: system
+      events:
+        - pce:ship:product:created
+      handler:
+        function: ship-product-created
+    - key: ship-product-updated
+      type: system
+      events:
+        - pce:ship:product:updated
+      handler:
+        function: ship-product-updated
+    - key: ship-product-deleted
+      type: system
+      events:
+        - pce:ship:product:deleted
+      handler:
+        function: ship-product-deleted
+    - key: ship-idea-created
+      type: system
+      events:
+        - pce:ship:idea:created
+      handler:
+        function: ship-idea-created
+    - key: ship-idea-updated
+      type: system
+      events:
+        - pce:ship:idea:updated
+      handler:
+        function: ship-idea-updated
+    - key: ship-idea-deleted
+      type: system
+      events:
+        - pce:ship:idea:deleted
+      handler:
+        function: ship-idea-deleted
+    - key: ship-ticket-created
+      type: system
+      events:
+        - pce:ship:ticket:created
+      handler:
+        function: ship-ticket-created
+    - key: ship-ticket-updated
+      type: system
+      events:
+        - pce:ship:ticket:updated
+      handler:
+        function: ship-ticket-updated
+    - key: testhub-test-case-created
+      type: system
+      events:
+        - pce:testhub:testcase:created
+      handler:
+        function: testhub-test-case-created
+    - key: testhub-test-case-updated
+      type: system
+      events:
+        - pce:testhub:testcase:updated
+      handler:
+        function: testhub-test-case-updated
+    - key: testhub-test-case-deleted
+      type: system
+      events:
+        - pce:testhub:testcase:deleted
+      handler:
+        function: testhub-test-case-deleted
+    - key: testhub-library-created
+      type: system
+      events:
+        - pce:testhub:library:created
+      handler:
+        function: testhub-library-created
+    - key: testhub-library-updated
+      type: system
+      events:
+        - pce:testhub:library:updated
+      handler:
+        function: testhub-library-updated
+    - key: testhub-library-deleted
+      type: system
+      events:
+        - pce:testhub:library:deleted
+      handler:
+        function: testhub-library-deleted
+    - key: link-added
+      type: system
+      events:
+        - pce:pjm:workitem:link:added
+        - pce:testhub:testcase:link:added
+        - pce:ship:idea:link:added
+        - pce:ship:ticket:link:added
+      handler:
+        function: link-added
+    - key: link-removed
+      type: system
+      events:
+        - pce:pjm:workitem:link:removed
+        - pce:testhub:testcase:link:removed
+        - pce:ship:idea:link:removed
+        - pce:ship:ticket:link:removed
+      handler:
+        function: link-removed
+    - key: app-installed
+      type: lifecycle
+      events:
+        - pce:nexus:app:install
+      handler:
+        function: app-installed
 functions:
   - key: resolver
     handler: index.resolver
+  - key: pjm-workitem-created
+    handler: index.onWorkItemCreatedHandler
+  - key: pjm-workitem-updated
+    handler: index.onWorkItemUpdatedHandler
+  - key: pjm-workitem-deleted
+    handler: index.onWorkItemDeletedHandler
+  - key: pjm-project-created
+    handler: index.onProjectCreatedHandler
+  - key: pjm-project-updated
+    handler: index.onProjectUpdatedHandler
+  - key: pjm-project-deleted
+    handler: index.onProjectDeletedHandler
+  - key: pjm-sprint-created
+    handler: index.onSprintCreatedHandler
+  - key: pjm-sprint-updated
+    handler: index.onSprintUpdatedHandler
+  - key: pjm-sprint-deleted
+    handler: index.onSprintDeletedHandler
+  - key: pjm-release-created
+    handler: index.onReleaseCreatedHandler
+  - key: pjm-release-updated
+    handler: index.onReleaseUpdatedHandler
+  - key: pjm-release-deleted
+    handler: index.onReleaseDeletedHandler
+  - key: wiki-page-created
+    handler: index.onPageCreatedHandler
+  - key: wiki-page-updated
+    handler: index.onPageUpdatedHandler
+  - key: wiki-page-deleted
+    handler: index.onPageDeletedHandler
+  - key: wiki-space-created
+    handler: index.onSpaceCreatedHandler
+  - key: wiki-space-updated
+    handler: index.onSpaceUpdatedHandler
+  - key: wiki-space-deleted
+    handler: index.onSpaceDeletedHandler
+  - key: ship-product-created
+    handler: index.onProductCreatedHandler
+  - key: ship-product-updated
+    handler: index.onProductUpdatedHandler
+  - key: ship-product-deleted
+    handler: index.onProductDeletedHandler
+  - key: ship-idea-created
+    handler: index.onIdeaCreatedHandler
+  - key: ship-idea-updated
+    handler: index.onIdeaUpdatedHandler
+  - key: ship-idea-deleted
+    handler: index.onIdeaDeletedHandler
+  - key: ship-ticket-created
+    handler: index.onTicketCreatedHandler
+  - key: ship-ticket-updated
+    handler: index.onTicketUpdatedHandler
+  - key: testhub-test-case-created
+    handler: index.onTestCaseCreatedHandler
+  - key: testhub-test-case-updated
+    handler: index.onTestCaseUpdatedHandler
+  - key: testhub-test-case-deleted
+    handler: index.onTestCaseDeletedHandler
+  - key: testhub-library-created
+    handler: index.onLibraryCreatedHandler
+  - key: testhub-library-updated
+    handler: index.onLibraryUpdatedHandler
+  - key: testhub-library-deleted
+    handler: index.onLibraryDeletedHandler
+  - key: link-added
+    handler: index.onLinkAddedHandler
+  - key: link-removed
+    handler: index.onLinkRemovedHandler
+  - key: app-installed
+    handler: index.onAppInstalledHandler
 resources:
   - key: main
     path: web/main/dist
@@ -112,7 +400,19 @@ permissions:
     - pcp:read:user:token
     - pcp:read:pjm:workitem
     - pcp:read:pjm:project
+    - pcp:read:pjm:sprint
+    - pcp:read:pjm:release
     - pcp:read:pjm:configuration
+    - pcp:read:wiki:page
+    - pcp:read:wiki:space
+    - pcp:read:ship:product
+    - pcp:read:ship:idea
+    - pcp:read:ship:ticket
+    - pcp:read:ship:configuration
+    - pcp:read:testhub:library
+    - pcp:read:testhub:testcase
+    - pcp:read:testhub:configuration
+    - pcp:read:global:team
   content:
     styles:
       - unsafe-inline

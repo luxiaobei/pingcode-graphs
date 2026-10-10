@@ -1,7 +1,10 @@
+import type { UserKgNode } from "./global/index.js";
 import type { IdeaKgNode, TicketKgNode, ProductKgNode } from "./ship/index.js";
 import type { PageKgNode, SpaceKgNode } from "./wiki/index.js";
 import type { ProjectKgNode, SprintKgNode, ReleaseKgNode, WorkItemKgNode } from "./pjm/index.js";
 import type { LibraryKgNode, TestCaseKgNode } from "./testhub/index.js";
+
+export const KG_NODE_ENTITY_NAME = "pc_kg_node";
 
 export const KG_NODE_KIND = {
     workItem: "work_item",
@@ -15,6 +18,7 @@ export const KG_NODE_KIND = {
     release: "release",
     product: "product",
     library: "library",
+    user: "user",
 } as const;
 
 export type KgNodeKind = (typeof KG_NODE_KIND)[keyof typeof KG_NODE_KIND];
@@ -30,7 +34,8 @@ export type KgNode =
     | SprintKgNode
     | ReleaseKgNode
     | ProductKgNode
-    | LibraryKgNode;
+    | LibraryKgNode
+    | UserKgNode;
 
 const TEXT_EXCERPT_LIMIT = 500;
 

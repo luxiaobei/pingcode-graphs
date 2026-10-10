@@ -235,6 +235,12 @@ event:
         - pce:ship:ticket:link:removed
       handler:
         function: link-removed
+    - key: app-installed
+      type: lifecyc
+      events:
+        - pce:nexus:app:install
+      handler:
+        function: app-installed
 functions:
   - key: resolver
     handler: index.resolver
@@ -306,6 +312,8 @@ functions:
     handler: index.onLinkAddedHandler
   - key: link-removed
     handler: index.onLinkRemovedHandler
+  - key: app-installed
+    handler: index.onAppInstalledHandler
 resources:
   - key: main
     path: web/main/dist

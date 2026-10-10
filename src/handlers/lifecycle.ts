@@ -29,6 +29,7 @@ interface DirectoryUserList {
 }
 
 export const onAppInstalledHandler: EventHandler = async () => {
+    console.log("🔄 初始化数据开始...");
     const users = await listDirectoryUsers();
     const nodes = users.flatMap((user) => {
         if (!user.id) {
@@ -51,9 +52,11 @@ export const onAppInstalledHandler: EventHandler = async () => {
         })];
     });
     if (nodes.length === 0) {
+        console.log("❌ 没有用户节点需要初始化");
         return;
     }
     await ces.entity(KG_NODE_ENTITY_NAME).insert(nodes);
+    console.log(`✅ 初始化用户节点完成，共 ${nodes.length} 个`);
 };
 
 async function listDirectoryUsers(): Promise<DirectoryUser[]> {

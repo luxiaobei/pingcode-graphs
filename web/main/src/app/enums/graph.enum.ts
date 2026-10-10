@@ -8,4 +8,8 @@ export const DEFAULT_RELATION_TYPES = [
   'causedBy',
   'relate',
   'duplicate',
+  'depend',
+  'mention',
+  'clone',
+  'child',
 ] as const;

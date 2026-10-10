@@ -1,12 +1,15 @@
 import { Component, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { view } from '@pc-nexus/bridge';
 import { ThyDialog, ThyDialogSizes } from 'ngx-tethys/dialog';
+import { ThySwitchModule } from 'ngx-tethys/switch';
 import { RELATION_OPTIONS } from './constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from './entities/graph.entity';
 import type { RelationType } from './enums/graph.enum';
 import { GraphCanvas } from './graph/graph-canvas';
+import { MOCK_GRAPH } from './graph/mock-graph';
 import { NodeDetail } from './graph/node-detail';
-import { getDependencyGraph, USING_MOCK_GRAPH } from './services/graph.service';
+import { getDependencyGraph } from './services/graph.service';
 import {
   cloneDisplaySettings,
   DEFAULT_DISPLAY_SETTINGS,
@@ -18,14 +21,14 @@ import { filterGraphByRelations } from './utils/graph.util';
 
 @Component({
   selector: 'app-root',
-  imports: [GraphCanvas, NodeDetail],
+  imports: [FormsModule, ThySwitchModule, GraphCanvas, NodeDetail],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
 export class App {
   protected readonly depths = [1, 2, 3] as const;
   protected readonly relationOptions = RELATION_OPTIONS;
-  protected readonly usingMockData = USING_MOCK_GRAPH;
+  protected readonly usingMockData = signal(true);
   protected readonly displaySettings = signal<DisplaySetting[]>(
     cloneDisplaySettings(DEFAULT_DISPLAY_SETTINGS),
   );
@@ -44,6 +47,8 @@ export class App {
   protected readonly source = signal<DependencyGraph | null>(null);
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
+
+  private requestSeq = 0;
 
   protected readonly graph = computed(() => {
     const source = this.source();
@@ -124,27 +129,42 @@ export class App {
     this.highlightCriticalPath.update((value) => !value);
   }
 
+  protected setUsingMockData(useMock: boolean): void {
+    if (useMock === this.usingMockData()) {
+      return;
+    }
+    this.usingMockData.set(useMock);
+    void this.reload();
+  }
+
   protected closeDialog(): void {
     view.close().catch(() => undefined);
   }
 
   protected async reload(): Promise<void> {
+    const seq = ++this.requestSeq;
     this.selected.set(null);
     this.resetFoldState();
     this.loading.set(true);
     this.error.set(null);
     try {
-      this.source.set(
-        await getDependencyGraph({
-          depth: 3,
-          relationTypes: [...this.enabledRelations()],
-        }),
-      );
+      const data = this.usingMockData()
+        ? structuredClone(MOCK_GRAPH)
+        : await getDependencyGraph();
+      if (seq !== this.requestSeq) {
+        return;
+      }
+      this.source.set(data);
     } catch (err) {
+      if (seq !== this.requestSeq) {
+        return;
+      }
       this.source.set(null);
-      this.error.set(err instanceof Error ? err.message : String(err));
+      this.error.set(err instanceof Error ? err.message.trim() : String(err));
     } finally {
-      this.loading.set(false);
+      if (seq === this.requestSeq) {
+        this.loading.set(false);
+      }
     }
   }
 

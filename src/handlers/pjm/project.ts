@@ -2,7 +2,7 @@ import type { EventHandler } from "@pc-nexus/event";
 import { ces } from "@pc-nexus/storage";
 import { createProjectNode, type ProjectKgNode } from "../../models/pjm/project-node.js";
 import { KG_NODE_ENTITY_NAME, KG_NODE_KIND, kgNodeId, type KgNode } from "../../models/pc-kg-node.js";
-import { createKgEdge, KG_EDGE_ENTITY_NAME, KG_EDGE_TYPE } from "../../models/pc-kg-edge.js";
+import { createKgEdge, deleteEdge, KG_EDGE_ENTITY_NAME, KG_EDGE_TYPE } from "../../models/pc-kg-edge.js";
 import type { KgEdge } from "../../models/pc-kg-edge.js";
 
 export const onProjectCreatedHandler: EventHandler = async (context, event) => {
@@ -28,6 +28,7 @@ export const onProjectCreatedHandler: EventHandler = async (context, event) => {
 
 export const onProjectUpdatedHandler: EventHandler = async (context, event) => {
     const projectInfo = (event.payload as any)["data"];
+    const changelog = (event.payload as any)["changelog"];
     const projectNode = createProjectNode({
         refId: projectInfo["id"],
         name: projectInfo["name"],
@@ -47,7 +48,7 @@ export const onProjectUpdatedHandler: EventHandler = async (context, event) => {
         cb.field("kind").eq(projectNode.kind);
         cb.field("ref_id").eq(projectNode.ref_id);
     }, projectNode);
-    createProjectEdges(projectNode, projectInfo);
+    createProjectEdges(projectNode, projectInfo, changelog);
 };
 
 export const onProjectDeletedHandler: EventHandler = async (context, event) => {
@@ -57,18 +58,17 @@ export const onProjectDeletedHandler: EventHandler = async (context, event) => {
         cb.field("ref_id").eq(projectInfo["id"]);
     }, { active: false });
 };
-async function createProjectEdges(projectNode: ProjectKgNode, projectInfo: any) {
+async function createProjectEdges(projectNode: ProjectKgNode, projectInfo: any, changelog?: any) {
     const edges: KgEdge[] = [];
-    if (projectInfo["assignee"]) {
+    if (projectInfo["assignee"] && (!changelog || changelog.origin.assignee !== changelog.target.assignee)) {
         edges.push(createKgEdge({
             fromId: projectNode.id,
             toId: kgNodeId(KG_NODE_KIND.user, projectInfo["assignee"]?.["id"]),
             type: KG_EDGE_TYPE.assignedTo,
         }));
-        await ces.entity<KgEdge>(KG_EDGE_ENTITY_NAME).delete((cb) => {
-            cb.field("from_id").eq(projectNode.id);
-            cb.field("type").eq(KG_EDGE_TYPE.assignedTo);
-        });
+        deleteEdge(projectNode.id, KG_EDGE_TYPE.assignedTo);
+    } else if (changelog && changelog.target.assignee === null) {
+        deleteEdge(projectNode.id, KG_EDGE_TYPE.assignedTo);
     }
     if (edges.length > 0) {
         await ces.entity(KG_EDGE_ENTITY_NAME).insert(edges);

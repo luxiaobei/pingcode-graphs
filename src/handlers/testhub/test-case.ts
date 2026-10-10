@@ -42,7 +42,6 @@ export const onTestCaseUpdatedHandler: EventHandler = async (context, event) => 
         cb.field("kind").eq(testCaseNode.kind);
         cb.field("ref_id").eq(testCaseNode.ref_id);
     }, testCaseNode);
-    createTestCaseEdges(testCaseNode, testCaseInfo);
 };
 
 export const onTestCaseDeletedHandler: EventHandler = async (context, event) => {

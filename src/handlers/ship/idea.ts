@@ -2,7 +2,7 @@ import type { EventHandler } from "@pc-nexus/event";
 import { ces } from "@pc-nexus/storage";
 import { createIdeaNode, type IdeaKgNode } from "../../models/ship/idea-node.js";
 import { KG_NODE_ENTITY_NAME, KG_NODE_KIND, kgNodeId, type KgNode } from "../../models/pc-kg-node.js";
-import { createKgEdge, KG_EDGE_ENTITY_NAME, KG_EDGE_TYPE, type KgEdge } from "../../models/pc-kg-edge.js";
+import { createKgEdge, deleteEdge, KG_EDGE_ENTITY_NAME, KG_EDGE_TYPE, type KgEdge } from "../../models/pc-kg-edge.js";
 
 export const onIdeaCreatedHandler: EventHandler = async (context, event) => {
     const ideaInfo = (event.payload as any)["data"];
@@ -20,6 +20,7 @@ export const onIdeaCreatedHandler: EventHandler = async (context, event) => {
         realDateBeginAt: ideaInfo["real_at"]?.["from"],
         realDateEndAt: ideaInfo["real_at"]?.["to"],
         realDateGranularity: ideaInfo["real_at"]?.["granularity"],
+        assigneeAvatar: ideaInfo["assignee"]?.["avatar"],
         sourceUpdatedAt: ideaInfo["updated_at"],
         syncedAt: ideaInfo["updated_at"],
         active: true,
@@ -44,6 +45,7 @@ export const onIdeaUpdatedHandler: EventHandler = async (context, event) => {
         realDateBeginAt: ideaInfo["real_at"]?.["from"],
         realDateEndAt: ideaInfo["real_at"]?.["to"],
         realDateGranularity: ideaInfo["real_at"]?.["granularity"],
+        assigneeAvatar: ideaInfo["assignee"]?.["avatar"],
         sourceUpdatedAt: ideaInfo["updated_at"],
         syncedAt: ideaInfo["updated_at"],
         active: true,
@@ -52,7 +54,12 @@ export const onIdeaUpdatedHandler: EventHandler = async (context, event) => {
         cb.field("kind").eq(ideaNode.kind);
         cb.field("ref_id").eq(ideaNode.ref_id);
     }, ideaNode);
-    createIdeaEdges(ideaNode, ideaInfo);
+    if (["assignee"].includes((event.payload as any).changelog.property.id)) {
+        createIdeaEdges(ideaNode, ideaInfo);
+        if ((event.payload as any).changelog.target === null) {
+            deleteEdge(ideaNode.id, KG_EDGE_TYPE.assignedTo);
+        }
+    }
 };
 
 export const onIdeaDeletedHandler: EventHandler = async (context, event) => {

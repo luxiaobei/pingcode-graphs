@@ -34,7 +34,6 @@ export const onPageUpdatedHandler: EventHandler = async (context, event) => {
         cb.field("kind").eq(pageNode.kind);
         cb.field("ref_id").eq(pageNode.ref_id);
     }, pageNode);
-    createPageEdges(pageNode, pageInfo);
 };
 
 export const onPageDeletedHandler: EventHandler = async (context, event) => {

@@ -10,6 +10,7 @@ export interface TicketNodeDetail {
     estimated_at?: number;
     vote_count?: number;
     type_name?: string;
+    assignee_avatar?: string;
 }
 
 export interface TicketKgNode extends KgNodeBase<typeof KG_NODE_KIND.ticket, TicketNodeDetail> {}
@@ -27,6 +28,7 @@ export interface TicketNodeInput {
     estimatedAt?: number;
     voteCount?: number;
     typeName?: string;
+    assigneeAvatar?: string;
     sourceUpdatedAt?: number;
     syncedAt?: number;
     active?: boolean;
@@ -43,6 +45,7 @@ export function createTicketNode(input: TicketNodeInput): TicketKgNode {
     assignDefined(detail, "estimated_at", input.estimatedAt);
     assignDefined(detail, "vote_count", input.voteCount);
     assignDefined(detail, "type_name", input.typeName);
+    assignDefined(detail, "assignee_avatar", input.assigneeAvatar);
 
     const title = [input.identifier, input.name].filter(Boolean).join(" ");
     return createKgNode(

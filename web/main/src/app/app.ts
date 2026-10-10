@@ -1,11 +1,18 @@
-import { Component, computed, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { view } from '@pc-nexus/bridge';
+import { ThyDialog, ThyDialogSizes } from 'ngx-tethys/dialog';
 import { RELATION_OPTIONS } from './constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from './entities/graph.entity';
 import type { RelationType } from './enums/graph.enum';
 import { GraphCanvas } from './graph/graph-canvas';
 import { NodeDetail } from './graph/node-detail';
 import { getDependencyGraph, USING_MOCK_GRAPH } from './services/graph.service';
+import {
+  cloneDisplaySettings,
+  DEFAULT_DISPLAY_SETTINGS,
+  type DisplaySetting,
+} from './settings/display-settings';
+import { DisplaySettingsDialog } from './settings/display-settings-dialog';
 import { buildVisibleGraph } from './utils/expand-graph';
 import { filterGraphByRelations } from './utils/graph.util';
 
@@ -19,6 +26,11 @@ export class App {
   protected readonly depths = [1, 2, 3] as const;
   protected readonly relationOptions = RELATION_OPTIONS;
   protected readonly usingMockData = USING_MOCK_GRAPH;
+  protected readonly displaySettings = signal<DisplaySetting[]>(
+    cloneDisplaySettings(DEFAULT_DISPLAY_SETTINGS),
+  );
+
+  private readonly dialog = inject(ThyDialog);
 
   protected readonly depth = signal<1 | 2 | 3>(2);
   protected readonly enabledRelations = signal<RelationType[]>(
@@ -161,5 +173,20 @@ export class App {
       );
     }
     this.selected.set(null);
+  }
+
+  protected openSettings(): void {
+    const dialogRef = this.dialog.open(DisplaySettingsDialog, {
+      size: ThyDialogSizes.sm,
+      initialState: {
+        settings: cloneDisplaySettings(this.displaySettings()),
+      },
+    });
+    dialogRef.afterClosed().subscribe((result) => {
+      if (!Array.isArray(result)) {
+        return;
+      }
+      this.displaySettings.set(result);
+    });
   }
 }

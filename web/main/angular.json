@@ -47,7 +47,17 @@
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "scss",
             "baseHref": "./",
-            "styles": ["src/styles.scss"],
+            "assets": [
+              {
+                "glob": "sprite.defs.svg",
+                "input": "node_modules/@tethys/icons/defs/svg",
+                "output": "assets/icons/svg"
+              }
+            ],
+            "styles": [
+              "./node_modules/ngx-tethys/styles/index.scss",
+              "src/styles.scss"
+            ],
             "outputPath": {
               "base": "./dist",
               "browser": "",
@@ -56,6 +66,14 @@
           },
           "configurations": {
             "production": {
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false
+                },
+                "fonts": true
+              },
               "budgets": [
                 {
                   "type": "initial",

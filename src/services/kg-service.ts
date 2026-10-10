@@ -14,7 +14,7 @@ export interface KgReachedNode {
 
 export interface KgDeepRelation {
     rootId: string;
-    type: KgEdgeType;
+    types: KgEdgeType[];
     depth: number;
     direction: KgRelationDirection;
     nodes: KgReachedNode[];
@@ -23,7 +23,7 @@ export interface KgDeepRelation {
 
 export interface GetDeepRelationPayload {
     nodeId: string;
-    type: KgEdgeType;
+    type: KgEdgeType | KgEdgeType[];
     depth: number;
     direction?: KgRelationDirection;
 }
@@ -38,29 +38,44 @@ function neighborId(edge: KgEdge, frontier: ReadonlySet<string>, direction: KgRe
     return undefined;
 }
 
-async function findRelationEdges(nodeIds: string[], type: KgEdgeType, direction: KgRelationDirection): Promise<KgEdge[]> {
-    if (nodeIds.length === 0) {
+function normalizeTypes(type: KgEdgeType | readonly KgEdgeType[]): KgEdgeType[] {
+    const types = Array.isArray(type) ? type : [type];
+    return [...new Set(types)];
+}
+
+async function findRelationEdges(nodeIds: string[], types: readonly KgEdgeType[], direction: KgRelationDirection): Promise<KgEdge[]> {
+    if (nodeIds.length === 0 || types.length === 0) {
         return [];
     }
     const edges = await ces.entity<KgEdge>(KG_EDGE_ENTITY_NAME).find((cb) => {
-        cb.field("type").eq(type);
-        if (nodeIds.length === 1 && direction === "outgoing") {
-            cb.field("from_id").eq(nodeIds[0]!);
-            return;
-        }
-        if (nodeIds.length === 1 && direction === "incoming") {
-            cb.field("to_id").eq(nodeIds[0]!);
-            return;
-        }
-        cb.or((or) => {
-            for (const id of nodeIds) {
-                if (direction !== "incoming") {
-                    or.field("from_id").eq(id);
-                }
-                if (direction !== "outgoing") {
-                    or.field("to_id").eq(id);
-                }
+        cb.and((and) => {
+            if (types.length === 1) {
+                and.field("type").eq(types[0]!);
+            } else {
+                and.or((or) => {
+                    for (const type of types) {
+                        or.field("type").eq(type);
+                    }
+                });
             }
+            if (nodeIds.length === 1 && direction === "outgoing") {
+                and.field("from_id").eq(nodeIds[0]!);
+                return;
+            }
+            if (nodeIds.length === 1 && direction === "incoming") {
+                and.field("to_id").eq(nodeIds[0]!);
+                return;
+            }
+            and.or((or) => {
+                for (const id of nodeIds) {
+                    if (direction !== "incoming") {
+                        or.field("from_id").eq(id);
+                    }
+                    if (direction !== "outgoing") {
+                        or.field("to_id").eq(id);
+                    }
+                }
+            });
         });
     });
     return edges.filter((edge) => edge.active !== false);
@@ -87,19 +102,23 @@ async function findNodesByIds(ids: string[]): Promise<KgNode[]> {
 export class KgService {
 
     /**
-     * 从节点出发，沿一种关系逐层扩展。
+     * 从节点出发，沿一种或多种关系逐层扩展。
+     * type 可传单个类型或类型数组，同一层会一次查出这些关系。
      * depth 为最大嵌套层数，1 表示只取直接关联。
-     * relates 默认双向查找，其余关系默认沿 from → to。
      */
     async getDeepRelation(
         context: NexusAppContext,
         nodeId: string,
-        type: KgEdgeType,
+        type: KgEdgeType | readonly KgEdgeType[],
         depth: number,
         direction?: KgRelationDirection,
     ): Promise<KgDeepRelation> {
         if (!nodeId) {
             throw new Error("Node id is required");
+        }
+        const types = normalizeTypes(type);
+        if (types.length === 0) {
+            throw new Error("Relation type is required");
         }
         if (!Number.isFinite(depth) || depth < 0) {
             throw new Error("Depth must be a non-negative number");
@@ -112,7 +131,7 @@ export class KgService {
         let frontier = [nodeId];
 
         for (let level = 0; level < maxDepth && frontier.length > 0; level++) {
-            const found = await findRelationEdges(frontier, type, resolvedDirection);
+            const found = await findRelationEdges(frontier, types, resolvedDirection);
             const frontierSet = new Set(frontier);
             const next: string[] = [];
             for (const edge of found) {
@@ -134,7 +153,7 @@ export class KgService {
 
         return {
             rootId: nodeId,
-            type,
+            types,
             depth: maxDepth,
             direction: resolvedDirection,
             nodes: reached,

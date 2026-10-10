@@ -412,6 +412,7 @@ permissions:
     - pcp:read:testhub:library
     - pcp:read:testhub:testcase
     - pcp:read:testhub:configuration
+    - pcp:read:global:team
   content:
     styles:
       - unsafe-inline

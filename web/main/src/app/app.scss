@@ -23,6 +23,13 @@
   background: #fff;
 }
 
+.toolbar__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .toolbar__title h1 {
   margin: 0;
   font-size: 18px;
@@ -44,6 +51,24 @@
   background: #fff7ed;
   color: #c2410c;
   border: 1px solid #fdba74;
+}
+
+.close-btn {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #64748b;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.close-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
 }
 
 .toolbar__controls {

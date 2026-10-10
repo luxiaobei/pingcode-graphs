@@ -6,20 +6,14 @@ import type {
     GraphWorkItem,
     RelationType,
 } from "../types/graph.js";
+import { KNOWN_RELATION_TYPES } from "../types/graph.js";
 import { workItemService, type WorkItemRelation } from "./work-item.js";
 
 const DEFAULT_DEPTH = 2;
 const MAX_DEPTH = 3;
-const DEFAULT_RELATION_TYPES: RelationType[] = [
-    "block",
-    "blockedBy",
-    "cause",
-    "causedBy",
-    "relate",
-    "duplicate",
-];
+const DEFAULT_RELATION_TYPES: RelationType[] = [...KNOWN_RELATION_TYPES];
 
-const RELATION_LABELS: Record<RelationType, string> = {
+const RELATION_LABELS: Record<string, string> = {
     block: "阻塞",
     blockedBy: "被阻塞",
     cause: "导致",
@@ -28,9 +22,10 @@ const RELATION_LABELS: Record<RelationType, string> = {
     duplicate: "重复",
 };
 
-function isRelationType(value: string | undefined): value is RelationType {
-    return !!value && value in RELATION_LABELS;
-}
+const INVERSE_TO_CANONICAL: Record<string, string> = {
+    blockedBy: "block",
+    causedBy: "cause",
+};
 
 function normalizeWorkItem(raw: GraphWorkItem | undefined, fallbackId?: string): GraphWorkItem | null {
     const id = raw?.id ?? fallbackId;
@@ -51,32 +46,23 @@ function resolveRelatedWorkItem(relation: WorkItemRelation): GraphWorkItem | nul
     );
 }
 
-/**
- * Normalize PingCode relation into a directed edge.
- * block / cause point from source → target; inverse types are flipped.
- */
 function toDirectedEdge(
     sourceId: string,
     relation: WorkItemRelation,
     related: GraphWorkItem,
 ): GraphEdge | null {
-    const relationType = relation.relation_type;
-    if (!isRelationType(relationType)) {
+    const relationType = relation.relation_type?.trim();
+    if (!relationType) {
         return null;
     }
 
     let from = sourceId;
     let to = related.id;
-    let canonicalType: RelationType = relationType;
+    let canonicalType = INVERSE_TO_CANONICAL[relationType] ?? relationType;
 
-    if (relationType === "blockedBy") {
+    if (relationType === "blockedBy" || relationType === "causedBy") {
         from = related.id;
         to = sourceId;
-        canonicalType = "block";
-    } else if (relationType === "causedBy") {
-        from = related.id;
-        to = sourceId;
-        canonicalType = "cause";
     }
 
     const edgeId = relation.id ?? `${from}:${canonicalType}:${to}`;
@@ -85,7 +71,7 @@ function toDirectedEdge(
         source: from,
         target: to,
         relationType: canonicalType,
-        label: RELATION_LABELS[canonicalType],
+        label: RELATION_LABELS[canonicalType] ?? RELATION_LABELS[relationType] ?? canonicalType,
     };
 }
 
@@ -157,7 +143,8 @@ export class GraphService {
 
             const relations = await workItemService.fetchRelations(context, current.id);
             for (const relation of relations) {
-                if (!isRelationType(relation.relation_type) || !allowedTypes.has(relation.relation_type)) {
+                const rawType = relation.relation_type?.trim();
+                if (!rawType || !allowedTypes.has(rawType)) {
                     continue;
                 }
 
@@ -170,19 +157,23 @@ export class GraphService {
                     try {
                         related = await workItemService.fetchWorkItem(context, related.id);
                     } catch {
-                        // Keep the stub node if detail fetch fails (e.g. permission).
+                        // permission / missing detail
                     }
                 }
 
-                nodes.set(related.id, { ...nodes.get(related.id), ...related });
+                const nextDepth = current.level + 1;
+                nodes.set(related.id, {
+                    ...nodes.get(related.id),
+                    ...related,
+                });
 
                 const edge = toDirectedEdge(current.id, relation, related);
                 if (edge) {
                     edges.set(edge.id, edge);
                 }
 
-                if (current.level + 1 < depth && !visited.has(related.id)) {
-                    queue.push({ id: related.id, level: current.level + 1 });
+                if (nextDepth < depth && !visited.has(related.id)) {
+                    queue.push({ id: related.id, level: nextDepth });
                 }
             }
         }

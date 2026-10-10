@@ -1,0 +1,15 @@
+<thy-dialog-header thyTitle="展示配置"></thy-dialog-header>
+<thy-dialog-body>
+  <ul class="display-settings">
+    @for (item of settings; track item.id) {
+      <li class="display-settings__row">
+        <span>{{ item.label }}</span>
+        <thy-switch [(ngModel)]="item.enabled"></thy-switch>
+      </li>
+    }
+  </ul>
+</thy-dialog-body>
+<thy-dialog-footer thyAlign="right">
+  <button thyButton="default" thyAppearance="link" type="button" (click)="cancel()">取消</button>
+  <button thyButton="primary" type="button" (click)="confirm()">确定</button>
+</thy-dialog-footer>

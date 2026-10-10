@@ -2,7 +2,8 @@
   "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
   "version": 1,
   "cli": {
-    "packageManager": "npm"
+    "packageManager": "npm",
+    "analytics": "fb05a77c-8d51-4dd5-807f-3866ef47df26"
   },
   "newProjectRoot": "projects",
   "projects": {
@@ -46,7 +47,17 @@
             "tsConfig": "tsconfig.app.json",
             "inlineStyleLanguage": "scss",
             "baseHref": "./",
-            "styles": ["src/styles.scss"],
+            "assets": [
+              {
+                "glob": "sprite.defs.svg",
+                "input": "node_modules/@tethys/icons/defs/svg",
+                "output": "assets/icons/svg"
+              }
+            ],
+            "styles": [
+              "./node_modules/ngx-tethys/styles/index.scss",
+              "src/styles.scss"
+            ],
             "outputPath": {
               "base": "./dist",
               "browser": "",
@@ -55,11 +66,19 @@
           },
           "configurations": {
             "production": {
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false
+                },
+                "fonts": true
+              },
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "1.5MB",
-                  "maximumError": "2.5MB"
+                  "maximumWarning": "2MB",
+                  "maximumError": "3MB"
                 },
                 {
                   "type": "anyComponentStyle",

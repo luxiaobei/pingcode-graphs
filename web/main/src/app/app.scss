@@ -145,11 +145,4 @@ app-graph-canvas {
   .toolbar__actions {
     margin-left: 0;
   }
-
-  app-node-detail {
-    position: absolute;
-    inset: 0 0 0 auto;
-    z-index: 2;
-    box-shadow: -8px 0 24px rgb(15 23 42 / 8%);
-  }
 }

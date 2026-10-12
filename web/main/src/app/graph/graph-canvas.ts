@@ -11,14 +11,14 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { CanvasEvent, Graph, GraphEvent, type IElementEvent, NodeEvent } from '@antv/g6';
+import { Graph, GraphEvent, type IElementEvent, NodeEvent } from '@antv/g6';
 import {
   GRAPH_FIT_SETTLE_MS,
   GRAPH_OPTIONS,
   GRAPH_ZOOM_RANGE,
   GRAPH_ZOOM_STEP,
 } from '../constants/graph.constants';
-import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
+import type { DependencyGraph } from '../entities/graph.entity';
 import {
   buildElementStates,
   graphHostSize,
@@ -27,6 +27,7 @@ import {
   rememberFoldSides,
   snapshotGraphPositions,
 } from '../utils/g6-helpers';
+import { openPivot } from '../utils/graph.util';
 import { visiblePositions } from '../utils/pin-layout';
 import {
   toG6Data,
@@ -41,10 +42,7 @@ import {
 })
 export class GraphCanvas {
   readonly graph = input<DependencyGraph | null>(null);
-  readonly selectedId = input<string | null>(null);
 
-  readonly selectNode = output<GraphEntity>();
-  readonly clearSelection = output<void>();
   readonly toggleExpand = output<string>();
 
   protected readonly zoomPercent = signal(100);
@@ -84,7 +82,7 @@ export class GraphCanvas {
       if (data && graph) {
         void graph
           .setElementState(
-            buildElementStates(data, this.selectedId()),
+            buildElementStates(data),
             false,
           )
           .catch(() => undefined);
@@ -180,10 +178,9 @@ export class GraphCanvas {
         this.toggleExpand.emit(item.id);
         return;
       }
-      this.selectNode.emit(item);
+      openPivot(item);
     });
 
-    this.g6.on(CanvasEvent.CLICK, () => this.clearSelection.emit());
     this.g6.on(GraphEvent.AFTER_TRANSFORM, () => this.syncZoomPercent());
     this.g6.on(NodeEvent.DRAG_START, () => this.g6?.stopLayout());
     this.g6.on(NodeEvent.DRAG_END, () => {
@@ -287,7 +284,7 @@ export class GraphCanvas {
 
     await graph
       .setElementState(
-        buildElementStates(data, untracked(() => this.selectedId())),
+        buildElementStates(data),
         false,
       )
       .catch(() => undefined);

@@ -3,10 +3,9 @@ import { FormsModule } from '@angular/forms';
 import { view } from '@pc-nexus/bridge';
 import { ThyDialog, ThyDialogSizes } from 'ngx-tethys/dialog';
 import { ThySwitchModule } from 'ngx-tethys/switch';
-import type { DependencyGraph, GraphEntity } from './entities/graph.entity';
+import type { DependencyGraph } from './entities/graph.entity';
 import { GraphCanvas } from './graph/graph-canvas';
 import { MOCK_GRAPH } from './graph/mock-graph';
-import { NodeDetail } from './graph/node-detail';
 import { getDependencyGraph } from './services/graph.service';
 import {
   applySavedDisplaySettings,
@@ -21,7 +20,7 @@ import { filterGraphByDisplaySettings } from './utils/graph.util';
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, ThySwitchModule, GraphCanvas, NodeDetail],
+  imports: [FormsModule, ThySwitchModule, GraphCanvas],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
@@ -32,7 +31,6 @@ export class App {
 
   private readonly dialog = inject(ThyDialog);
 
-  protected readonly selected = signal<GraphEntity | null>(null);
   protected readonly collapsedAnchors = signal<readonly string[]>([]);
 
   protected readonly source = signal<DependencyGraph | null>(null);
@@ -54,12 +52,6 @@ export class App {
     const data = this.graph();
     const root = data?.nodes.find((node) => node.id === data.rootId);
     return root ? `${root.identifier} · ${root.title}` : '关联关系图';
-  });
-
-  protected readonly selectedIsRoot = computed(() => {
-    const selected = this.selected();
-    const data = this.graph();
-    return !!selected && !!data && selected.id === data.rootId;
   });
 
   constructor() {
@@ -90,7 +82,6 @@ export class App {
 
   protected async reload(): Promise<void> {
     const seq = ++this.requestSeq;
-    this.selected.set(null);
     this.resetFoldState();
     this.loading.set(true);
     this.error.set(null);
@@ -117,14 +108,6 @@ export class App {
     }
   }
 
-  protected onSelectNode(item: GraphEntity): void {
-    this.selected.set(item);
-  }
-
-  protected clearSelection(): void {
-    this.selected.set(null);
-  }
-
   protected onToggleExpand(anchorId: string): void {
     const node = this.graph()?.nodes.find((item) => item.id === anchorId);
     if (!node?.expandToggle) {
@@ -136,7 +119,6 @@ export class App {
       }
       return list.includes(anchorId) ? list : [...list, anchorId];
     });
-    this.selected.set(null);
   }
 
   protected openSettings(): void {
@@ -152,7 +134,6 @@ export class App {
       }
       this.displaySettings.set(result);
       this.resetFoldState();
-      this.selected.set(null);
       this.remountCanvas();
       void saveDisplaySettings(result).catch(() => undefined);
     });

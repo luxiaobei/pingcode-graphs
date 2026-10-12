@@ -1,18 +1,10 @@
-<div class="page">
-  <header class="toolbar">
-    <div class="toolbar__heading">
-      <div class="toolbar__title">
-        <h1>关系图</h1>
-        <p>{{ focusTitle() }}</p>
-        @if (usingMockData()) {
-          <span class="mock-badge">模拟数据</span>
-        }
-      </div>
-      <button type="button" class="close-btn" (click)="closeDialog()" aria-label="关闭">×</button>
-    </div>
-
-    <div class="toolbar__controls">
-      <div class="toolbar__actions">
+<thy-layout>
+  <thy-header thyDivided>
+    <ng-template #headerTitle>
+      <span class="title-name">关系可视化</span>
+    </ng-template>
+    <ng-template #headerOperation>
+      <div class="header-actions">
         <div class="switch-field">
           <span>模拟数据</span>
           <thy-switch
@@ -21,13 +13,27 @@
             (ngModelChange)="setUsingMockData($event)"
           ></thy-switch>
         </div>
-        <button type="button" class="ghost-btn" (click)="openSettings()">设置</button>
-        <button type="button" class="ghost-btn" (click)="reload()">刷新</button>
+        <!-- 后续可以当作一键美化按钮 -->
+        <thy-action thyIcon="sync" thyTooltip="刷新" thyTooltipPlacement="bottom" (click)="reload()"></thy-action>
+        <thy-action thyIcon="ai-star" thyTooltip="AI分析" thyTooltipPlacement="bottom"></thy-action>
+        <thy-action
+          thyIcon="settings"
+          thyTooltip="设置"
+          thyTooltipPlacement="bottom"
+          (click)="openSettings()"
+        ></thy-action>
+        <thy-divider thyVertical class="m-0"></thy-divider>
+        <thy-action
+          thyIcon="close"
+          thyTooltip="关闭"
+          thyTooltipPlacement="bottom"
+          (click)="closeDialog()"
+        ></thy-action>
       </div>
-    </div>
-  </header>
+    </ng-template>
+  </thy-header>
 
-  <main class="workspace">
+  <thy-content>
     @if (loading()) {
       <div class="state">正在加载关系图…</div>
     } @else if (error()) {
@@ -40,13 +46,10 @@
       @if (!data.nodes.length) {
         <div class="state">暂无关联对象数据</div>
       } @else if (showCanvas()) {
-        <app-graph-canvas
-          [graph]="data"
-          (toggleExpand)="onToggleExpand($event)"
-        />
+        <app-graph-canvas [graph]="data" (toggleExpand)="onToggleExpand($event)" />
       }
     } @else {
       <div class="state">无法获取当前对象上下文</div>
     }
-  </main>
-</div>
+  </thy-content>
+</thy-layout>

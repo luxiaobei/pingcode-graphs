@@ -14,6 +14,8 @@ import {
   viewChild,
 } from '@angular/core';
 import { Graph, GraphEvent, type IElementEvent, NodeEvent } from '@antv/g6';
+import { ThyAction } from 'ngx-tethys/action';
+import { ThyTooltipDirective } from 'ngx-tethys/tooltip';
 import { bindWorkItemCardRuntime } from './work-item-card';
 import {
   GRAPH_FIT_SETTLE_MS,
@@ -41,6 +43,7 @@ import {
 
 @Component({
   selector: 'app-graph-canvas',
+  imports: [ThyAction, ThyTooltipDirective],
   templateUrl: './graph-canvas.html',
   styleUrl: './graph-canvas.scss',
 })
@@ -99,6 +102,12 @@ export class GraphCanvas {
       void this.g6.zoomBy(1 / GRAPH_ZOOM_STEP).then(() => this.syncZoomPercent());
     }
   }
+
+  /** 定位入口，功能后续再接。 */
+  protected locate(): void {}
+
+  /** 保存入口，功能后续再接。 */
+  protected save(): void {}
 
   protected fit(): void {
     const graph = this.liveGraph();

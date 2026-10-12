@@ -1,8 +1,12 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { view } from '@pc-nexus/bridge';
+import { ThyAction } from 'ngx-tethys/action';
 import { ThyDialog, ThyDialogSizes } from 'ngx-tethys/dialog';
+import { ThyDivider } from 'ngx-tethys/divider';
+import { ThyContent, ThyHeader, ThyLayout } from 'ngx-tethys/layout';
 import { ThySwitchModule } from 'ngx-tethys/switch';
+import { ThyTooltipDirective } from 'ngx-tethys/tooltip';
 import type { DependencyGraph } from './entities/graph.entity';
 import { GraphCanvas } from './graph/graph-canvas';
 import { MOCK_GRAPH } from './graph/mock-graph';
@@ -20,7 +24,17 @@ import { filterGraphByDisplaySettings } from './utils/graph.util';
 
 @Component({
   selector: 'app-root',
-  imports: [FormsModule, ThySwitchModule, GraphCanvas],
+  imports: [
+    FormsModule,
+    ThyLayout,
+    ThyHeader,
+    ThyContent,
+    ThyAction,
+    ThyDivider,
+    ThySwitchModule,
+    ThyTooltipDirective,
+    GraphCanvas,
+  ],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })

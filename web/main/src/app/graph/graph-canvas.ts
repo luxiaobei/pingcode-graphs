@@ -59,6 +59,7 @@ export class GraphCanvas {
   private fitTimer: number | null = null;
   private renderSeq = 0;
   private lastDepth: number | null = null;
+  private lastRootId: string | null = null;
   private readonly pinnedPositions = new Map<string, GraphNodePosition>();
   private readonly foldSideById = new Map<string, FoldPlacement>();
 
@@ -80,11 +81,14 @@ export class GraphCanvas {
         return;
       }
       const data = untracked(() => this.graph());
-      if (data) {
-        void this.g6.setElementState(
-          buildElementStates(data, this.selectedId(), this.highlightCriticalPath()),
-          false,
-        );
+      const graph = this.liveGraph();
+      if (data && graph) {
+        void graph
+          .setElementState(
+            buildElementStates(data, this.selectedId(), this.highlightCriticalPath()),
+            false,
+          )
+          .catch(() => undefined);
       }
     });
   }
@@ -110,7 +114,14 @@ export class GraphCanvas {
   }
 
   protected fit(): void {
-    void this.g6?.fitView({ when: 'always', direction: 'both' }).then(() => this.syncZoomPercent());
+    const graph = this.liveGraph();
+    if (!graph) {
+      return;
+    }
+    void graph
+      .fitView({ when: 'always', direction: 'both' })
+      .then(() => this.syncZoomPercent())
+      .catch(() => undefined);
   }
 
   private initGraph(): void {
@@ -134,6 +145,9 @@ export class GraphCanvas {
     this.resizeObserver = null;
     this.pinnedPositions.clear();
     this.foldSideById.clear();
+    this.lastDepth = null;
+    this.lastRootId = null;
+    this.g6?.off();
     this.g6?.destroy();
     this.g6 = null;
     this.ready.set(false);
@@ -186,21 +200,43 @@ export class GraphCanvas {
     });
   }
 
+  /** 同一根节点、同一深度，且画布上还有重叠节点时沿用坐标；否则重新布局。 */
   private preparePositions(data: DependencyGraph): ReadonlyMap<string, GraphNodePosition> | null {
-    if (this.lastDepth !== data.depth) {
+    const canvasNodeIds = new Set((this.g6?.getNodeData() ?? []).map((node) => String(node.id)));
+    const sharesNode = data.nodes.some((node) => canvasNodeIds.has(node.id));
+    const reusePins =
+      this.lastRootId === data.rootId && this.lastDepth === data.depth && sharesNode;
+
+    if (!reusePins) {
       this.pinnedPositions.clear();
       this.foldSideById.clear();
       this.lastDepth = data.depth;
+      this.lastRootId = data.rootId;
       return null;
     }
-    if (this.g6?.getNodeData().length) {
-      snapshotGraphPositions(this.g6, this.pinnedPositions);
+
+    const graph = this.liveGraph();
+    if (!graph) {
+      return null;
     }
+    snapshotGraphPositions(graph, this.pinnedPositions);
     return this.pinnedPositions.size ? visiblePositions(data, this.pinnedPositions) : null;
   }
 
+  private liveGraph(): Graph | null {
+    return this.g6 && !this.g6.destroyed ? this.g6 : null;
+  }
+
   private syncZoomPercent(): void {
-    this.zoomPercent.set(Math.round((this.g6?.getZoom() ?? 1) * 100));
+    const graph = this.liveGraph();
+    if (!graph) {
+      return;
+    }
+    try {
+      this.zoomPercent.set(Math.round(graph.getZoom() * 100));
+    } catch {
+      // 销毁过程中视口可能已经拆掉
+    }
   }
 
   private async render(data: DependencyGraph | null): Promise<void> {
@@ -215,6 +251,7 @@ export class GraphCanvas {
       this.pinnedPositions.clear();
       this.foldSideById.clear();
       this.lastDepth = null;
+      this.lastRootId = null;
       this.g6.setData({ nodes: [], edges: [] });
       await this.g6.render();
       return;
@@ -244,18 +281,21 @@ export class GraphCanvas {
       }, GRAPH_FIT_SETTLE_MS);
     }
 
-    if (seq !== this.renderSeq) {
+    const graph = this.liveGraph();
+    if (seq !== this.renderSeq || !graph) {
       return;
     }
 
-    await this.g6.setElementState(
-      buildElementStates(
-        data,
-        untracked(() => this.selectedId()),
-        untracked(() => this.highlightCriticalPath()),
-      ),
-      false,
-    );
+    await graph
+      .setElementState(
+        buildElementStates(
+          data,
+          untracked(() => this.selectedId()),
+          untracked(() => this.highlightCriticalPath()),
+        ),
+        false,
+      )
+      .catch(() => undefined);
   }
 
   private clearFitTimer(): void {

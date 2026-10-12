@@ -34,6 +34,10 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
   causedBy: { label: '由…导致', color: '#c47a1a', canonical: 'cause' },
   relate: { label: '关联', color: '#3b6fd9' },
   duplicate: { label: '重复', color: '#6b7280' },
+  depend: { label: '依赖', color: '#0f766e' },
+  mention: { label: '提及', color: '#7c3aed' },
+  clone: { label: '克隆', color: '#475569' },
+  child: { label: '子工作项', color: '#0369a1' },
 };
 
 /** 默认筛选选项；正式环境由接口下发的关系配置覆盖 */

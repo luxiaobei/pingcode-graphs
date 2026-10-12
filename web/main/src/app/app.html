@@ -4,7 +4,7 @@
       <div class="toolbar__title">
         <h1>关系图</h1>
         <p>{{ focusTitle() }}</p>
-        @if (usingMockData) {
+        @if (usingMockData()) {
           <span class="mock-badge">模拟数据</span>
         }
       </div>
@@ -45,6 +45,14 @@
       </div>
 
       <div class="toolbar__actions">
+        <div class="switch-field">
+          <span>模拟数据</span>
+          <thy-switch
+            thySize="sm"
+            [ngModel]="usingMockData()"
+            (ngModelChange)="setUsingMockData($event)"
+          ></thy-switch>
+        </div>
         <button
           type="button"
           class="ghost-btn"

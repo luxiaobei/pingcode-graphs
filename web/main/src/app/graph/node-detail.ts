@@ -15,7 +15,6 @@ import {
 export class NodeDetail {
   readonly item = input<GraphEntity | null>(null);
   readonly isRoot = input(false);
-  readonly isOnCriticalPath = input(false);
   readonly close = output<void>();
 
   protected readonly typeName = computed(() => entityTypeName(this.item()));

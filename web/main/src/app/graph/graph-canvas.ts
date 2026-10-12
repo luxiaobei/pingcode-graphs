@@ -42,7 +42,6 @@ import {
 export class GraphCanvas {
   readonly graph = input<DependencyGraph | null>(null);
   readonly selectedId = input<string | null>(null);
-  readonly highlightCriticalPath = input(false);
 
   readonly selectNode = output<GraphEntity>();
   readonly clearSelection = output<void>();
@@ -85,7 +84,7 @@ export class GraphCanvas {
       if (data && graph) {
         void graph
           .setElementState(
-            buildElementStates(data, this.selectedId(), this.highlightCriticalPath()),
+            buildElementStates(data, this.selectedId()),
             false,
           )
           .catch(() => undefined);
@@ -288,11 +287,7 @@ export class GraphCanvas {
 
     await graph
       .setElementState(
-        buildElementStates(
-          data,
-          untracked(() => this.selectedId()),
-          untracked(() => this.highlightCriticalPath()),
-        ),
+        buildElementStates(data, untracked(() => this.selectedId())),
         false,
       )
       .catch(() => undefined);

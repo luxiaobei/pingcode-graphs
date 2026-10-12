@@ -1,10 +1,6 @@
 import { idea, page, testcase, ticket, workitem } from '@pc-nexus/capabilities';
 import { NavigationTarget } from '@pc-nexus/bridge';
-import {
-  CRITICAL_PATH_RELATION_TYPES,
-  DEFAULT_EDGE_COLOR,
-  RELATION_STYLE,
-} from '../constants/graph.constants';
+import { DEFAULT_EDGE_COLOR, RELATION_STYLE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import type { RelationType } from '../enums/graph.enum';
 import { isRelationShown, type DisplaySetting } from '../settings/display-settings';
@@ -22,11 +18,6 @@ export function relationLabel(type: RelationType, fallback?: string): string {
 /** 反向关系归到规范类型，如 blockedBy → block */
 export function toCanonicalType(type: RelationType): string {
   return RELATION_STYLE[type]?.canonical ?? type;
-}
-
-/** 是否参与关键路径高亮（默认 block） */
-export function isCriticalRelation(type: RelationType): boolean {
-  return CRITICAL_PATH_RELATION_TYPES.includes(toCanonicalType(type));
 }
 
 /** 节点类型名 */
@@ -106,6 +97,5 @@ function keepEdgeNodes(source: DependencyGraph, edges: DependencyGraph['edges'])
     ...source,
     nodes: source.nodes.filter((node) => nodeIds.has(node.id)),
     edges,
-    criticalPath: source.criticalPath.filter((id) => nodeIds.has(id)),
   };
 }

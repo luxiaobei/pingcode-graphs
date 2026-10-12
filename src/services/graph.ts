@@ -75,41 +75,6 @@ function toDirectedEdge(
     };
 }
 
-function findCriticalPath(rootId: string, edges: GraphEdge[]): string[] {
-    const blockEdges = edges.filter((edge) => edge.relationType === "block");
-    if (!blockEdges.length) {
-        return [rootId];
-    }
-
-    const outgoing = new Map<string, string[]>();
-    for (const edge of blockEdges) {
-        const list = outgoing.get(edge.source) ?? [];
-        list.push(edge.target);
-        outgoing.set(edge.source, list);
-    }
-
-    let bestPath: string[] = [rootId];
-
-    const dfs = (nodeId: string, path: string[], visited: Set<string>) => {
-        if (path.length > bestPath.length) {
-            bestPath = [...path];
-        }
-        for (const next of outgoing.get(nodeId) ?? []) {
-            if (visited.has(next)) {
-                continue;
-            }
-            visited.add(next);
-            path.push(next);
-            dfs(next, path, visited);
-            path.pop();
-            visited.delete(next);
-        }
-    };
-
-    dfs(rootId, [rootId], new Set([rootId]));
-    return bestPath;
-}
-
 export class GraphService {
     async getDependencyGraph(
         context: NexusAppContext,
@@ -184,7 +149,6 @@ export class GraphService {
             depth,
             nodes: [...nodes.values()],
             edges: edgeList,
-            criticalPath: findCriticalPath(workitemId, edgeList),
         };
     }
 }

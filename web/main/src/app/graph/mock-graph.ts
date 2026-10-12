@@ -127,5 +127,4 @@ export const MOCK_GRAPH: DependencyGraph = {
   depth: 3,
   nodes,
   edges,
-  criticalPath: ['n-sso', 'n-auth', 'n-root', 'n-mobile', 'n-release'],
 };

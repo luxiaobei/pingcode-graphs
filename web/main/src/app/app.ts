@@ -32,7 +32,6 @@ export class App {
 
   private readonly dialog = inject(ThyDialog);
 
-  protected readonly highlightCriticalPath = signal(false);
   protected readonly selected = signal<GraphEntity | null>(null);
   protected readonly collapsedAnchors = signal<readonly string[]>([]);
 
@@ -63,12 +62,6 @@ export class App {
     return !!selected && !!data && selected.id === data.rootId;
   });
 
-  protected readonly selectedOnCritical = computed(() => {
-    const selected = this.selected();
-    const data = this.graph();
-    return !!selected && !!data && data.criticalPath.includes(selected.id);
-  });
-
   constructor() {
     void this.reload();
   }
@@ -81,10 +74,6 @@ export class App {
   private remountCanvas(): void {
     this.showCanvas.set(false);
     setTimeout(() => this.showCanvas.set(true));
-  }
-
-  protected toggleCriticalPath(): void {
-    this.highlightCriticalPath.update((value) => !value);
   }
 
   protected setUsingMockData(useMock: boolean): void {

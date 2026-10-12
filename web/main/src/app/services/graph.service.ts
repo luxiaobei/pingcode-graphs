@@ -197,7 +197,6 @@ function toDependencyGraph(
     depth,
     nodes: grouped.nodes,
     edges: grouped.edges,
-    criticalPath: findCriticalPath(rootId, grouped.edges),
   };
 }
 
@@ -342,36 +341,3 @@ function ensureNode(nodes: Map<string, GraphEntity>, id: string): void {
   });
 }
 
-function findCriticalPath(rootId: string, edges: GraphEdge[]): string[] {
-  const outgoing = new Map<string, string[]>();
-  for (const edge of edges) {
-    if (edge.relationType !== 'block') {
-      continue;
-    }
-    const list = outgoing.get(edge.source) ?? [];
-    list.push(edge.target);
-    outgoing.set(edge.source, list);
-  }
-  if (!outgoing.size) {
-    return [rootId];
-  }
-
-  let bestPath = [rootId];
-  const visit = (nodeId: string, path: string[], seen: Set<string>) => {
-    if (path.length > bestPath.length) {
-      bestPath = [...path];
-    }
-    for (const next of outgoing.get(nodeId) ?? []) {
-      if (seen.has(next)) {
-        continue;
-      }
-      seen.add(next);
-      path.push(next);
-      visit(next, path, seen);
-      path.pop();
-      seen.delete(next);
-    }
-  };
-  visit(rootId, [rootId], new Set([rootId]));
-  return bestPath;
-}

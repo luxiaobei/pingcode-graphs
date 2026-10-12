@@ -21,14 +21,6 @@
             (ngModelChange)="setUsingMockData($event)"
           ></thy-switch>
         </div>
-        <button
-          type="button"
-          class="ghost-btn"
-          [class.active]="highlightCriticalPath()"
-          (click)="toggleCriticalPath()"
-        >
-          关键路径
-        </button>
         <button type="button" class="ghost-btn" (click)="openSettings()">设置</button>
         <button type="button" class="ghost-btn" (click)="reload()">刷新</button>
       </div>
@@ -51,7 +43,6 @@
         <app-graph-canvas
           [graph]="data"
           [selectedId]="selected()?.id ?? null"
-          [highlightCriticalPath]="highlightCriticalPath()"
           (selectNode)="onSelectNode($event)"
           (clearSelection)="clearSelection()"
           (toggleExpand)="onToggleExpand($event)"
@@ -60,7 +51,6 @@
           <app-node-detail
             [item]="selected()"
             [isRoot]="selectedIsRoot()"
-            [isOnCriticalPath]="selectedOnCritical()"
             (close)="clearSelection()"
           />
         }

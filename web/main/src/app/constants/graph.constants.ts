@@ -6,7 +6,6 @@ import type {
   NodeData,
 } from '@antv/g6';
 import type { RelationStyle } from '../entities/graph.entity';
-import { DEFAULT_RELATION_TYPES, type RelationType } from '../enums/graph.enum';
 
 export const GRAPH_MIN_SIZE = 320;
 
@@ -33,6 +32,11 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
   cause: { label: '导致', color: '#c47a1a' },
   causedBy: { label: '由…导致', color: '#c47a1a', canonical: 'cause' },
   relate: { label: '关联', color: '#3b6fd9' },
+  'relate:work_item': { label: '关联工作项', color: '#3b6fd9' },
+  'relate:idea': { label: '关联产品需求', color: '#7c3aed' },
+  'relate:ticket': { label: '关联工单', color: '#db2777' },
+  'relate:test_case': { label: '关联测试', color: '#0891b2' },
+  'relate:objective': { label: '关联目标', color: '#ca8a04' },
   duplicate: { label: '重复', color: '#6b7280' },
   depend: { label: '依赖', color: '#0f766e' },
   mention: { label: '提及', color: '#7c3aed' },
@@ -40,21 +44,27 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
   child: { label: '子工作项', color: '#0369a1' },
 };
 
-/** 默认筛选选项；正式环境由接口下发的关系配置覆盖 */
-export const RELATION_OPTIONS: Array<{ value: RelationType; label: string; color: string }> =
-  DEFAULT_RELATION_TYPES.map((value) => ({
-    value,
-    label: RELATION_STYLE[value].label,
-    color: RELATION_STYLE[value].color,
-  }));
+export const GRAPH_NODE_SIZE = { width: 132, height: 56 } as const;
 
-export const GRAPH_FORCE_LAYOUT = {
-  type: 'd3-force' as const,
-  preventOverlap: true,
-  collide: { radius: 90 },
-  link: { distance: 180 },
-  manyBody: { strength: -520 },
-  center: { strength: 0.05 },
+function relationHubOf(datum: NodeData): string | undefined {
+  return (datum.data?.['item'] as { relationHub?: string } | undefined)?.relationHub;
+}
+
+function cardOrHub<T>(datum: NodeData, card: T, hub: T): T {
+  return relationHubOf(datum) ? hub : card;
+}
+
+/** 思维导图：根节点居中，关系向两侧展开。 */
+export const GRAPH_MINDMAP_LAYOUT = {
+  type: 'mindmap' as const,
+  direction: 'H' as const,
+  getId: (node: { id: string }) => node.id,
+  getWidth: (node: { width?: number; data?: { width?: number } }) =>
+    node.width ?? node.data?.width ?? GRAPH_NODE_SIZE.width,
+  getHeight: (node: { height?: number; data?: { height?: number } }) =>
+    node.height ?? node.data?.height ?? GRAPH_NODE_SIZE.height,
+  getHGap: () => 64,
+  getVGap: () => 18,
 };
 
 export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'> = {
@@ -62,22 +72,24 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
   padding: 48,
   zoomRange: GRAPH_ZOOM_RANGE,
   animation: false,
-  layout: GRAPH_FORCE_LAYOUT,
+  layout: GRAPH_MINDMAP_LAYOUT,
   node: {
     type: 'rect',
     style: {
-      size: [132, 56] as [number, number],
+      size: (d: NodeData) => cardOrHub(d, [132, 56] as [number, number], [1, 1]),
       radius: 8,
-      fill: '#ffffff',
-      stroke: '#94a3b8',
-      lineWidth: 2,
-      labelText: (d: NodeData) => (d.data?.['label'] as string) ?? '',
+      fill: (d: NodeData) => cardOrHub(d, '#ffffff', 'transparent'),
+      stroke: (d: NodeData) => cardOrHub(d, '#94a3b8', 'transparent'),
+      lineWidth: (d: NodeData) => cardOrHub(d, 2, 0),
+      opacity: (d: NodeData) => cardOrHub(d, 1, 0),
+      labelText: (d: NodeData) => cardOrHub(d, (d.data?.['label'] as string) ?? '', ''),
       labelFill: '#1f2937',
       labelFontSize: 11,
       labelPlacement: 'center',
       labelWordWrap: true,
       labelMaxWidth: 120,
-      cursor: 'pointer',
+      cursor: (d: NodeData) => cardOrHub(d, 'pointer', 'default'),
+      pointerEvents: (d: NodeData) => cardOrHub(d, 'auto', 'none'),
     },
     state: {
       root: { stroke: '#2563eb', lineWidth: 3, fill: '#eff6ff' },
@@ -87,16 +99,18 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
     },
   },
   edge: {
-    type: 'line',
+    type: 'polyline',
     style: {
       stroke: (d: EdgeData) => (d.data?.['color'] as string) ?? '#94a3b8',
       lineWidth: 1.5,
-      lineDash: [6, 4],
-      endArrow: true,
+      radius: 8,
+      router: { type: 'orth' },
+      endArrow: (d: EdgeData) => d.data?.['endArrow'] !== false,
       labelText: (d: EdgeData) => (d.data?.['label'] as string) ?? '',
-      labelFill: '#64748b',
-      labelFontSize: 9,
-      labelBackground: true,
+      labelFill: (d: EdgeData) => (d.data?.['color'] as string) ?? '#64748b',
+      labelFontSize: 11,
+      labelFontWeight: 600,
+      labelBackground: (d: EdgeData) => Boolean(d.data?.['label']),
       labelBackgroundFill: '#f8fafc',
       labelBackgroundOpacity: 0.95,
       labelPadding: [1, 4],

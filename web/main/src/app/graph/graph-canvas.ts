@@ -174,7 +174,7 @@ export class GraphCanvas {
         return;
       }
       const item = nodeItemFromEvent(this.g6, event);
-      if (!item) {
+      if (!item || item.relationHub) {
         return;
       }
       if (item.expandToggle && isBadgeTarget(event)) {

@@ -7,6 +7,7 @@ import {
 } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import type { RelationType } from '../enums/graph.enum';
+import { isRelationShown, type DisplaySetting } from '../settings/display-settings';
 
 /** 关系线颜色 */
 export function relationColor(type: RelationType): string {
@@ -21,11 +22,6 @@ export function relationLabel(type: RelationType, fallback?: string): string {
 /** 反向关系归到规范类型，如 blockedBy → block */
 export function toCanonicalType(type: RelationType): string {
   return RELATION_STYLE[type]?.canonical ?? type;
-}
-
-/** 一批关系类型转成规范类型集合，用于筛选 */
-export function toCanonicalTypes(types: RelationType[]): Set<string> {
-  return new Set(types.map(toCanonicalType));
 }
 
 /** 是否参与关键路径高亮（默认 block） */
@@ -89,13 +85,18 @@ export function truncate(value: string, max: number): string {
   return `${value.slice(0, max - 1)}…`;
 }
 
-/** 按关系类型裁剪源图（真实接口也可在服务端过滤） */
-export function filterGraphByRelations(
+/** 按展示配置裁剪。开关关掉的关系隐藏，未列入配置的关系保留。 */
+export function filterGraphByDisplaySettings(
   source: DependencyGraph,
-  relationTypes: RelationType[],
+  settings: readonly DisplaySetting[],
 ): DependencyGraph {
-  const allowed = toCanonicalTypes(relationTypes);
-  const edges = source.edges.filter((edge) => allowed.has(toCanonicalType(edge.relationType)));
+  const edges = source.edges.filter((edge) =>
+    isRelationShown(settings, toCanonicalType(edge.relationType)),
+  );
+  return keepEdgeNodes(source, edges);
+}
+
+function keepEdgeNodes(source: DependencyGraph, edges: DependencyGraph['edges']): DependencyGraph {
   const nodeIds = new Set<string>([source.rootId]);
   for (const edge of edges) {
     nodeIds.add(edge.source);

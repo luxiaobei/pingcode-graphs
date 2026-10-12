@@ -12,38 +12,6 @@
     </div>
 
     <div class="toolbar__controls">
-      <div class="control">
-        <span class="control__label">深度</span>
-        <div class="segmented">
-          @for (item of depths; track item) {
-            <button
-              type="button"
-              [class.active]="depth() === item"
-              (click)="setDepth(item)"
-            >
-              {{ item }}
-            </button>
-          }
-        </div>
-      </div>
-
-      <div class="control control--relations">
-        <span class="control__label">关系类型</span>
-        <div class="chips">
-          @for (option of relationOptions; track option.value) {
-            <button
-              type="button"
-              class="chip"
-              [class.active]="isRelationEnabled(option.value)"
-              [style.--chip-color]="option.color"
-              (click)="toggleRelation(option.value)"
-            >
-              {{ option.label }}
-            </button>
-          }
-        </div>
-      </div>
-
       <div class="toolbar__actions">
         <div class="switch-field">
           <span>模拟数据</span>
@@ -65,14 +33,6 @@
         <button type="button" class="ghost-btn" (click)="reload()">刷新</button>
       </div>
     </div>
-
-    @if (stats(); as currentStats) {
-      <div class="stats">
-        <span>{{ currentStats.nodes }} 个对象</span>
-        <span>{{ currentStats.edges }} 条关系</span>
-        <span>关键路径长度 {{ currentStats.criticalLength }}</span>
-      </div>
-    }
   </header>
 
   <main class="workspace">
@@ -87,7 +47,7 @@
     } @else if (graph(); as data) {
       @if (!data.nodes.length) {
         <div class="state">暂无关联对象数据</div>
-      } @else {
+      } @else if (showCanvas()) {
         <app-graph-canvas
           [graph]="data"
           [selectedId]="selected()?.id ?? null"

@@ -1,7 +1,9 @@
 import {
+  ApplicationRef,
   Component,
   DestroyRef,
   ElementRef,
+  EnvironmentInjector,
   afterNextRender,
   effect,
   inject,
@@ -14,6 +16,7 @@ import {
 import { Graph, GraphEvent, type IElementEvent, NodeEvent } from '@antv/g6';
 import { ThyAction } from 'ngx-tethys/action';
 import { ThyTooltipDirective } from 'ngx-tethys/tooltip';
+import { bindWorkItemCardRuntime } from './work-item-card';
 import {
   GRAPH_FIT_SETTLE_MS,
   GRAPH_OPTIONS,
@@ -27,6 +30,7 @@ import {
   isBadgeTarget,
   nodeItemFromEvent,
   rememberFoldSides,
+  sharpenHtmlCamera,
   snapshotGraphPositions,
 } from '../utils/g6-helpers';
 import { openPivot } from '../utils/graph.util';
@@ -56,6 +60,7 @@ export class GraphCanvas {
   private g6: Graph | null = null;
   private readonly ready = signal(false);
   private resizeObserver: ResizeObserver | null = null;
+  private htmlCameraObserver: MutationObserver | null = null;
   private fitTimer: number | null = null;
   private renderSeq = 0;
   private lastDepth: number | null = null;
@@ -67,6 +72,7 @@ export class GraphCanvas {
   private readonly zoomMaxPercent = Math.round(GRAPH_ZOOM_RANGE[1] * 100);
 
   constructor() {
+    bindWorkItemCardRuntime(inject(EnvironmentInjector), inject(ApplicationRef));
     afterNextRender(() => this.initGraph());
     this.destroyRef.onDestroy(() => this.destroyGraph());
 
@@ -118,6 +124,7 @@ export class GraphCanvas {
     const container = this.host().nativeElement;
     this.g6 = new Graph({ container, ...graphHostSize(container), ...GRAPH_OPTIONS });
     this.bindGraphEvents();
+    this.bindHtmlCamera(container);
     this.resizeObserver = new ResizeObserver(() => {
       if (!this.g6) {
         return;
@@ -133,6 +140,8 @@ export class GraphCanvas {
     this.clearFitTimer();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.htmlCameraObserver?.disconnect();
+    this.htmlCameraObserver = null;
     this.pinnedPositions.clear();
     this.foldSideById.clear();
     this.lastDepth = null;
@@ -214,6 +223,28 @@ export class GraphCanvas {
 
   private liveGraph(): Graph | null {
     return this.g6 && !this.g6.destroyed ? this.g6 : null;
+  }
+
+  /** 卡片是 HTML，跟着相机 transform 放大后会糊。相机层一变就把缩放改成 zoom。 */
+  private bindHtmlCamera(container: HTMLElement): void {
+    const sync = (): void => {
+      const camera = container.querySelector<HTMLElement>('#g-canvas-camera');
+      if (!camera) {
+        return;
+      }
+      if (!this.htmlCameraObserver) {
+        this.htmlCameraObserver = new MutationObserver(() => sharpenHtmlCamera(camera));
+        this.htmlCameraObserver.observe(camera, {
+          attributes: true,
+          attributeFilter: ['style'],
+          childList: true,
+        });
+      }
+      sharpenHtmlCamera(camera);
+    };
+    this.g6?.on(GraphEvent.AFTER_RENDER, sync);
+    this.g6?.on(GraphEvent.AFTER_DRAW, sync);
+    this.g6?.on(GraphEvent.AFTER_TRANSFORM, sync);
   }
 
   private syncZoomPercent(): void {

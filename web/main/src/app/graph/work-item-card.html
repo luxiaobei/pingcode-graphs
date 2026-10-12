@@ -1,0 +1,27 @@
+<article
+  class="card"
+  [class.card--root]="root()"
+>
+  <div class="card__main">
+    <div class="card__head">
+      @if (item().icon) {
+        <thy-icon class="card__icon" [thyName]="item().icon" [style.color]="item().iconColor"></thy-icon>
+      }
+      <div class="card__id">{{ item().identifier || item().id }}</div>
+    </div>
+    <div class="card__title">{{ item().title || '未命名' }}</div>
+  </div>
+  @if (item().assignee?.avatar || assignee()) {
+    <thy-avatar
+      class="card__avatar"
+      thySize="28"
+      [thySrc]="item().assignee?.avatar"
+      [thyName]="assignee()"
+    ></thy-avatar>
+  }
+  @if (item().expandToggle) {
+    <span class="card-badge" [class.card-badge--left]="fold() === 'left'">
+      {{ item().expandToggle === 'collapsed' ? '+' : '−' }}
+    </span>
+  }
+</article>

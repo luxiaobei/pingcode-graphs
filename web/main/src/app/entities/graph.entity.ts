@@ -29,7 +29,12 @@ export interface GraphEntity {
     id?: string;
     name?: string;
     display_name?: string;
+    avatar?: string;
   };
+  /** thy-icon 名称，来自 type_icon */
+  icon?: string;
+  /** thy-icon 颜色，来自 type_color */
+  iconColor?: string;
   /** 服务端常用字段 */
   project?: GraphScope;
   /** 前端展示用，缺省时回退 project */

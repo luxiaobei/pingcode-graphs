@@ -19,7 +19,7 @@ export const GRAPH_ZOOM_RANGE: [number, number] = [0.2, 3];
 export const GRAPH_FIT_SETTLE_MS = 300;
 
 /** 业务节点占位（含间距），展开落点避让用 */
-export const GRAPH_NODE_SLOT = { width: 168, height: 96 } as const;
+export const GRAPH_NODE_SLOT = { width: 256, height: 88 } as const;
 
 export const DEFAULT_EDGE_COLOR = '#94a3b8';
 
@@ -41,7 +41,7 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
   child: { label: '子工作项', color: '#0369a1' },
 };
 
-export const GRAPH_NODE_SIZE = { width: 132, height: 56 } as const;
+export const GRAPH_NODE_SIZE = { width: 240, height: 68 } as const;
 
 function relationHubOf(datum: NodeData): string | undefined {
   return (datum.data?.['item'] as { relationHub?: string } | undefined)?.relationHub;
@@ -71,20 +71,15 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
   animation: false,
   layout: GRAPH_MINDMAP_LAYOUT,
   node: {
-    type: 'rect',
+    type: 'work-item-card',
     style: {
-      size: (d: NodeData) => cardOrHub(d, [132, 56] as [number, number], [1, 1]),
+      size: (d: NodeData) => cardOrHub(d, [GRAPH_NODE_SIZE.width, GRAPH_NODE_SIZE.height], [1, 1]),
       radius: 8,
       fill: (d: NodeData) => cardOrHub(d, '#ffffff', 'transparent'),
       stroke: (d: NodeData) => cardOrHub(d, '#94a3b8', 'transparent'),
       lineWidth: (d: NodeData) => cardOrHub(d, 2, 0),
       opacity: (d: NodeData) => cardOrHub(d, 1, 0),
-      labelText: (d: NodeData) => cardOrHub(d, (d.data?.['label'] as string) ?? '', ''),
-      labelFill: '#1f2937',
-      labelFontSize: 11,
-      labelPlacement: 'center',
-      labelWordWrap: true,
-      labelMaxWidth: 120,
+      label: false,
       cursor: (d: NodeData) => cardOrHub(d, 'pointer', 'default'),
       pointerEvents: (d: NodeData) => cardOrHub(d, 'auto', 'none'),
     },

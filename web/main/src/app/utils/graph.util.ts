@@ -28,6 +28,11 @@ export function entityTypeName(item: GraphEntity | null | undefined): string {
   return typeof item.type === 'string' ? item.type : (item.type.name ?? '');
 }
 
+/** 负责人显示名 */
+export function entityAssigneeName(item: GraphEntity | null | undefined): string {
+  return item?.assignee?.display_name || item?.assignee?.name || '';
+}
+
 /** 打开详情用的导航目标；无效则返回 null */
 export function resolveNavigationTarget(item: GraphEntity): NavigationTarget | null {
   const target = item.navigationTarget as NavigationTarget | undefined;

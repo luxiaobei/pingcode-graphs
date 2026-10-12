@@ -19,9 +19,13 @@ interface KgReachedNode {
     identifier?: string;
     detail?: {
       type_name?: string;
+      type_icon?: string;
+      type_color?: string;
       state_name?: string;
       state_type?: string;
       priority?: string;
+      assignee_name?: string;
+      assignee_avatar?: string;
     };
   };
 }
@@ -301,6 +305,16 @@ function toEntity(reached: KgReachedNode): GraphEntity | null {
         ? { name: detail.state_name, type: detail.state_type }
         : undefined,
     priority: detail?.priority ? { name: detail.priority } : undefined,
+    assignee:
+      detail?.assignee_name || detail?.assignee_avatar
+        ? {
+            display_name: detail.assignee_name,
+            name: detail.assignee_name,
+            avatar: detail.assignee_avatar,
+          }
+        : undefined,
+    icon: detail?.type_icon,
+    iconColor: detail?.type_color,
     navigationTarget: node.kind ? KIND_NAVIGATION[node.kind] : undefined,
     depth: reached.depth,
   };

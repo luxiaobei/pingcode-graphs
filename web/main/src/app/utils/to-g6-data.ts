@@ -1,17 +1,10 @@
 import type { EdgeData, GraphData, NodeData } from '@antv/g6';
 import type { DependencyGraph, GraphEdge, GraphEntity } from '../entities/graph.entity';
 import { GRAPH_NODE_SIZE } from '../constants/graph.constants';
-import { entityTypeName, relationColor, truncate } from './graph.util';
+import { relationColor } from './graph.util';
 
 export type GraphNodePosition = { x: number; y: number };
 export type FoldPlacement = 'right' | 'left' | 'top' | 'bottom';
-
-const BADGE_OFFSET: Record<FoldPlacement, { offsetX: number; offsetY: number }> = {
-  left: { offsetX: -4, offsetY: 0 },
-  right: { offsetX: 4, offsetY: 0 },
-  top: { offsetX: 0, offsetY: -4 },
-  bottom: { offsetX: 0, offsetY: 4 },
-};
 
 /** 领域图 → G6 节点/边，并带上坐标与 +/- 方位 */
 export function toG6Data(
@@ -31,7 +24,7 @@ export function toG6Data(
 
   return {
     nodes: graph.nodes.map((item) =>
-      toG6Node(item, graph.rootId, childrenOf.get(item.id) ?? [], positions, foldSideHint),
+      toG6Node(item, childrenOf.get(item.id) ?? [], positions, foldSideHint),
     ),
     edges: graph.edges.map(toG6Edge),
   };
@@ -67,35 +60,9 @@ export function resolveFoldPlacement(
   return foldSideHint?.get(item.id) ?? 'right';
 }
 
-/** 卡片 +/- 徽标样式；无可展开子项则不显示 */
-function expandBadge(item: GraphEntity, placement: FoldPlacement): NonNullable<NodeData['style']> {
-  if (!item.expandToggle) {
-    return { badge: false, badges: [] };
-  }
-  return {
-    badge: true,
-    badges: [
-      {
-        text: item.expandToggle === 'collapsed' ? '+' : '−',
-        placement,
-        ...BADGE_OFFSET[placement],
-        fontSize: 12,
-        fontWeight: 700,
-        fill: '#334155',
-        padding: [1, 5],
-        backgroundFill: '#ffffff',
-        backgroundStroke: '#94a3b8',
-        backgroundLineWidth: 1,
-        backgroundRadius: 10,
-      },
-    ],
-  };
-}
-
-/** 业务节点 → G6 rect */
+/** 业务节点 → HTML 卡片。+/- 画在卡片上。 */
 function toG6Node(
   item: GraphEntity,
-  rootId: string,
   childIds: readonly string[],
   positions?: ReadonlyMap<string, GraphNodePosition>,
   foldSideHint?: ReadonlyMap<string, FoldPlacement>,
@@ -104,16 +71,14 @@ function toG6Node(
   const foldPlacement = resolveFoldPlacement(item, childIds, positions, foldSideHint);
   const node: NodeData = {
     id: item.id,
-    type: 'rect',
+    type: 'work-item-card',
     data: {
-      label: buildEntityLabel(item),
       expandToggle: item.expandToggle,
       foldPlacement,
       item,
       width: item.relationHub ? 1 : GRAPH_NODE_SIZE.width,
       height: item.relationHub ? 1 : GRAPH_NODE_SIZE.height,
     },
-    style: expandBadge(item, foldPlacement),
   };
   if (position) {
     node.style = { ...node.style, x: position.x, y: position.y };
@@ -135,14 +100,4 @@ function toG6Edge(edge: GraphEdge): EdgeData {
       endArrow: !trunk,
     },
   };
-}
-
-/** 卡片文案：标识 / 标题 / 类型 */
-function buildEntityLabel(item: GraphEntity): string {
-  if (item.relationHub) {
-    return '';
-  }
-  return [item.identifier ?? '', truncate(item.title ?? '未命名', 28), entityTypeName(item)]
-    .filter(Boolean)
-    .join('\n');
 }

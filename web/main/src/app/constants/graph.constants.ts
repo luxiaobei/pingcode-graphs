@@ -90,7 +90,6 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
     },
     state: {
       root: { stroke: '#2563eb', lineWidth: 3, fill: '#eff6ff' },
-      selected: { stroke: '#0f766e', lineWidth: 3, fill: '#ecfdf5' },
     },
   },
   edge: {

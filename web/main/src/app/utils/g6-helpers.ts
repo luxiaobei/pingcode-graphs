@@ -37,24 +37,12 @@ export function rememberFoldSides(
   }
 }
 
-/** 计算节点的 G6 状态：root、selected */
-export function buildElementStates(
-  data: DependencyGraph,
-  selectedId: string | null,
-): Record<string, string[]> {
+/** 计算节点的 G6 状态：根节点标为 root */
+export function buildElementStates(data: DependencyGraph): Record<string, string[]> {
   const stateMap: Record<string, string[]> = {};
-
   for (const node of data.nodes) {
-    const states: string[] = [];
-    if (node.id === data.rootId) {
-      states.push('root');
-    }
-    if (node.id === selectedId) {
-      states.push('selected');
-    }
-    stateMap[node.id] = states;
+    stateMap[node.id] = node.id === data.rootId ? ['root'] : [];
   }
-
   return stateMap;
 }
 

@@ -123,7 +123,6 @@ export function buildVisibleGraph(
     return 'expanded';
   };
 
-  const criticalPath = graph.criticalPath.filter((id) => visibleIds.has(id));
   return {
     rootId: graph.rootId,
     depth: graph.depth,
@@ -135,6 +134,5 @@ export function buildVisibleGraph(
         revealedByAnchorId: parentOf.get(node.id),
       })),
     edges: graph.edges.filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target)),
-    criticalPath: criticalPath.length ? criticalPath : [graph.rootId],
   };
 }

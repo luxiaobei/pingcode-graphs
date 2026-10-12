@@ -12,6 +12,7 @@ export interface WorkItemNodeDetail {
     end_at?: number;
     description_excerpt?: string;
     story_points?: number;
+    assignee_name?: string;
     assignee_avatar?: string;
 }
 
@@ -49,6 +50,7 @@ export function createWorkItemNode(input: WorkItemNodeInput): WorkItemKgNode {
     assignDefined(detail, "start_at", input.startAt);
     assignDefined(detail, "end_at", input.endAt);
     assignDefined(detail, "description_excerpt", excerptText(input.description));
+    assignDefined(detail, "assignee_name", input.assigneeName);
     assignDefined(detail, "assignee_avatar", input.assigneeAvatar);
     assignDefined(detail, "type_icon", input.typeIcon);
     assignDefined(detail, "type_color", input.typeColor);

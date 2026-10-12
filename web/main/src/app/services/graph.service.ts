@@ -19,9 +19,13 @@ interface KgReachedNode {
     identifier?: string;
     detail?: {
       type_name?: string;
+      type_icon?: string;
+      type_color?: string;
       state_name?: string;
       state_type?: string;
       priority?: string;
+      assignee_name?: string;
+      assignee_avatar?: string;
     };
   };
 }
@@ -197,7 +201,6 @@ function toDependencyGraph(
     depth,
     nodes: grouped.nodes,
     edges: grouped.edges,
-    criticalPath: findCriticalPath(rootId, grouped.edges),
   };
 }
 
@@ -302,6 +305,16 @@ function toEntity(reached: KgReachedNode): GraphEntity | null {
         ? { name: detail.state_name, type: detail.state_type }
         : undefined,
     priority: detail?.priority ? { name: detail.priority } : undefined,
+    assignee:
+      detail?.assignee_name || detail?.assignee_avatar
+        ? {
+            display_name: detail.assignee_name,
+            name: detail.assignee_name,
+            avatar: detail.assignee_avatar,
+          }
+        : undefined,
+    icon: detail?.type_icon,
+    iconColor: detail?.type_color,
     navigationTarget: node.kind ? KIND_NAVIGATION[node.kind] : undefined,
     depth: reached.depth,
   };
@@ -342,36 +355,3 @@ function ensureNode(nodes: Map<string, GraphEntity>, id: string): void {
   });
 }
 
-function findCriticalPath(rootId: string, edges: GraphEdge[]): string[] {
-  const outgoing = new Map<string, string[]>();
-  for (const edge of edges) {
-    if (edge.relationType !== 'block') {
-      continue;
-    }
-    const list = outgoing.get(edge.source) ?? [];
-    list.push(edge.target);
-    outgoing.set(edge.source, list);
-  }
-  if (!outgoing.size) {
-    return [rootId];
-  }
-
-  let bestPath = [rootId];
-  const visit = (nodeId: string, path: string[], seen: Set<string>) => {
-    if (path.length > bestPath.length) {
-      bestPath = [...path];
-    }
-    for (const next of outgoing.get(nodeId) ?? []) {
-      if (seen.has(next)) {
-        continue;
-      }
-      seen.add(next);
-      path.push(next);
-      visit(next, path, seen);
-      path.pop();
-      seen.delete(next);
-    }
-  };
-  visit(rootId, [rootId], new Set([rootId]));
-  return bestPath;
-}

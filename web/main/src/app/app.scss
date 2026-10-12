@@ -103,12 +103,6 @@
   cursor: pointer;
 }
 
-.ghost-btn.active {
-  border-color: #dc2626;
-  color: #b91c1c;
-  background: #fef2f2;
-}
-
 .workspace {
   flex: 1;
   min-height: 0;
@@ -150,12 +144,5 @@ app-graph-canvas {
 @media (max-width: 900px) {
   .toolbar__actions {
     margin-left: 0;
-  }
-
-  app-node-detail {
-    position: absolute;
-    inset: 0 0 0 auto;
-    z-index: 2;
-    box-shadow: -8px 0 24px rgb(15 23 42 / 8%);
   }
 }

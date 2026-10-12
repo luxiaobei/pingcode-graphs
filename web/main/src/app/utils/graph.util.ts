@@ -1,10 +1,6 @@
 import { idea, page, testcase, ticket, workitem } from '@pc-nexus/capabilities';
 import { NavigationTarget } from '@pc-nexus/bridge';
-import {
-  CRITICAL_PATH_RELATION_TYPES,
-  DEFAULT_EDGE_COLOR,
-  RELATION_STYLE,
-} from '../constants/graph.constants';
+import { DEFAULT_EDGE_COLOR, RELATION_STYLE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import type { RelationType } from '../enums/graph.enum';
 import { isRelationShown, type DisplaySetting } from '../settings/display-settings';
@@ -24,27 +20,9 @@ export function toCanonicalType(type: RelationType): string {
   return RELATION_STYLE[type]?.canonical ?? type;
 }
 
-/** 是否参与关键路径高亮（默认 block） */
-export function isCriticalRelation(type: RelationType): boolean {
-  return CRITICAL_PATH_RELATION_TYPES.includes(toCanonicalType(type));
-}
-
-/** 节点类型名 */
-export function entityTypeName(item: GraphEntity | null | undefined): string {
-  if (!item?.type) {
-    return '';
-  }
-  return typeof item.type === 'string' ? item.type : (item.type.name ?? '');
-}
-
 /** 负责人显示名 */
 export function entityAssigneeName(item: GraphEntity | null | undefined): string {
   return item?.assignee?.display_name || item?.assignee?.name || '';
-}
-
-/** 所属范围名，优先 scope，否则 project */
-export function entityScopeName(item: GraphEntity | null | undefined): string {
-  return item?.scope?.name || item?.project?.name || '';
 }
 
 /** 打开详情用的导航目标；无效则返回 null */
@@ -106,6 +84,5 @@ function keepEdgeNodes(source: DependencyGraph, edges: DependencyGraph['edges'])
     ...source,
     nodes: source.nodes.filter((node) => nodeIds.has(node.id)),
     edges,
-    criticalPath: source.criticalPath.filter((id) => nodeIds.has(id)),
   };
 }

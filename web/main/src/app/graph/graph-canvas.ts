@@ -1,7 +1,9 @@
 import {
+  ApplicationRef,
   Component,
   DestroyRef,
   ElementRef,
+  EnvironmentInjector,
   afterNextRender,
   effect,
   inject,
@@ -11,22 +13,25 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { CanvasEvent, Graph, GraphEvent, type IElementEvent, NodeEvent } from '@antv/g6';
+import { Graph, GraphEvent, type IElementEvent, NodeEvent } from '@antv/g6';
+import { bindWorkItemCardRuntime } from './work-item-card';
 import {
   GRAPH_FIT_SETTLE_MS,
   GRAPH_OPTIONS,
   GRAPH_ZOOM_RANGE,
   GRAPH_ZOOM_STEP,
 } from '../constants/graph.constants';
-import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
+import type { DependencyGraph } from '../entities/graph.entity';
 import {
   buildElementStates,
   graphHostSize,
   isBadgeTarget,
   nodeItemFromEvent,
   rememberFoldSides,
+  sharpenHtmlCamera,
   snapshotGraphPositions,
 } from '../utils/g6-helpers';
+import { openPivot } from '../utils/graph.util';
 import { visiblePositions } from '../utils/pin-layout';
 import {
   toG6Data,
@@ -41,11 +46,7 @@ import {
 })
 export class GraphCanvas {
   readonly graph = input<DependencyGraph | null>(null);
-  readonly selectedId = input<string | null>(null);
-  readonly highlightCriticalPath = input(false);
 
-  readonly selectNode = output<GraphEntity>();
-  readonly clearSelection = output<void>();
   readonly toggleExpand = output<string>();
 
   protected readonly zoomPercent = signal(100);
@@ -56,6 +57,7 @@ export class GraphCanvas {
   private g6: Graph | null = null;
   private readonly ready = signal(false);
   private resizeObserver: ResizeObserver | null = null;
+  private htmlCameraObserver: MutationObserver | null = null;
   private fitTimer: number | null = null;
   private renderSeq = 0;
   private lastDepth: number | null = null;
@@ -67,28 +69,13 @@ export class GraphCanvas {
   private readonly zoomMaxPercent = Math.round(GRAPH_ZOOM_RANGE[1] * 100);
 
   constructor() {
+    bindWorkItemCardRuntime(inject(EnvironmentInjector), inject(ApplicationRef));
     afterNextRender(() => this.initGraph());
     this.destroyRef.onDestroy(() => this.destroyGraph());
 
     effect(() => {
       if (this.ready()) {
         void this.render(this.graph());
-      }
-    });
-
-    effect(() => {
-      if (!this.ready() || !this.g6) {
-        return;
-      }
-      const data = untracked(() => this.graph());
-      const graph = this.liveGraph();
-      if (data && graph) {
-        void graph
-          .setElementState(
-            buildElementStates(data, this.selectedId(), this.highlightCriticalPath()),
-            false,
-          )
-          .catch(() => undefined);
       }
     });
   }
@@ -128,6 +115,7 @@ export class GraphCanvas {
     const container = this.host().nativeElement;
     this.g6 = new Graph({ container, ...graphHostSize(container), ...GRAPH_OPTIONS });
     this.bindGraphEvents();
+    this.bindHtmlCamera(container);
     this.resizeObserver = new ResizeObserver(() => {
       if (!this.g6) {
         return;
@@ -143,6 +131,8 @@ export class GraphCanvas {
     this.clearFitTimer();
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
+    this.htmlCameraObserver?.disconnect();
+    this.htmlCameraObserver = null;
     this.pinnedPositions.clear();
     this.foldSideById.clear();
     this.lastDepth = null;
@@ -181,10 +171,9 @@ export class GraphCanvas {
         this.toggleExpand.emit(item.id);
         return;
       }
-      this.selectNode.emit(item);
+      openPivot(item);
     });
 
-    this.g6.on(CanvasEvent.CLICK, () => this.clearSelection.emit());
     this.g6.on(GraphEvent.AFTER_TRANSFORM, () => this.syncZoomPercent());
     this.g6.on(NodeEvent.DRAG_START, () => this.g6?.stopLayout());
     this.g6.on(NodeEvent.DRAG_END, () => {
@@ -225,6 +214,28 @@ export class GraphCanvas {
 
   private liveGraph(): Graph | null {
     return this.g6 && !this.g6.destroyed ? this.g6 : null;
+  }
+
+  /** 卡片是 HTML，跟着相机 transform 放大后会糊。相机层一变就把缩放改成 zoom。 */
+  private bindHtmlCamera(container: HTMLElement): void {
+    const sync = (): void => {
+      const camera = container.querySelector<HTMLElement>('#g-canvas-camera');
+      if (!camera) {
+        return;
+      }
+      if (!this.htmlCameraObserver) {
+        this.htmlCameraObserver = new MutationObserver(() => sharpenHtmlCamera(camera));
+        this.htmlCameraObserver.observe(camera, {
+          attributes: true,
+          attributeFilter: ['style'],
+          childList: true,
+        });
+      }
+      sharpenHtmlCamera(camera);
+    };
+    this.g6?.on(GraphEvent.AFTER_RENDER, sync);
+    this.g6?.on(GraphEvent.AFTER_DRAW, sync);
+    this.g6?.on(GraphEvent.AFTER_TRANSFORM, sync);
   }
 
   private syncZoomPercent(): void {
@@ -288,11 +299,7 @@ export class GraphCanvas {
 
     await graph
       .setElementState(
-        buildElementStates(
-          data,
-          untracked(() => this.selectedId()),
-          untracked(() => this.highlightCriticalPath()),
-        ),
+        buildElementStates(data),
         false,
       )
       .catch(() => undefined);

@@ -21,14 +21,6 @@
             (ngModelChange)="setUsingMockData($event)"
           ></thy-switch>
         </div>
-        <button
-          type="button"
-          class="ghost-btn"
-          [class.active]="highlightCriticalPath()"
-          (click)="toggleCriticalPath()"
-        >
-          关键路径
-        </button>
         <button type="button" class="ghost-btn" (click)="openSettings()">设置</button>
         <button type="button" class="ghost-btn" (click)="reload()">刷新</button>
       </div>
@@ -50,20 +42,8 @@
       } @else if (showCanvas()) {
         <app-graph-canvas
           [graph]="data"
-          [selectedId]="selected()?.id ?? null"
-          [highlightCriticalPath]="highlightCriticalPath()"
-          (selectNode)="onSelectNode($event)"
-          (clearSelection)="clearSelection()"
           (toggleExpand)="onToggleExpand($event)"
         />
-        @if (selected()) {
-          <app-node-detail
-            [item]="selected()"
-            [isRoot]="selectedIsRoot()"
-            [isOnCriticalPath]="selectedOnCritical()"
-            (close)="clearSelection()"
-          />
-        }
       }
     } @else {
       <div class="state">无法获取当前对象上下文</div>

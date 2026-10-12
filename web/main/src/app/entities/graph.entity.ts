@@ -60,7 +60,6 @@ export interface DependencyGraph {
   depth: number;
   nodes: GraphEntity[];
   edges: GraphEdge[];
-  criticalPath: string[];
 }
 
 /** 与后端 getDependencyGraph 对齐 */

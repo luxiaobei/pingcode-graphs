@@ -23,9 +23,6 @@ export const GRAPH_NODE_SLOT = { width: 168, height: 96 } as const;
 
 export const DEFAULT_EDGE_COLOR = '#94a3b8';
 
-/** 参与「关键路径」高亮的规范关系类型（可由接口配置覆盖） */
-export const CRITICAL_PATH_RELATION_TYPES: readonly string[] = ['block'];
-
 export const RELATION_STYLE: Record<string, RelationStyle> = {
   block: { label: '阻塞', color: '#d64545' },
   blockedBy: { label: '被阻塞', color: '#d64545', canonical: 'block' },
@@ -94,8 +91,6 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
     state: {
       root: { stroke: '#2563eb', lineWidth: 3, fill: '#eff6ff' },
       selected: { stroke: '#0f766e', lineWidth: 3, fill: '#ecfdf5' },
-      critical: { stroke: '#dc2626', fill: '#fef2f2' },
-      dimmed: { opacity: 0.25 },
     },
   },
   edge: {
@@ -114,10 +109,6 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
       labelBackgroundFill: '#f8fafc',
       labelBackgroundOpacity: 0.95,
       labelPadding: [1, 4],
-    },
-    state: {
-      critical: { stroke: '#dc2626', lineWidth: 2.5, lineDash: [0, 0] },
-      dimmed: { opacity: 0.2 },
     },
   },
   behaviors: [

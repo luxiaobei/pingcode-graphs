@@ -1,7 +1,6 @@
 import type { Graph, IElementEvent } from '@antv/g6';
 import { GRAPH_MIN_SIZE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
-import { isCriticalRelation } from './graph.util';
 import type { FoldPlacement, GraphNodePosition } from './to-g6-data';
 
 /** 按容器尺寸取画布宽高，不低于最小值 */
@@ -38,13 +37,11 @@ export function rememberFoldSides(
   }
 }
 
-/** 计算节点/边的 G6 状态：root、selected、critical、dimmed */
+/** 计算节点的 G6 状态：root、selected */
 export function buildElementStates(
   data: DependencyGraph,
   selectedId: string | null,
-  highlightCritical: boolean,
 ): Record<string, string[]> {
-  const criticalSet = new Set(highlightCritical ? data.criticalPath : []);
   const stateMap: Record<string, string[]> = {};
 
   for (const node of data.nodes) {
@@ -55,21 +52,7 @@ export function buildElementStates(
     if (node.id === selectedId) {
       states.push('selected');
     }
-    if (criticalSet.has(node.id)) {
-      states.push('critical');
-    } else if (highlightCritical) {
-      states.push('dimmed');
-    }
     stateMap[node.id] = states;
-  }
-
-  for (const edge of data.edges) {
-    const onCritical =
-      highlightCritical &&
-      isCriticalRelation(edge.relationType) &&
-      criticalSet.has(edge.source) &&
-      criticalSet.has(edge.target);
-    stateMap[edge.id] = onCritical ? ['critical'] : highlightCritical ? ['dimmed'] : [];
   }
 
   return stateMap;

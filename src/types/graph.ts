@@ -51,7 +51,6 @@ export interface DependencyGraph {
     depth: number;
     nodes: GraphWorkItem[];
     edges: GraphEdge[];
-    criticalPath: string[];
 }
 
 export interface GetDependencyGraphPayload {

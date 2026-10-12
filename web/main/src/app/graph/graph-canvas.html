@@ -1,27 +1,34 @@
 <div class="canvas-shell">
   <div #g6Host class="g6-host"></div>
-  <div class="canvas-toolbar" role="toolbar" aria-label="画布缩放">
-    <button
-      type="button"
-      class="canvas-toolbar__btn"
-      title="缩小"
-      [disabled]="!canZoomOut()"
-      (click)="zoomOut()"
-    >
-      −
-    </button>
-    <span class="canvas-toolbar__zoom" title="当前缩放">{{ zoomPercent() }}%</span>
-    <button
-      type="button"
-      class="canvas-toolbar__btn"
-      title="放大"
-      [disabled]="!canZoomIn()"
-      (click)="zoomIn()"
-    >
-      +
-    </button>
-    <button type="button" class="canvas-toolbar__action" title="适应画布" (click)="fit()">
-      适应
-    </button>
+  <div class="canvas-tools">
+    <div class="canvas-toolbar" role="toolbar" aria-label="画布操作">
+      <thy-action thyIcon="aim" thyTooltip="定位" thyTooltipPlacement="top" (click)="locate()"></thy-action>
+      <span class="canvas-toolbar__split"></span>
+      <thy-action
+        thyIcon="zoom-out"
+        thyTooltip="缩小"
+        thyTooltipPlacement="top"
+        [thyDisabled]="!canZoomOut()"
+        (click)="zoomOut()"
+      ></thy-action>
+      <span class="canvas-toolbar__zoom" title="当前缩放">{{ zoomPercent() }}%</span>
+      <thy-action
+        thyIcon="zoom-in"
+        thyTooltip="放大"
+        thyTooltipPlacement="top"
+        [thyDisabled]="!canZoomIn()"
+        (click)="zoomIn()"
+      ></thy-action>
+      <span class="canvas-toolbar__split"></span>
+      <thy-action
+        thyIcon="fit-screen"
+        thyTooltip="适应画布"
+        thyTooltipPlacement="top"
+        (click)="fit()"
+      ></thy-action>
+    </div>
+    <div class="canvas-save">
+      <thy-action thyIcon="save" thyTooltip="保存" thyTooltipPlacement="top" (click)="save()"></thy-action>
+    </div>
   </div>
 </div>

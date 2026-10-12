@@ -23,57 +23,41 @@
     linear-gradient(180deg, #f7f9fc 0%, #eef2f7 100%);
 }
 
-.canvas-toolbar {
+.canvas-tools {
   position: absolute;
-  right: 16px;
-  bottom: 16px;
+  top: 16px;
+  left: 16px;
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 4px;
-  border: 1px solid #cbd5e1;
+  gap: 8px;
+}
+
+.canvas-toolbar,
+.canvas-save {
+  display: flex;
+  align-items: center;
+  border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #fff;
-  box-shadow: 0 1px 3px rgb(15 23 42 / 8%);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 6%);
 }
 
-.canvas-toolbar__btn,
-.canvas-toolbar__action {
-  border: none;
-  background: transparent;
-  color: #334155;
-  border-radius: 6px;
-  font-size: 14px;
-  line-height: 1;
+.canvas-toolbar {
+  gap: 2px;
+  padding: 4px;
+}
+
+.canvas-toolbar__split {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: #e2e8f0;
+}
+
+.canvas-toolbar thy-action,
+.canvas-save thy-action {
   cursor: pointer;
-}
-
-.canvas-toolbar__btn {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  font-size: 16px;
-  font-weight: 500;
-}
-
-.canvas-toolbar__action {
-  padding: 0 10px;
-  height: 28px;
-  font-size: 13px;
-  border-left: 1px solid #e2e8f0;
-  border-radius: 0 6px 6px 0;
-  margin-left: 2px;
-}
-
-.canvas-toolbar__btn:hover:not(:disabled),
-.canvas-toolbar__action:hover {
-  background: #f1f5f9;
-}
-
-.canvas-toolbar__btn:disabled {
-  color: #cbd5e1;
-  cursor: not-allowed;
 }
 
 .canvas-toolbar__zoom {
@@ -84,4 +68,9 @@
   font-variant-numeric: tabular-nums;
   color: #64748b;
   user-select: none;
+}
+
+.canvas-save {
+  justify-content: center;
+  padding: 4px;
 }

@@ -66,13 +66,13 @@ const RELATION_BY_EDGE: Record<string, string> = {
   parent_of: 'child',
 };
 
-/** 关联边文案看对端节点 kind。 */
-const RELATE_LABEL_BY_KIND: Record<string, string> = {
-  work_item: '关联工作项',
-  idea: '关联产品需求',
-  ticket: '关联工单',
-  test_case: '关联测试',
-  objective: '关联目标',
+/** 关联按对端 kind 分成不同关系，避免工作项和产品需求混在一起。 */
+const RELATE_TYPE_BY_KIND: Record<string, string> = {
+  work_item: 'relate:work_item',
+  idea: 'relate:idea',
+  ticket: 'relate:ticket',
+  test_case: 'relate:test_case',
+  objective: 'relate:objective',
 };
 
 const KIND_NAVIGATION: Record<string, string> = {
@@ -191,14 +191,98 @@ function toDependencyGraph(
     });
   }
 
-  const edgeList = [...edges.values()];
+  const grouped = groupRelationNodes(rootId, nodes, [...edges.values()]);
   return {
     rootId,
     depth,
-    nodes: [...nodes.values()],
-    edges: edgeList,
-    criticalPath: findCriticalPath(rootId, edgeList),
+    nodes: grouped.nodes,
+    edges: grouped.edges,
+    criticalPath: findCriticalPath(rootId, grouped.edges),
   };
+}
+
+/** 从根往外，每个对象第一次被走到的那条边保留原 id，再次出现则复制一份。 */
+function primaryEdgeIds(rootId: string, edges: GraphEdge[]): Map<string, string> {
+  const outgoing = new Map<string, GraphEdge[]>();
+  for (const edge of edges) {
+    const list = outgoing.get(edge.source) ?? [];
+    list.push(edge);
+    outgoing.set(edge.source, list);
+  }
+
+  const primary = new Map<string, string>();
+  const seen = new Set([rootId]);
+  const queue = [rootId];
+  while (queue.length) {
+    const current = queue.shift()!;
+    for (const edge of outgoing.get(current) ?? []) {
+      if (seen.has(edge.target)) {
+        continue;
+      }
+      seen.add(edge.target);
+      primary.set(edge.target, edge.id);
+      queue.push(edge.target);
+    }
+  }
+  return primary;
+}
+
+/** 同一起点、同一种关系有多个对象时，收成一个隐形分叉点。 */
+function groupRelationNodes(
+  rootId: string,
+  entities: ReadonlyMap<string, GraphEntity>,
+  edges: GraphEdge[],
+): { nodes: GraphEntity[]; edges: GraphEdge[] } {
+  const primary = primaryEdgeIds(rootId, edges);
+  const nodes = new Map<string, GraphEntity>();
+  const root = entities.get(rootId);
+  if (root) {
+    nodes.set(rootId, root);
+  }
+
+  const groups = new Map<string, Map<string, GraphEdge[]>>();
+  for (const edge of edges) {
+    const source = entities.get(edge.source);
+    if (source) {
+      nodes.set(edge.source, source);
+    }
+    const byType = groups.get(edge.source) ?? new Map<string, GraphEdge[]>();
+    const list = byType.get(edge.relationType) ?? [];
+    list.push(edge);
+    byType.set(edge.relationType, list);
+    groups.set(edge.source, byType);
+  }
+
+  const nextEdges: GraphEdge[] = [];
+  for (const [source, byType] of groups) {
+    for (const [relationType, group] of byType) {
+      const label = relationLabel(relationType);
+      const hubId = `rel:${source}:${relationType}`;
+      const fork = group.length > 1;
+      const from = fork ? hubId : source;
+      if (fork) {
+        nodes.set(hubId, { id: hubId, title: label, relationHub: relationType });
+        nextEdges.push({ id: `${hubId}:link`, source, target: hubId, relationType, label });
+      }
+      for (const edge of group) {
+        const keepId = primary.get(edge.target) === edge.id;
+        const targetId = keepId ? edge.target : `${hubId}:${edge.target}`;
+        const entity = entities.get(edge.target);
+        if (entity) {
+          nodes.set(targetId, keepId ? entity : { ...entity, id: targetId });
+        }
+        nextEdges.push({
+          id: edge.id,
+          source: from,
+          target: targetId,
+          relationType,
+          label: fork ? '' : label,
+        });
+      }
+    }
+  }
+
+  return { nodes: [...nodes.values()], edges: nextEdges };
 }
 
 function toEntity(reached: KgReachedNode): GraphEntity | null {
@@ -227,23 +311,24 @@ function toEdge(edge: KgEdgeRecord, kindById: ReadonlyMap<string, string>): Grap
   if (!edge.id || !edge.from_id || !edge.to_id || !edge.type) {
     return null;
   }
-  const relationType = RELATION_BY_EDGE[edge.type] ?? edge.type;
-  const childEdge = relationType === 'child';
+  const mapped = RELATION_BY_EDGE[edge.type] ?? edge.type;
+  const childEdge = mapped === 'child';
   const source = childEdge ? edge.to_id : edge.from_id;
   const target = childEdge ? edge.from_id : edge.to_id;
+  const relationType = mapped === 'relate' ? relateType(target, kindById) : mapped;
   return {
     id: edge.id,
     source,
     target,
     relationType,
-    label: relationType === 'relate' ? relateLabel(target, kindById) : relationLabel(relationType),
+    label: relationLabel(relationType),
   };
 }
 
-/** 出边指向的节点决定关联文案；kind 缺失时从节点 id 前缀读取。 */
-function relateLabel(nodeId: string, kindById: ReadonlyMap<string, string>): string {
+/** 对端 kind 决定关联关系；kind 缺失时从节点 id 前缀读取。 */
+function relateType(nodeId: string, kindById: ReadonlyMap<string, string>): string {
   const kind = kindById.get(nodeId) ?? nodeId.slice(0, nodeId.indexOf(':'));
-  return RELATE_LABEL_BY_KIND[kind] ?? relationLabel('relate');
+  return RELATE_TYPE_BY_KIND[kind] ?? 'relate';
 }
 
 function ensureNode(nodes: Map<string, GraphEntity>, id: string): void {

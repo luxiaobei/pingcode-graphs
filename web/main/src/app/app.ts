@@ -3,21 +3,21 @@ import { FormsModule } from '@angular/forms';
 import { view } from '@pc-nexus/bridge';
 import { ThyDialog, ThyDialogSizes } from 'ngx-tethys/dialog';
 import { ThySwitchModule } from 'ngx-tethys/switch';
-import { RELATION_OPTIONS } from './constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from './entities/graph.entity';
-import type { RelationType } from './enums/graph.enum';
 import { GraphCanvas } from './graph/graph-canvas';
 import { MOCK_GRAPH } from './graph/mock-graph';
 import { NodeDetail } from './graph/node-detail';
 import { getDependencyGraph } from './services/graph.service';
 import {
+  applySavedDisplaySettings,
   cloneDisplaySettings,
-  DEFAULT_DISPLAY_SETTINGS,
+  loadDisplaySettings,
+  saveDisplaySettings,
   type DisplaySetting,
 } from './settings/display-settings';
 import { DisplaySettingsDialog } from './settings/display-settings-dialog';
 import { buildVisibleGraph } from './utils/expand-graph';
-import { filterGraphByRelations } from './utils/graph.util';
+import { filterGraphByDisplaySettings } from './utils/graph.util';
 
 @Component({
   selector: 'app-root',
@@ -26,22 +26,14 @@ import { filterGraphByRelations } from './utils/graph.util';
   styleUrl: './app.scss',
 })
 export class App {
-  protected readonly depths = [1, 2, 3] as const;
-  protected readonly relationOptions = RELATION_OPTIONS;
   protected readonly usingMockData = signal(true);
-  protected readonly displaySettings = signal<DisplaySetting[]>(
-    cloneDisplaySettings(DEFAULT_DISPLAY_SETTINGS),
-  );
+  protected readonly showCanvas = signal(true);
+  protected readonly displaySettings = signal<DisplaySetting[]>(applySavedDisplaySettings(null));
 
   private readonly dialog = inject(ThyDialog);
 
-  protected readonly depth = signal<1 | 2 | 3>(2);
-  protected readonly enabledRelations = signal<RelationType[]>(
-    RELATION_OPTIONS.map((item) => item.value),
-  );
   protected readonly highlightCriticalPath = signal(false);
   protected readonly selected = signal<GraphEntity | null>(null);
-  protected readonly expandedAnchors = signal<readonly string[]>([]);
   protected readonly collapsedAnchors = signal<readonly string[]>([]);
 
   protected readonly source = signal<DependencyGraph | null>(null);
@@ -55,29 +47,14 @@ export class App {
     if (!source) {
       return null;
     }
-    const filtered = filterGraphByRelations(source, this.enabledRelations());
-    return buildVisibleGraph(filtered, this.depth(), {
-      expandedIds: new Set(this.expandedAnchors()),
-      collapsedIds: new Set(this.collapsedAnchors()),
-    });
+    const filtered = filterGraphByDisplaySettings(source, this.displaySettings());
+    return buildVisibleGraph(filtered, new Set(this.collapsedAnchors()));
   });
 
   protected readonly focusTitle = computed(() => {
     const data = this.graph();
     const root = data?.nodes.find((node) => node.id === data.rootId);
     return root ? `${root.identifier} · ${root.title}` : '关联关系图';
-  });
-
-  protected readonly stats = computed(() => {
-    const data = this.graph();
-    if (!data) {
-      return { nodes: 0, edges: 0, criticalLength: 0 };
-    }
-    return {
-      nodes: data.nodes.length,
-      edges: data.edges.length,
-      criticalLength: Math.max(data.criticalPath.length - 1, 0),
-    };
   });
 
   protected readonly selectedIsRoot = computed(() => {
@@ -97,32 +74,13 @@ export class App {
   }
 
   private resetFoldState(): void {
-    this.expandedAnchors.set([]);
     this.collapsedAnchors.set([]);
   }
 
-  protected setDepth(value: 1 | 2 | 3): void {
-    this.depth.set(value);
-    this.resetFoldState();
-    this.selected.set(null);
-  }
-
-  protected toggleRelation(type: RelationType): void {
-    const current = this.enabledRelations();
-    if (current.includes(type)) {
-      if (current.length === 1) {
-        return;
-      }
-      this.enabledRelations.set(current.filter((item) => item !== type));
-    } else {
-      this.enabledRelations.set([...current, type]);
-    }
-    this.resetFoldState();
-    this.selected.set(null);
-  }
-
-  protected isRelationEnabled(type: RelationType): boolean {
-    return this.enabledRelations().includes(type);
+  /** 卸掉再挂上画布，让展示配置和手动刷新走同一套初次布局。 */
+  private remountCanvas(): void {
+    this.showCanvas.set(false);
+    setTimeout(() => this.showCanvas.set(true));
   }
 
   protected toggleCriticalPath(): void {
@@ -148,12 +106,14 @@ export class App {
     this.loading.set(true);
     this.error.set(null);
     try {
-      const data = this.usingMockData()
-        ? structuredClone(MOCK_GRAPH)
-        : await getDependencyGraph();
+      const dataPromise = this.usingMockData()
+        ? Promise.resolve(structuredClone(MOCK_GRAPH))
+        : getDependencyGraph();
+      const [data, settings] = await Promise.all([dataPromise, loadDisplaySettings()]);
       if (seq !== this.requestSeq) {
         return;
       }
+      this.displaySettings.set(settings);
       this.source.set(data);
     } catch (err) {
       if (seq !== this.requestSeq) {
@@ -181,17 +141,12 @@ export class App {
     if (!node?.expandToggle) {
       return;
     }
-    if (node.expandToggle === 'collapsed') {
-      this.collapsedAnchors.update((list) => list.filter((id) => id !== anchorId));
-      this.expandedAnchors.update((list) =>
-        list.includes(anchorId) ? list : [...list, anchorId],
-      );
-    } else {
-      this.expandedAnchors.update((list) => list.filter((id) => id !== anchorId));
-      this.collapsedAnchors.update((list) =>
-        list.includes(anchorId) ? list : [...list, anchorId],
-      );
-    }
+    this.collapsedAnchors.update((list) => {
+      if (node.expandToggle === 'collapsed') {
+        return list.filter((id) => id !== anchorId);
+      }
+      return list.includes(anchorId) ? list : [...list, anchorId];
+    });
     this.selected.set(null);
   }
 
@@ -207,6 +162,10 @@ export class App {
         return;
       }
       this.displaySettings.set(result);
+      this.resetFoldState();
+      this.selected.set(null);
+      this.remountCanvas();
+      void saveDisplaySettings(result).catch(() => undefined);
     });
   }
 }

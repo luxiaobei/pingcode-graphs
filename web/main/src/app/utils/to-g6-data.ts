@@ -1,5 +1,6 @@
 import type { EdgeData, GraphData, NodeData } from '@antv/g6';
 import type { DependencyGraph, GraphEdge, GraphEntity } from '../entities/graph.entity';
+import { GRAPH_NODE_SIZE } from '../constants/graph.constants';
 import { entityTypeName, relationColor, truncate } from './graph.util';
 
 export type GraphNodePosition = { x: number; y: number };
@@ -109,6 +110,8 @@ function toG6Node(
       expandToggle: item.expandToggle,
       foldPlacement,
       item,
+      width: item.relationHub ? 1 : GRAPH_NODE_SIZE.width,
+      height: item.relationHub ? 1 : GRAPH_NODE_SIZE.height,
     },
     style: expandBadge(item, foldPlacement),
   };
@@ -118,8 +121,9 @@ function toG6Node(
   return node;
 }
 
-/** 业务边 → G6 直线虚线 */
+/** 业务边 → 折线。分叉主干不画箭头，关系名在有文字的那段线上。 */
 function toG6Edge(edge: GraphEdge): EdgeData {
+  const trunk = edge.id.endsWith(':link');
   return {
     id: edge.id,
     source: edge.source,
@@ -128,12 +132,16 @@ function toG6Edge(edge: GraphEdge): EdgeData {
       relationType: edge.relationType,
       label: edge.label,
       color: relationColor(edge.relationType),
+      endArrow: !trunk,
     },
   };
 }
 
 /** 卡片文案：标识 / 标题 / 类型 */
 function buildEntityLabel(item: GraphEntity): string {
+  if (item.relationHub) {
+    return '';
+  }
   return [item.identifier ?? '', truncate(item.title ?? '未命名', 28), entityTypeName(item)]
     .filter(Boolean)
     .join('\n');

@@ -75,66 +75,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
-  align-items: flex-end;
-}
-
-.control {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.control__label {
-  font-size: 12px;
-  color: #64748b;
-}
-
-.segmented {
-  display: inline-flex;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.segmented button {
-  border: none;
-  background: #fff;
-  padding: 6px 12px;
-  font-size: 13px;
-  cursor: pointer;
-  color: #475569;
-}
-
-.segmented button + button {
-  border-left: 1px solid #cbd5e1;
-}
-
-.segmented button.active {
-  background: #2563eb;
-  color: #fff;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.chip {
-  border: 1px solid color-mix(in srgb, var(--chip-color) 45%, #cbd5e1);
-  background: #fff;
-  color: #475569;
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.chip.active {
-  background: color-mix(in srgb, var(--chip-color) 14%, #fff);
-  color: var(--chip-color);
-  border-color: var(--chip-color);
-  font-weight: 600;
+  align-items: center;
 }
 
 .toolbar__actions {
@@ -166,14 +107,6 @@
   border-color: #dc2626;
   color: #b91c1c;
   background: #fef2f2;
-}
-
-.stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  font-size: 12px;
-  color: #64748b;
 }
 
 .workspace {

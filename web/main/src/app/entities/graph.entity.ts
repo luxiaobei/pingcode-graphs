@@ -36,6 +36,8 @@ export interface GraphEntity {
   scope?: GraphScope;
   /** 打开详情的导航目标（如 workitem / testcase / ticket） */
   navigationTarget?: string;
+  /** 关系聚合节点。有值时这一节点代表一种关系，具体对象挂在它下面。 */
+  relationHub?: string;
   /** 相对根节点跳数（0 = 焦点），前端 BFS 计算 */
   depth?: number;
   /** 卡片 +/-：有向外子树时出现 */

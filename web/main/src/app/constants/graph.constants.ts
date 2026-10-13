@@ -51,25 +51,11 @@ function cardOrHub<T>(datum: NodeData, card: T, hub: T): T {
   return relationHubOf(datum) ? hub : card;
 }
 
-/** 思维导图：根节点居中，关系向两侧展开。 */
-export const GRAPH_MINDMAP_LAYOUT = {
-  type: 'mindmap' as const,
-  direction: 'H' as const,
-  getId: (node: { id: string }) => node.id,
-  getWidth: (node: { width?: number; data?: { width?: number } }) =>
-    node.width ?? node.data?.width ?? GRAPH_NODE_SIZE.width,
-  getHeight: (node: { height?: number; data?: { height?: number } }) =>
-    node.height ?? node.data?.height ?? GRAPH_NODE_SIZE.height,
-  getHGap: () => 64,
-  getVGap: () => 18,
-};
-
 export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'> = {
   autoFit: 'view',
   padding: 48,
   zoomRange: GRAPH_ZOOM_RANGE,
   animation: false,
-  layout: GRAPH_MINDMAP_LAYOUT,
   node: {
     type: 'work-item-card',
     style: {
@@ -92,9 +78,9 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
     style: {
       stroke: (d: EdgeData) => (d.data?.['color'] as string) ?? '#94a3b8',
       lineWidth: 1.5,
-      radius: 8,
-      router: { type: 'orth' },
+      radius: 10,
       endArrow: (d: EdgeData) => d.data?.['endArrow'] !== false,
+      labelAutoRotate: false,
       labelText: (d: EdgeData) => (d.data?.['label'] as string) ?? '',
       labelFill: (d: EdgeData) => (d.data?.['color'] as string) ?? '#64748b',
       labelFontSize: 11,

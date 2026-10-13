@@ -1,7 +1,7 @@
 import type { Graph, IElementEvent } from '@antv/g6';
 import { GRAPH_MIN_SIZE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
-import type { FoldPlacement, GraphNodePosition } from './to-g6-data';
+import type { GraphNodePosition } from './to-g6-data';
 
 /** 按容器尺寸取画布宽高，不低于最小值 */
 export function graphHostSize(container: HTMLElement): { width: number; height: number } {
@@ -24,19 +24,6 @@ export function snapshotGraphPositions(
   }
 }
 
-/** 记录已展开节点的 +/- 所在侧，收起后仍贴同一侧 */
-export function rememberFoldSides(
-  g6: Graph,
-  foldSideById: Map<string, FoldPlacement>,
-): void {
-  for (const node of g6.getNodeData()) {
-    const placement = node.data?.['foldPlacement'] as FoldPlacement | undefined;
-    if (placement && node.data?.['expandToggle'] === 'expanded') {
-      foldSideById.set(String(node.id), placement);
-    }
-  }
-}
-
 /** 计算节点的 G6 状态：根节点标为 root */
 export function buildElementStates(data: DependencyGraph): Record<string, string[]> {
   const stateMap: Record<string, string[]> = {};
@@ -46,11 +33,12 @@ export function buildElementStates(data: DependencyGraph): Record<string, string
   return stateMap;
 }
 
-/** 点击是否落在卡片 +/- 上 */
-export function isBadgeTarget(event: IElementEvent): boolean {
+/** 点在某种关系的展开收起上时，返回「父节点::关系类型」。 */
+export function foldKeyFromEvent(event: IElementEvent): string | null {
   const target = (event as { nativeEvent?: { target?: EventTarget | null } }).nativeEvent?.target;
   const element = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
-  return Boolean(element?.closest('.card-badge'));
+  const key = element?.closest('.card-badge')?.getAttribute('data-fold');
+  return key || null;
 }
 
 /** 从节点点击事件取出业务实体 */

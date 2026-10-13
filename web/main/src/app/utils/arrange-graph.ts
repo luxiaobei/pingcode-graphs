@@ -13,7 +13,7 @@ const GROUP_GAP = 56;
 const LEFT_TYPES = ['relate:idea', 'relate:ticket'] as const;
 const RIGHT_TYPES = ['relate:objective', 'relate:test_case'] as const;
 
-type Side = 'left' | 'right' | 'top' | 'bottom';
+export type Side = 'left' | 'right' | 'top' | 'bottom';
 
 interface Extent {
   left: number;
@@ -129,7 +129,7 @@ function groupsOf(graph: DependencyGraph, parentId: string): RelationGroup[] {
 }
 
 /** 根节点四向分边。子级沿着这一侧继续向外，避免穿回中心。 */
-function sideOfType(type: string): Side {
+export function sideOfType(type: string): Side {
   if (type === 'child') {
     return 'bottom';
   }
@@ -142,7 +142,7 @@ function sideOfType(type: string): Side {
   return 'top';
 }
 
-function groupRank(type: string, side: Side): number {
+export function groupRank(type: string, side: Side): number {
   if (side === 'left') {
     const index = LEFT_TYPES.indexOf(type as (typeof LEFT_TYPES)[number]);
     return index === -1 ? LEFT_TYPES.length : index;

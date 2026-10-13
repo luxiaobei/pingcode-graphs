@@ -18,9 +18,6 @@ export const GRAPH_ZOOM_RANGE: [number, number] = [0.2, 3];
 /** 力导向收束后再适应一次的延迟（ms） */
 export const GRAPH_FIT_SETTLE_MS = 300;
 
-/** 业务节点占位（含间距），展开落点避让用 */
-export const GRAPH_NODE_SLOT = { width: 256, height: 88 } as const;
-
 export const DEFAULT_EDGE_COLOR = '#94a3b8';
 
 export const RELATION_STYLE: Record<string, RelationStyle> = {

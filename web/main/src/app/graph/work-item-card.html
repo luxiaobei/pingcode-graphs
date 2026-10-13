@@ -19,9 +19,12 @@
       [thyName]="assignee()"
     ></thy-avatar>
   }
-  @if (item().expandToggle) {
-    <span class="card-badge" [class.card-badge--left]="fold() === 'left'">
-      {{ item().expandToggle === 'collapsed' ? '+' : '−' }}
-    </span>
+  @for (mark of marks(); track mark.key) {
+    <span
+      class="card-badge"
+      [style.left.px]="mark.left"
+      [style.top.px]="mark.top"
+      [attr.data-fold]="mark.key"
+    >{{ mark.text }}</span>
   }
 </article>

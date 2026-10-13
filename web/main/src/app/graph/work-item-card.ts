@@ -16,7 +16,7 @@ import {
 } from '@antv/g6';
 import { ThyAvatar, ThyAvatarService, ThyDefaultAvatarService } from 'ngx-tethys/avatar';
 import { ThyIcon } from 'ngx-tethys/icon';
-import type { GraphEntity } from '../entities/graph.entity';
+import type { FoldMark, GraphEntity } from '../entities/graph.entity';
 import { entityAssigneeName } from '../utils/graph.util';
 
 let environmentInjector: EnvironmentInjector | null = null;
@@ -40,7 +40,7 @@ export function bindWorkItemCardRuntime(
 })
 export class WorkItemCard {
   readonly item = input.required<GraphEntity>();
-  readonly fold = input('right');
+  readonly marks = input<FoldMark[]>([]);
   readonly root = input(false);
 
   protected readonly assignee = computed(() => entityAssigneeName(this.item()));
@@ -67,7 +67,7 @@ class WorkItemCardNode extends HTML {
     }
     const states = new Set(this.context.graph.getElementState(this.id) ?? []);
     this.view.setInput('item', item);
-    this.view.setInput('fold', this.foldOf());
+    this.view.setInput('marks', this.marksOf());
     this.view.setInput('root', states.has('root'));
     this.view.changeDetectorRef.detectChanges();
 
@@ -91,9 +91,9 @@ class WorkItemCardNode extends HTML {
     return this.context.graph.getNodeData(this.id)?.data?.['item'] as GraphEntity | undefined;
   }
 
-  private foldOf(): string {
-    const fold = this.context.graph.getNodeData(this.id)?.data?.['foldPlacement'];
-    return typeof fold === 'string' ? fold : 'right';
+  private marksOf(): FoldMark[] {
+    const marks = this.context.graph.getNodeData(this.id)?.data?.['foldMarks'];
+    return Array.isArray(marks) ? (marks as FoldMark[]) : [];
   }
 
   private destroyView(): void {

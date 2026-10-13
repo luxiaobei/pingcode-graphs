@@ -33,8 +33,8 @@ import {
   sharpenHtmlCamera,
   snapshotGraphPositions,
 } from '../utils/g6-helpers';
+import { arrangeGraph } from '../utils/arrange-graph';
 import { openPivot } from '../utils/graph.util';
-import { visiblePositions } from '../utils/pin-layout';
 import {
   toG6Data,
   type FoldPlacement,
@@ -108,6 +108,20 @@ export class GraphCanvas {
 
   /** 保存入口，功能后续再接。 */
   protected save(): void {}
+
+  /** 按思维导图重新排：根在中间，上下左右各自居中。 */
+  protected organize(): void {
+    const data = untracked(() => this.graph());
+    const graph = this.liveGraph();
+    if (!data?.nodes.length || !graph) {
+      return;
+    }
+    this.applyArranged(data);
+    void graph
+      .draw()
+      .then(() => this.fit())
+      .catch(() => undefined);
+  }
 
   protected fit(): void {
     const graph = this.liveGraph();
@@ -198,7 +212,7 @@ export class GraphCanvas {
     });
   }
 
-  /** 同一根节点、同一深度，且画布上还有重叠节点时沿用坐标；否则重新布局。 */
+  /** 同一根节点、同一深度时取出现有坐标，不在这里给新卡片找位置。 */
   private preparePositions(data: DependencyGraph): ReadonlyMap<string, GraphNodePosition> | null {
     const canvasNodeIds = new Set((this.g6?.getNodeData() ?? []).map((node) => String(node.id)));
     const sharesNode = data.nodes.some((node) => canvasNodeIds.has(node.id));
@@ -218,7 +232,13 @@ export class GraphCanvas {
       return null;
     }
     snapshotGraphPositions(graph, this.pinnedPositions);
-    return this.pinnedPositions.size ? visiblePositions(data, this.pinnedPositions) : null;
+    return this.pinnedPositions.size ? this.pinnedPositions : null;
+  }
+
+  /** 展开收起会增减卡片。集合一致才保留拖拽位置，否则按整理规则重排。 */
+  private sameVisibleNodes(data: DependencyGraph): boolean {
+    const ids = data.nodes.filter((node) => !node.relationHub).map((node) => node.id);
+    return ids.length === this.pinnedPositions.size && ids.every((id) => this.pinnedPositions.has(id));
   }
 
   private liveGraph(): Graph | null {
@@ -278,16 +298,18 @@ export class GraphCanvas {
     }
 
     const positions = this.preparePositions(data);
-    if (positions) {
+    if (positions && this.sameVisibleNodes(data)) {
       this.applyGraphData(data, positions);
       await this.g6.draw();
+    } else if (positions) {
+      this.applyArranged(data);
+      await this.g6.draw();
     } else {
-      this.g6.setData(toG6Data(data, undefined, this.foldSideById));
+      this.applyArranged(data);
       await this.g6.render();
       if (seq !== this.renderSeq) {
         return;
       }
-      snapshotGraphPositions(this.g6, this.pinnedPositions);
       this.applyGraphData(data, this.pinnedPositions);
       await this.g6.draw();
       if (seq !== this.renderSeq) {
@@ -312,6 +334,16 @@ export class GraphCanvas {
         false,
       )
       .catch(() => undefined);
+  }
+
+  private applyArranged(data: DependencyGraph): void {
+    const arranged = arrangeGraph(data);
+    this.pinnedPositions.clear();
+    this.foldSideById.clear();
+    for (const [id, pos] of arranged) {
+      this.pinnedPositions.set(id, pos);
+    }
+    this.applyGraphData(data, this.pinnedPositions);
   }
 
   private clearFitTimer(): void {

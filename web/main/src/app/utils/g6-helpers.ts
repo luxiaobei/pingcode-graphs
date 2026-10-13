@@ -20,7 +20,7 @@ export function snapshotGraphPositions(
   for (const node of g6.getNodeData()) {
     const id = String(node.id);
     const [x, y] = g6.getElementPosition(id);
-    pins.set(id, { x, y });
+    pins.set(id, { x, y, side: pins.get(id)?.side });
   }
 }
 

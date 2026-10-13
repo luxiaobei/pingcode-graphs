@@ -122,17 +122,10 @@ export class App {
     }
   }
 
-  protected onToggleExpand(anchorId: string): void {
-    const node = this.graph()?.nodes.find((item) => item.id === anchorId);
-    if (!node?.expandToggle) {
-      return;
-    }
-    this.collapsedAnchors.update((list) => {
-      if (node.expandToggle === 'collapsed') {
-        return list.filter((id) => id !== anchorId);
-      }
-      return list.includes(anchorId) ? list : [...list, anchorId];
-    });
+  protected onToggleExpand(key: string): void {
+    this.collapsedAnchors.update((list) =>
+      list.includes(key) ? list.filter((id) => id !== key) : [...list, key],
+    );
   }
 
   protected openSettings(): void {

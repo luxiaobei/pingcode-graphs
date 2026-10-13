@@ -27,19 +27,14 @@ import type { DependencyGraph } from '../entities/graph.entity';
 import {
   buildElementStates,
   graphHostSize,
-  isBadgeTarget,
+  foldKeyFromEvent,
   nodeItemFromEvent,
-  rememberFoldSides,
   sharpenHtmlCamera,
   snapshotGraphPositions,
 } from '../utils/g6-helpers';
 import { arrangeGraph } from '../utils/arrange-graph';
 import { openPivot } from '../utils/graph.util';
-import {
-  toG6Data,
-  type FoldPlacement,
-  type GraphNodePosition,
-} from '../utils/to-g6-data';
+import { toG6Data, type GraphNodePosition } from '../utils/to-g6-data';
 
 @Component({
   selector: 'app-graph-canvas',
@@ -66,7 +61,6 @@ export class GraphCanvas {
   private lastDepth: number | null = null;
   private lastRootId: string | null = null;
   private readonly pinnedPositions = new Map<string, GraphNodePosition>();
-  private readonly foldSideById = new Map<string, FoldPlacement>();
 
   private readonly zoomMinPercent = Math.round(GRAPH_ZOOM_RANGE[0] * 100);
   private readonly zoomMaxPercent = Math.round(GRAPH_ZOOM_RANGE[1] * 100);
@@ -157,7 +151,6 @@ export class GraphCanvas {
     this.htmlCameraObserver?.disconnect();
     this.htmlCameraObserver = null;
     this.pinnedPositions.clear();
-    this.foldSideById.clear();
     this.lastDepth = null;
     this.lastRootId = null;
     this.g6?.off();
@@ -173,8 +166,7 @@ export class GraphCanvas {
     if (!this.g6) {
       return;
     }
-    this.g6.setData(toG6Data(data, positions ?? this.pinnedPositions, this.foldSideById));
-    rememberFoldSides(this.g6, this.foldSideById);
+    this.g6.setData(toG6Data(data, positions ?? this.pinnedPositions));
   }
 
   private bindGraphEvents(): void {
@@ -190,8 +182,9 @@ export class GraphCanvas {
       if (!item || item.relationHub) {
         return;
       }
-      if (item.expandToggle && isBadgeTarget(event)) {
-        this.toggleExpand.emit(item.id);
+      const foldKey = foldKeyFromEvent(event);
+      if (foldKey) {
+        this.toggleExpand.emit(foldKey);
         return;
       }
       openPivot(item);
@@ -221,7 +214,6 @@ export class GraphCanvas {
 
     if (!reusePins) {
       this.pinnedPositions.clear();
-      this.foldSideById.clear();
       this.lastDepth = data.depth;
       this.lastRootId = data.rootId;
       return null;
@@ -289,7 +281,6 @@ export class GraphCanvas {
 
     if (!data?.nodes.length) {
       this.pinnedPositions.clear();
-      this.foldSideById.clear();
       this.lastDepth = null;
       this.lastRootId = null;
       this.g6.setData({ nodes: [], edges: [] });
@@ -301,26 +292,27 @@ export class GraphCanvas {
     if (positions && this.sameVisibleNodes(data)) {
       this.applyGraphData(data, positions);
       await this.g6.draw();
-    } else if (positions) {
-      this.applyArranged(data);
-      await this.g6.draw();
     } else {
       this.applyArranged(data);
-      await this.g6.render();
-      if (seq !== this.renderSeq) {
-        return;
-      }
-      this.applyGraphData(data, this.pinnedPositions);
-      await this.g6.draw();
-      if (seq !== this.renderSeq) {
-        return;
-      }
-      this.fit();
-      this.fitTimer = window.setTimeout(() => {
-        if (seq === this.renderSeq) {
-          this.fit();
+      if (positions) {
+        await this.g6.draw();
+      } else {
+        await this.g6.render();
+        if (seq !== this.renderSeq) {
+          return;
         }
-      }, GRAPH_FIT_SETTLE_MS);
+        this.applyGraphData(data, this.pinnedPositions);
+        await this.g6.draw();
+        if (seq !== this.renderSeq) {
+          return;
+        }
+        this.fit();
+        this.fitTimer = window.setTimeout(() => {
+          if (seq === this.renderSeq) {
+            this.fit();
+          }
+        }, GRAPH_FIT_SETTLE_MS);
+      }
     }
 
     const graph = this.liveGraph();
@@ -339,7 +331,6 @@ export class GraphCanvas {
   private applyArranged(data: DependencyGraph): void {
     const arranged = arrangeGraph(data);
     this.pinnedPositions.clear();
-    this.foldSideById.clear();
     for (const [id, pos] of arranged) {
       this.pinnedPositions.set(id, pos);
     }

@@ -9,7 +9,7 @@ export interface GraphScope {
 
 /**
  * 关系图节点。
- * 服务端字段与 GraphWorkItem 对齐；depth / expandToggle 等由前端计算。
+ * 服务端字段与 GraphWorkItem 对齐；depth / folds 等由前端计算。
  */
 export interface GraphEntity {
   id: string;
@@ -45,11 +45,27 @@ export interface GraphEntity {
   relationHub?: string;
   /** 相对根节点跳数（0 = 焦点），前端 BFS 计算 */
   depth?: number;
-  /** 卡片 +/-：有向外子树时出现 */
-  expandToggle?: 'collapsed' | 'expanded';
   /** 展开树上的父节点 */
   revealedByAnchorId?: string;
   position?: { x: number; y: number };
+  /** 从这张卡片出发的关系，每种一个展开收起 */
+  folds?: RelationFold[];
+}
+
+/** 一种关系的展开收起。key 是「父节点::关系类型」。 */
+export interface RelationFold {
+  key: string;
+  relationType: string;
+  count: number;
+  expanded: boolean;
+}
+
+/** 画在关系线起点上的展开收起 */
+export interface FoldMark {
+  key: string;
+  text: string;
+  left: number;
+  top: number;
 }
 
 export interface GraphEdge {

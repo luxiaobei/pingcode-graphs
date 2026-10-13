@@ -135,6 +135,10 @@ const nodes: GraphEntity[] = [
     type: { name: '任务' },
     assignee: { id: 'u1', display_name: '张三' },
   }),
+  item('n-parent', 'PORTAL-80', '客户门户登录能力', {
+    type: { name: '史诗' },
+    assignee: { id: 'u5', display_name: '陈七' },
+  }),
   item('n-c1', 'PORTAL-150', '拆分登录子任务', {
     type: { name: '任务' },
     assignee: { id: 'u2', display_name: '李四' },
@@ -198,6 +202,7 @@ const edges: GraphEdge[] = (
     ['e16c', 'n-root', 'n-objective-3', 'relate:objective'],
     ['e17', 'n-root', 'n-test', 'relate:test_case'],
     ['e18', 'n-root', 'n-depend', 'depend'],
+    ['e18b', 'n-root', 'n-parent', 'parent'],
     ['e19', 'n-root', 'n-c1', 'child'],
     ['e20', 'n-root', 'n-c1b', 'child'],
     ['e20b', 'n-root', 'n-c1c', 'child'],

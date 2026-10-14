@@ -374,6 +374,20 @@ export class GraphCanvas {
     return next;
   }
 
+  /**
+   * 展开/收起：保留已有 pin（含拖拽），只给新出现的节点用思维导图坐标。
+   */
+  private resolveExpandCollapsePositions(data: DependencyGraph): Map<string, GraphNodePosition> {
+    const arranged = arrangeGraph(data);
+    const next = new Map(arranged);
+    for (const [id, pos] of this.pinnedPositions) {
+      if (next.has(id)) {
+        next.set(id, { ...next.get(id), ...pos });
+      }
+    }
+    return next;
+  }
+
   /** 展开收起会增减卡片。集合一致才保留拖拽位置，否则按整理规则重排。 */
   private sameVisibleNodes(data: DependencyGraph): boolean {
     const ids = data.nodes.filter((node) => !node.relationHub).map((node) => node.id);
@@ -452,8 +466,10 @@ export class GraphCanvas {
       this.applyGraphData(data, positions);
       await this.g6.draw();
     } else if (positions) {
-      // 展开/收起后节点有增减：按基准布局重排，不强制适应画布以免打断当前视口
-      await this.layoutBaseline(data, { fitView: false });
+      // 展开/收起：保留已拖拽坐标，只给新增节点补位
+      await this.applyLayoutPositions(data, this.resolveExpandCollapsePositions(data), {
+        fitView: false,
+      });
     } else {
       // 初次进入 / 换根：服务端位置优先，否则思维导图初始化
       await this.layoutBaseline(data, { fitView: true });

@@ -110,16 +110,22 @@ const nodes: GraphEntity[] = [
   }),
   item('n-idea', 'IDEA-12', '登录体验改版', {
     type: { name: '产品需求' },
+    icon: 'bulb-square-fill',
+    iconColor: '#f98a7c',
     navigationTarget: 'idea',
     assignee: { id: 'u4', display_name: '赵六' },
   }),
   item('n-idea-2', 'IDEA-18', '多因子登录', {
     type: { name: '产品需求' },
+    icon: 'bulb-square-fill',
+    iconColor: '#f98a7c',
     navigationTarget: 'idea',
     assignee: { id: 'u5', display_name: '陈七' },
   }),
   item('n-ticket', 'TCK-7', '无法收到验证码', {
     type: { name: '工单' },
+    icon: 'project-support',
+    iconColor: '#f6c659',
     navigationTarget: 'ticket',
     assignee: { id: 'u2', display_name: '李四' },
   }),
@@ -140,6 +146,8 @@ const nodes: GraphEntity[] = [
   }),
   item('n-test', 'TC-21', '登录主流程', {
     type: { name: '测试用例' },
+    icon: 'test-case-square-fill',
+    iconColor: '#3ddc91',
     navigationTarget: 'testcase',
     assignee: { id: 'u3', display_name: '王五' },
   }),

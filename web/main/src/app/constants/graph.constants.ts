@@ -20,6 +20,13 @@ export const GRAPH_FIT_SETTLE_MS = 300;
 
 export const DEFAULT_EDGE_COLOR = '#94a3b8';
 
+/** 非工作项节点的默认图标（thy-icon）。 */
+export const KIND_ICON_STYLE: Record<string, { icon: string; color: string }> = {
+  idea: { icon: 'bulb-square-fill', color: '#f98a7c' },
+  ticket: { icon: 'project-support', color: '#f6c659' },
+  test_case: { icon: 'test-case-square-fill', color: '#3ddc91' },
+};
+
 /** 关系展示名与颜色。正反向各自独立。 */
 export const RELATION_STYLE: Record<string, RelationStyle> = {
   block: { label: '阻塞', color: '#d64545' },

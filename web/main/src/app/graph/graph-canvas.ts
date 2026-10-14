@@ -77,7 +77,10 @@ export class GraphCanvas {
   private renderSeq = 0;
   private lastDepth: number | null = null;
   private lastRootId: string | null = null;
+  /** 当前会话拖拽后的坐标 */
   private readonly pinnedPositions = new Map<string, GraphNodePosition>();
+  /** 服务端下发 / 已保存的布局；一键整理优先还原 */
+  private readonly savedPositions = new Map<string, GraphNodePosition>();
   private readonly traceStop = new AbortController();
   private traceTargetId: string | null = null;
   private traceMenuTimer = 0;
@@ -135,15 +138,14 @@ export class GraphCanvas {
   protected save(): void {}
 
   /**
-   * 一键整理：按思维导图规则重排（根居中，左需求/工单、右目标/测试、上下其他关系）。
-   * 初次进入与拖拽打乱后共用这套坐标。
+   * 一键整理：优先还原服务端位置；没有服务端数据时用思维导图初始化位置。
    */
   protected organize(): void {
     const data = untracked(() => this.graph());
     if (!data?.nodes.length || !this.liveGraph()) {
       return;
     }
-    void this.layoutToMindMap(data, { fitView: true }).catch(() => undefined);
+    void this.layoutBaseline(data, { fitView: true }).catch(() => undefined);
   }
 
   protected fit(): void {
@@ -181,6 +183,7 @@ export class GraphCanvas {
     this.htmlCameraObserver?.disconnect();
     this.htmlCameraObserver = null;
     this.pinnedPositions.clear();
+    this.savedPositions.clear();
     this.lastDepth = null;
     this.lastRootId = null;
     window.clearTimeout(this.traceMenuTimer);
@@ -312,6 +315,7 @@ export class GraphCanvas {
       this.pinnedPositions.clear();
       this.lastDepth = data.depth;
       this.lastRootId = data.rootId;
+      this.syncSavedPositions(data);
       return null;
     }
 
@@ -321,6 +325,41 @@ export class GraphCanvas {
     }
     snapshotGraphPositions(graph, this.pinnedPositions);
     return this.pinnedPositions.size ? this.pinnedPositions : null;
+  }
+
+  /** 从节点上的 position（服务端字段）同步已保存布局。 */
+  private syncSavedPositions(data: DependencyGraph): void {
+    this.savedPositions.clear();
+    for (const node of data.nodes) {
+      if (node.relationHub || !node.position) {
+        continue;
+      }
+      const { x, y } = node.position;
+      if (Number.isFinite(x) && Number.isFinite(y)) {
+        this.savedPositions.set(node.id, { x, y });
+      }
+    }
+  }
+
+  /**
+   * 基准布局：有服务端位置则还原（缺的节点用思维导图补齐），否则整图初始化。
+   */
+  private resolveBaselinePositions(data: DependencyGraph): Map<string, GraphNodePosition> {
+    this.syncSavedPositions(data);
+    const arranged = arrangeGraph(data);
+    const hasSaved = data.nodes.some(
+      (node) => !node.relationHub && this.savedPositions.has(node.id),
+    );
+    if (!hasSaved) {
+      return arranged;
+    }
+    const next = new Map(arranged);
+    for (const [id, pos] of this.savedPositions) {
+      if (next.has(id)) {
+        next.set(id, { ...next.get(id), ...pos });
+      }
+    }
+    return next;
   }
 
   /** 展开收起会增减卡片。集合一致才保留拖拽位置，否则按整理规则重排。 */
@@ -387,6 +426,7 @@ export class GraphCanvas {
 
     if (!data?.nodes.length) {
       this.pinnedPositions.clear();
+      this.savedPositions.clear();
       this.lastDepth = null;
       this.lastRootId = null;
       this.g6.setData({ nodes: [], edges: [] });
@@ -396,14 +436,15 @@ export class GraphCanvas {
 
     const positions = this.preparePositions(data);
     if (positions && this.sameVisibleNodes(data)) {
+      // 可见节点未变：保留拖拽位置
       this.applyGraphData(data, positions);
       await this.g6.draw();
     } else if (positions) {
-      // 展开/收起后节点有增减：按思维导图重排，不强制适应画布以免打断当前视口
-      await this.layoutToMindMap(data, { fitView: false });
+      // 展开/收起后节点有增减：按基准布局重排，不强制适应画布以免打断当前视口
+      await this.layoutBaseline(data, { fitView: false });
     } else {
-      // 初次进入 / 换根：初始化思维导图位置并适应画布
-      await this.layoutToMindMap(data, { fitView: true });
+      // 初次进入 / 换根：服务端位置优先，否则思维导图初始化
+      await this.layoutBaseline(data, { fitView: true });
       if (seq !== this.renderSeq) {
         return;
       }
@@ -422,13 +463,21 @@ export class GraphCanvas {
     await graph.setElementState(buildElementStates(data), false).catch(() => undefined);
   }
 
-  /**
-   * 写入思维导图坐标并落到画布。
-   * 初次进入走 render；已有画布节点用 translateElementTo 强制归位
-   *（打乱后仅 setData+draw 往往不会更新坐标）。
-   */
-  private async layoutToMindMap(
+  /** 一键整理 / 首次进入：服务端位置优先，否则思维导图初始化。 */
+  private async layoutBaseline(
     data: DependencyGraph,
+    options: { fitView: boolean },
+  ): Promise<void> {
+    await this.applyLayoutPositions(data, this.resolveBaselinePositions(data), options);
+  }
+
+  /**
+   * 把给定坐标落到画布并写入 pin。
+   * 初次进入走 render；已有节点用 translateElementTo 强制归位。
+   */
+  private async applyLayoutPositions(
+    data: DependencyGraph,
+    positions: ReadonlyMap<string, GraphNodePosition>,
     options: { fitView: boolean },
   ): Promise<void> {
     const graph = this.liveGraph();
@@ -438,7 +487,7 @@ export class GraphCanvas {
 
     // setData 前判断：之后 getNodeData 已是新数据，分不清是否首次渲染
     const firstPaint = !(graph.getNodeData() ?? []).length;
-    this.seedPinnedPositions(arrangeGraph(data));
+    this.seedPinnedPositions(positions);
     this.applyGraphData(data, this.pinnedPositions);
 
     if (firstPaint) {
@@ -461,9 +510,9 @@ export class GraphCanvas {
     }
   }
 
-  private seedPinnedPositions(arranged: ReadonlyMap<string, GraphNodePosition>): void {
+  private seedPinnedPositions(positions: ReadonlyMap<string, GraphNodePosition>): void {
     this.pinnedPositions.clear();
-    for (const [id, pos] of arranged) {
+    for (const [id, pos] of positions) {
       this.pinnedPositions.set(id, pos);
     }
   }

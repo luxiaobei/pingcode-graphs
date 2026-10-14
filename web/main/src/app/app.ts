@@ -143,7 +143,7 @@ export class App {
 
   protected openSettings(): void {
     const dialogRef = this.dialog.open(DisplaySettingsDialog, {
-      size: ThyDialogSizes.sm,
+      size: ThyDialogSizes.md,
       initialState: {
         settings: cloneDisplaySettings(this.displaySettings()),
       },

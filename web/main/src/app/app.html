@@ -44,7 +44,11 @@
       @if (!data.nodes.length) {
         <div class="state">暂无关联对象数据</div>
       } @else if (showCanvas()) {
-        <app-graph-canvas [graph]="data" (toggleExpand)="onToggleExpand($event)" />
+        <app-graph-canvas
+          [graph]="data"
+          (toggleExpand)="onToggleExpand($event)"
+          (retrace)="onRetrace($event)"
+        />
       }
     } @else {
       <div class="state">无法获取当前对象上下文</div>

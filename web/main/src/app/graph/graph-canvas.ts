@@ -15,6 +15,12 @@ import {
 } from '@angular/core';
 import { Graph, GraphEvent, NodeEvent, type IElementEvent } from '@antv/g6';
 import { ThyAction } from 'ngx-tethys/action';
+import {
+  ThyDropdownDirective,
+  ThyDropdownMenuComponent,
+  ThyDropdownMenuItemDirective,
+  ThyDropdownMenuItemNameDirective,
+} from 'ngx-tethys/dropdown';
 import { ThyTooltipDirective } from 'ngx-tethys/tooltip';
 import {
   GRAPH_FIT_SETTLE_MS,
@@ -22,7 +28,7 @@ import {
   GRAPH_ZOOM_RANGE,
   GRAPH_ZOOM_STEP,
 } from '../constants/graph.constants';
-import type { DependencyGraph } from '../entities/graph.entity';
+import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import { arrangeGraph } from '../utils/arrange-graph';
 import {
   buildElementStates,
@@ -38,7 +44,14 @@ import { bindWorkItemCardRuntime } from './work-item-card';
 
 @Component({
   selector: 'app-graph-canvas',
-  imports: [ThyAction, ThyTooltipDirective],
+  imports: [
+    ThyAction,
+    ThyTooltipDirective,
+    ThyDropdownDirective,
+    ThyDropdownMenuComponent,
+    ThyDropdownMenuItemDirective,
+    ThyDropdownMenuItemNameDirective,
+  ],
   templateUrl: './graph-canvas.html',
   styleUrl: './graph-canvas.scss',
 })
@@ -47,9 +60,13 @@ export class GraphCanvas {
 
   readonly toggleExpand = output<string>();
 
+  readonly retrace = output<string>();
+
   protected readonly zoomPercent = signal(100);
 
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('g6Host');
+  private readonly traceOrigin = viewChild.required<ElementRef<HTMLElement>>('traceOrigin');
+  private readonly traceDropdown = viewChild.required(ThyDropdownDirective);
   private readonly destroyRef = inject(DestroyRef);
 
   private g6: Graph | null = null;
@@ -61,6 +78,9 @@ export class GraphCanvas {
   private lastDepth: number | null = null;
   private lastRootId: string | null = null;
   private readonly pinnedPositions = new Map<string, GraphNodePosition>();
+  private readonly traceStop = new AbortController();
+  private traceTargetId: string | null = null;
+  private traceMenuTimer = 0;
 
   private readonly zoomMinPercent = Math.round(GRAPH_ZOOM_RANGE[0] * 100);
   private readonly zoomMaxPercent = Math.round(GRAPH_ZOOM_RANGE[1] * 100);
@@ -140,6 +160,7 @@ export class GraphCanvas {
   private initGraph(): void {
     const container = this.host().nativeElement;
     this.g6 = new Graph({ container, ...graphHostSize(container), ...GRAPH_OPTIONS });
+    this.bindTraceMenu(container);
     this.bindGraphEvents();
     this.bindHtmlCamera(container);
     this.resizeObserver = new ResizeObserver(() => {
@@ -162,6 +183,8 @@ export class GraphCanvas {
     this.pinnedPositions.clear();
     this.lastDepth = null;
     this.lastRootId = null;
+    window.clearTimeout(this.traceMenuTimer);
+    this.traceStop.abort();
     this.g6?.off();
     this.g6?.destroy();
     this.g6 = null;
@@ -199,7 +222,10 @@ export class GraphCanvas {
       openPivot(item);
     });
 
-    this.g6.on(GraphEvent.AFTER_TRANSFORM, () => this.syncZoomPercent());
+    this.g6.on(GraphEvent.AFTER_TRANSFORM, () => {
+      this.syncZoomPercent();
+      this.syncTraceMenuScale();
+    });
     this.g6.on(NodeEvent.DRAG_START, () => this.g6?.stopLayout());
     this.g6.on(NodeEvent.DRAG_END, () => {
       if (!this.g6) {
@@ -212,6 +238,67 @@ export class GraphCanvas {
         void this.g6.draw();
       }
     });
+  }
+
+  /** 右键卡片不拖动；非当前工作项弹出「以此工作项追溯」。 */
+  private bindTraceMenu(container: HTMLElement): void {
+    const signal = this.traceStop.signal;
+    container.addEventListener('pointerdown', this.keepRightClick, { capture: true, signal });
+    container.addEventListener('contextmenu', this.onTraceMenu, { signal });
+  }
+
+  private readonly keepRightClick = (event: PointerEvent): void => {
+    if (event.button === 2 && cardOf(event)) {
+      event.stopPropagation();
+    }
+  };
+
+  private readonly onTraceMenu = (event: MouseEvent): void => {
+    const card = cardOf(event);
+    if (!card) {
+      return;
+    }
+    event.preventDefault();
+    const id = this.traceCandidate(card.dataset['nodeId']);
+    if (id) {
+      this.openTraceMenu(id, event.clientX, event.clientY);
+    }
+  };
+
+  /** 当前中心、分叉点和非工作项不能换根。 */
+  private traceCandidate(id: string | undefined): string | null {
+    const data = untracked(() => this.graph());
+    const item = data?.nodes.find((node) => node.id === id);
+    if (!item || item.relationHub || item.id === data?.rootId || !isWorkItem(item)) {
+      return null;
+    }
+    return item.id;
+  }
+
+  /** hide 是异步的，下一拍再打开，避免还挂着上一次菜单。 */
+  private openTraceMenu(id: string, x: number, y: number): void {
+    this.traceTargetId = id;
+    this.syncTraceMenuScale();
+    const origin = this.traceOrigin().nativeElement;
+    origin.style.left = `${x}px`;
+    origin.style.top = `${y}px`;
+    this.traceDropdown().hide(0);
+    window.clearTimeout(this.traceMenuTimer);
+    this.traceMenuTimer = window.setTimeout(() => this.traceDropdown().show(0));
+  }
+
+  /** 菜单跟着画面缩放，最小停在还能点中的尺寸。 */
+  private syncTraceMenuScale(): void {
+    const zoom = Math.min(1, Math.max(0.6, this.graphZoom() ?? 1));
+    document.documentElement.style.setProperty('--trace-menu-scale', String(zoom));
+  }
+
+  protected confirmTrace(): void {
+    const id = this.traceTargetId;
+    this.traceTargetId = null;
+    if (id) {
+      this.retrace.emit(id);
+    }
   }
 
   /** 同一根节点、同一深度时取出现有坐标，不在这里给新卡片找位置。 */
@@ -270,15 +357,23 @@ export class GraphCanvas {
     this.g6?.on(GraphEvent.AFTER_TRANSFORM, sync);
   }
 
-  private syncZoomPercent(): void {
+  /** 视口拆掉后 getZoom 会读到空对象，这时当没有缩放。 */
+  private graphZoom(): number | null {
     const graph = this.liveGraph();
     if (!graph) {
-      return;
+      return null;
     }
     try {
-      this.zoomPercent.set(Math.round(graph.getZoom() * 100));
+      return graph.getZoom();
     } catch {
-      // 销毁过程中视口可能已经拆掉
+      return null;
+    }
+  }
+
+  private syncZoomPercent(): void {
+    const zoom = this.graphZoom();
+    if (zoom != null) {
+      this.zoomPercent.set(Math.round(zoom * 100));
     }
   }
 
@@ -379,4 +474,13 @@ export class GraphCanvas {
       this.fitTimer = null;
     }
   }
+}
+
+function isWorkItem(item: GraphEntity): boolean {
+  return item.navigationTarget === 'workitem' || item.id.startsWith('work_item:');
+}
+
+function cardOf(event: Event): HTMLElement | null {
+  const target = event.target;
+  return target instanceof Element ? target.closest<HTMLElement>('[data-node-id]') : null;
 }

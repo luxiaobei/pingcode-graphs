@@ -25,8 +25,13 @@
 }
 
 .card--root {
-  border-color: #2563eb;
+  border-color: #6698ff;
   background: #eff6ff;
+}
+
+.card:hover {
+  border-color: #6698ff;
+  box-shadow: 0 6px 16px rgb(102 152 255 / 32%);
 }
 
 .card__main {

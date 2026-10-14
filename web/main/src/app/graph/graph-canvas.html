@@ -48,4 +48,17 @@
       ></thy-action>
     </div>
   </div>
+  <span
+    #traceOrigin
+    class="trace-origin"
+    [thyDropdown]="traceMenu"
+    thyPlacement="rightTop"
+    thyPanelClass="trace-menu-panel"
+    [thyPopoverOptions]="{ minWidth: '0' }"
+  ></span>
+  <thy-dropdown-menu #traceMenu>
+    <a thyDropdownMenuItem (click)="confirmTrace()">
+      <span thyDropdownMenuItemName>以此工作项追溯</span>
+    </a>
+  </thy-dropdown-menu>
 </div>

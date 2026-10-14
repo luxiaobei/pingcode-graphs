@@ -33,6 +33,7 @@ function toG6Node(
     data: {
       foldMarks: foldMarks(item, position, rootId, forks),
       item,
+      root: item.id === rootId,
       width: item.relationHub ? 1 : GRAPH_NODE_SIZE.width,
       height: item.relationHub ? 1 : GRAPH_NODE_SIZE.height,
     },

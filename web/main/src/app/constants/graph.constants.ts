@@ -49,6 +49,12 @@ function cardOrHub<T>(datum: NodeData, card: T, hub: T): T {
   return relationHubOf(datum) ? hub : card;
 }
 
+/** 右键留给追溯菜单，拖动只认左键。 */
+function isLeftDrag(event: { button?: number; buttons?: number }): boolean {
+  const buttons = event.buttons ?? 0;
+  return buttons > 0 ? (buttons & 1) === 1 : (event.button ?? 0) === 0;
+}
+
 export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'> = {
   autoFit: 'view',
   padding: 48,
@@ -68,7 +74,7 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
       pointerEvents: (d: NodeData) => cardOrHub(d, 'auto', 'none'),
     },
     state: {
-      root: { stroke: '#2563eb', lineWidth: 3, fill: '#eff6ff' },
+      root: { stroke: '#6698ff', lineWidth: 2, fill: '#eff6ff' },
     },
   },
   edge: {
@@ -93,13 +99,13 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
     {
       key: 'drag-canvas',
       type: 'drag-canvas',
-      enable: (event: IPointerEvent) => event.targetType === 'canvas',
+      enable: (event: IPointerEvent) => event.targetType === 'canvas' && isLeftDrag(event),
     },
     { key: 'zoom-canvas', type: 'zoom-canvas' },
     {
       key: 'drag-element',
       type: 'drag-element',
-      enable: (event: IElementDragEvent) => event.targetType === 'node',
+      enable: (event: IElementDragEvent) => event.targetType === 'node' && isLeftDrag(event),
       dropEffect: 'none',
       animation: false,
     },

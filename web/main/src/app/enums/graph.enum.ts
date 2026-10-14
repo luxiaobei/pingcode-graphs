@@ -16,5 +16,6 @@ export const DEFAULT_RELATION_TYPES = [
   'depend',
   'mention',
   'clone',
+  'parent',
   'child',
 ] as const;

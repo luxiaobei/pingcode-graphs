@@ -517,17 +517,28 @@ export class GraphCanvas {
 
     // setData 前判断：之后 getNodeData 已是新数据，分不清是否首次渲染
     const firstPaint = !(graph.getNodeData() ?? []).length;
-    this.seedPinnedPositions(positions, options.keepHiddenPins);
-    this.applyGraphData(data, positions);
+    // 思维导图相对 (0,0) 布局，而默认相机看画布中心；fitView 落位时整体挪到画布中心
+    const [width, height] = graph.getSize();
+    const layout =
+      options.fitView && width > 0 && height > 0
+        ? new Map(
+            [...positions].map(([id, pos]) => [
+              id,
+              { ...pos, x: pos.x + width / 2, y: pos.y + height / 2 },
+            ]),
+          )
+        : positions;
+    this.seedPinnedPositions(layout, options.keepHiddenPins);
+    this.applyGraphData(data, layout);
 
     if (firstPaint) {
       await graph.render();
-      this.applyGraphData(data, positions);
+      this.applyGraphData(data, layout);
       await graph.draw();
     } else {
       await graph.draw();
       const moves = Object.fromEntries(
-        [...positions].map(([id, pos]) => [id, [pos.x, pos.y] as [number, number]]),
+        [...layout].map(([id, pos]) => [id, [pos.x, pos.y] as [number, number]]),
       );
       if (Object.keys(moves).length) {
         await graph.translateElementTo(moves, false).catch(() => undefined);

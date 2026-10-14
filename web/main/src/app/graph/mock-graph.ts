@@ -229,3 +229,12 @@ export const MOCK_GRAPH: DependencyGraph = {
   nodes,
   edges,
 };
+
+/** 用模拟图里的某个工作项当中心。不在图里时仍用原来的根。 */
+export function mockGraphFrom(rootId?: string | null): DependencyGraph {
+  const graph = structuredClone(MOCK_GRAPH);
+  if (rootId && graph.nodes.some((node) => node.id === rootId && !node.relationHub)) {
+    graph.rootId = rootId;
+  }
+  return graph;
+}

@@ -24,11 +24,13 @@ export function snapshotGraphPositions(
   }
 }
 
-/** 计算节点的 G6 状态：根节点标为 root */
+/** 根节点标为 root。分叉点没有画出来，放进去会让整次状态更新失败。 */
 export function buildElementStates(data: DependencyGraph): Record<string, string[]> {
   const stateMap: Record<string, string[]> = {};
   for (const node of data.nodes) {
-    stateMap[node.id] = node.id === data.rootId ? ['root'] : [];
+    if (!node.relationHub) {
+      stateMap[node.id] = node.id === data.rootId ? ['root'] : [];
+    }
   }
   return stateMap;
 }

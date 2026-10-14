@@ -11,6 +11,7 @@ import { provideAnimations } from '@angular/platform-browser/animations';
 import { provideTethys } from 'ngx-tethys/core';
 import { ThyDialogModule } from 'ngx-tethys/dialog';
 import { ThyIconRegistry } from 'ngx-tethys/icon';
+import { ThyPopoverModule } from 'ngx-tethys/popover';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -18,7 +19,7 @@ export const appConfig: ApplicationConfig = {
     provideAnimations(),
     provideHttpClient(),
     provideTethys(),
-    importProvidersFrom(ThyDialogModule),
+    importProvidersFrom(ThyDialogModule, ThyPopoverModule),
     provideAppInitializer(() => {
       const iconRegistry = inject(ThyIconRegistry);
       const domSanitizer = inject(DomSanitizer);

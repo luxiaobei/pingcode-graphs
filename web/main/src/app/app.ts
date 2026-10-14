@@ -9,7 +9,7 @@ import { ThySwitchModule } from 'ngx-tethys/switch';
 import { ThyTooltipDirective } from 'ngx-tethys/tooltip';
 import type { DependencyGraph } from './entities/graph.entity';
 import { GraphCanvas } from './graph/graph-canvas';
-import { MOCK_GRAPH } from './graph/mock-graph';
+import { mockGraphFrom } from './graph/mock-graph';
 import { getDependencyGraph } from './services/graph.service';
 import {
   applySavedDisplaySettings,
@@ -46,6 +46,9 @@ export class App {
   private readonly dialog = inject(ThyDialog);
 
   protected readonly collapsedAnchors = signal<readonly string[]>([]);
+
+  /** 换根追溯后的工作项。空表示用打开页面时的当前工作项。 */
+  private readonly traceWorkItemId = signal<string | null>(null);
 
   protected readonly source = signal<DependencyGraph | null>(null);
   protected readonly loading = signal(true);
@@ -87,6 +90,7 @@ export class App {
       return;
     }
     this.usingMockData.set(useMock);
+    this.traceWorkItemId.set(null);
     void this.reload();
   }
 
@@ -100,9 +104,10 @@ export class App {
     this.loading.set(true);
     this.error.set(null);
     try {
+      const traceId = this.traceWorkItemId();
       const dataPromise = this.usingMockData()
-        ? Promise.resolve(structuredClone(MOCK_GRAPH))
-        : getDependencyGraph();
+        ? Promise.resolve(mockGraphFrom(traceId))
+        : getDependencyGraph(traceId ? { workitemId: traceId } : {});
       const [data, settings] = await Promise.all([dataPromise, loadDisplaySettings()]);
       if (seq !== this.requestSeq) {
         return;
@@ -120,6 +125,14 @@ export class App {
         this.loading.set(false);
       }
     }
+  }
+
+  protected onRetrace(workItemId: string): void {
+    if (!workItemId || workItemId === this.source()?.rootId) {
+      return;
+    }
+    this.traceWorkItemId.set(workItemId);
+    void this.reload();
   }
 
   protected onToggleExpand(key: string): void {

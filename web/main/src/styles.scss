@@ -16,3 +16,10 @@ app-root {
 * {
   box-sizing: border-box;
 }
+
+/* 菜单挂在画布外，用缩放变量跟画面一起变小。 */
+.trace-menu-panel {
+  width: max-content !important;
+  min-width: 0 !important;
+  zoom: var(--trace-menu-scale, 1);
+}

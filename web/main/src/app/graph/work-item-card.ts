@@ -65,10 +65,9 @@ class WorkItemCardNode extends HTML {
       this.view = createComponent(WorkItemCard, { environmentInjector });
       applicationRef.attachView(this.view.hostView);
     }
-    const states = new Set(this.context.graph.getElementState(this.id) ?? []);
     this.view.setInput('item', item);
     this.view.setInput('marks', this.marksOf());
-    this.view.setInput('root', states.has('root'));
+    this.view.setInput('root', this.context.graph.getNodeData(this.id)?.data?.['root'] === true);
     this.view.changeDetectorRef.detectChanges();
 
     super.render(

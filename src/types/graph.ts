@@ -7,6 +7,8 @@ export const KNOWN_RELATION_TYPES = [
     "causedBy",
     "relate",
     "duplicate",
+    "clone",
+    "clonedBy",
 ] as const;
 
 export type KnownRelationType = (typeof KNOWN_RELATION_TYPES)[number];

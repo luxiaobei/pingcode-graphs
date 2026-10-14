@@ -16,15 +16,12 @@ const DEFAULT_RELATION_TYPES: RelationType[] = [...KNOWN_RELATION_TYPES];
 const RELATION_LABELS: Record<string, string> = {
     block: "阻塞",
     blockedBy: "被阻塞",
-    cause: "导致",
-    causedBy: "由…导致",
+    cause: "原因",
+    causedBy: "结果",
     relate: "关联",
     duplicate: "重复",
-};
-
-const INVERSE_TO_CANONICAL: Record<string, string> = {
-    blockedBy: "block",
-    causedBy: "cause",
+    clone: "拷贝",
+    clonedBy: "副本",
 };
 
 function normalizeWorkItem(raw: GraphWorkItem | undefined, fallbackId?: string): GraphWorkItem | null {
@@ -56,22 +53,13 @@ function toDirectedEdge(
         return null;
     }
 
-    let from = sourceId;
-    let to = related.id;
-    let canonicalType = INVERSE_TO_CANONICAL[relationType] ?? relationType;
-
-    if (relationType === "blockedBy" || relationType === "causedBy") {
-        from = related.id;
-        to = sourceId;
-    }
-
-    const edgeId = relation.id ?? `${from}:${canonicalType}:${to}`;
+    const edgeId = relation.id ?? `${sourceId}:${relationType}:${related.id}`;
     return {
         id: edgeId,
-        source: from,
-        target: to,
-        relationType: canonicalType,
-        label: RELATION_LABELS[canonicalType] ?? RELATION_LABELS[relationType] ?? canonicalType,
+        source: sourceId,
+        target: related.id,
+        relationType,
+        label: RELATION_LABELS[relationType] ?? relationType,
     };
 }
 

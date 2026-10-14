@@ -1,4 +1,4 @@
-import { GRAPH_NODE_SIZE, RELATION_STYLE } from '../constants/graph.constants';
+import { GRAPH_NODE_SIZE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEdge, GraphEntity } from '../entities/graph.entity';
 
 /** 左右分支和父卡片之间的空白，留给关系名。 */
@@ -41,10 +41,6 @@ interface RelationGroup {
 interface StackItem {
   placed: Placed;
   gapAfter: number;
-}
-
-function canonicalType(type: string): string {
-  return RELATION_STYLE[type]?.canonical ?? type;
 }
 
 function cardExtent(): Extent {
@@ -93,7 +89,7 @@ function findLink(
       (edge.target === parentId && edge.source === childId),
   );
   if (direct) {
-    return canonicalType(direct.relationType);
+    return direct.relationType;
   }
   for (const edge of edges) {
     const hubId = edge.source === parentId ? edge.target : edge.target === parentId ? edge.source : undefined;
@@ -107,7 +103,7 @@ function findLink(
         (item.target === hubId && item.source === childId),
     );
     if (linked) {
-      return canonicalType(hub.relationHub);
+      return hub.relationHub;
     }
   }
   return 'relate';

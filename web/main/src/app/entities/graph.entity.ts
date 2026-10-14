@@ -93,5 +93,4 @@ export interface GetDependencyGraphPayload {
 export interface RelationStyle {
   label: string;
   color: string;
-  canonical?: string;
 }

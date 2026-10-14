@@ -6,6 +6,8 @@ export const DEFAULT_RELATION_TYPES = [
   'blockedBy',
   'cause',
   'causedBy',
+  'clone',
+  'clonedBy',
   'relate',
   'relate:work_item',
   'relate:idea',
@@ -15,7 +17,6 @@ export const DEFAULT_RELATION_TYPES = [
   'duplicate',
   'depend',
   'mention',
-  'clone',
   'parent',
   'child',
 ] as const;

@@ -15,11 +15,6 @@ export function relationLabel(type: RelationType, fallback?: string): string {
   return RELATION_STYLE[type]?.label ?? fallback ?? type;
 }
 
-/** 反向关系归到规范类型，如 blockedBy → block */
-export function toCanonicalType(type: RelationType): string {
-  return RELATION_STYLE[type]?.canonical ?? type;
-}
-
 /** 节点类型名 */
 export function entityTypeName(item: GraphEntity | null | undefined): string {
   if (!item?.type) {
@@ -76,9 +71,7 @@ export function filterGraphByDisplaySettings(
   source: DependencyGraph,
   settings: readonly DisplaySetting[],
 ): DependencyGraph {
-  const edges = source.edges.filter((edge) =>
-    isRelationShown(settings, toCanonicalType(edge.relationType)),
-  );
+  const edges = source.edges.filter((edge) => isRelationShown(settings, edge.relationType));
   return keepEdgeNodes(source, edges);
 }
 

@@ -43,30 +43,32 @@ interface KgDeepRelationResult {
   edges?: KgEdgeRecord[];
 }
 
-/** 一次查出的出边，对应 pc-kg-edge 中的关联类边。 */
+/** 出边类型。parent_of 在 toEdge 里按方向拆成父/子。 */
 const OUTGOING_EDGE_TYPES = [
   'blocks',
+  'blocked_by',
   'causes',
+  'caused_by',
+  'clones',
+  'cloned_by',
   'depends_on',
   'duplicates',
   'mentions',
-  'clones',
   'relates',
   'parent_of',
 ] as const;
 
-/**
- * 图谱边类型 → 图上的关系类型。
- * 与已有筛选值对齐：blocks → block，mentions → mention。
- * parent_of 的方向是子项指向父项，在 toEdge 里分成「父」和「子」。
- */
+/** 图谱边 type → 图上关系类型。 */
 const RELATION_BY_EDGE: Record<string, string> = {
   blocks: 'block',
+  blocked_by: 'blockedBy',
   causes: 'cause',
+  caused_by: 'causedBy',
+  clones: 'clone',
+  cloned_by: 'clonedBy',
   depends_on: 'depend',
   duplicates: 'duplicate',
   mentions: 'mention',
-  clones: 'clone',
   relates: 'relate',
 };
 
@@ -91,10 +93,10 @@ const KIND_NAVIGATION: Record<string, string> = {
   product: 'product',
 };
 
-/** 出边只取直接关系，其中 parent_of 是当前项指向的直属父项。 */
+/** 关联 / 父项：只取直接出边。 */
 const RELATION_DEPTH = 1;
 
-/** 子项经 parent_of 指向父项。incoming 顺着这条边展开子树。 */
+/** 子项：沿 parent_of 入边展开。 */
 const CHILD_DEPTH = 5;
 
 /** 按当前工作项拉取真实关系图。 */
@@ -324,15 +326,14 @@ function toEdge(edge: KgEdgeRecord, kindById: ReadonlyMap<string, string>, rootI
   if (!edge.id || !edge.from_id || !edge.to_id || !edge.type) {
     return null;
   }
+  // parent_of：子 → 父。根是子则展示「父工作项」，根是父则展示「子工作项」。
   if (edge.type === 'parent_of') {
-    const toParent = edge.from_id === rootId;
-    const source = toParent ? edge.from_id : edge.to_id;
-    const target = toParent ? edge.to_id : edge.from_id;
-    const relationType = toParent ? 'parent' : 'child';
+    const fromRoot = edge.from_id === rootId;
+    const relationType = fromRoot ? 'parent' : 'child';
     return {
       id: edge.id,
-      source,
-      target,
+      source: fromRoot ? edge.from_id : edge.to_id,
+      target: fromRoot ? edge.to_id : edge.from_id,
       relationType,
       label: relationLabel(relationType),
     };

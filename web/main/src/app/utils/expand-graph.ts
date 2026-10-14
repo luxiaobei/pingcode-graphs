@@ -1,4 +1,5 @@
-import type { DependencyGraph, GraphEdge, GraphEntity } from '../entities/graph.entity';
+import type { DependencyGraph, GraphEdge, RelationFold } from '../entities/graph.entity';
+import { RELATION_STYLE } from '../constants/graph.constants';
 
 /** 无向邻接表：source/target 互为邻居 */
 function neighborMap(edges: GraphEdge[]): Map<string, Set<string>> {
@@ -53,10 +54,19 @@ function attachHopDepth(graph: DependencyGraph): DependencyGraph {
 interface OutwardStep {
   hubId?: string;
   nodeId: string;
+  relationType: string;
+}
+
+function canonicalType(type: string): string {
+  return RELATION_STYLE[type]?.canonical ?? type;
+}
+
+function relationKey(parentId: string, relationType: string): string {
+  return `${parentId}::${relationType}`;
 }
 
 /**
- * 未收起的子层级全部展示。关系分叉点不显示 +/-，展开收起落在工作项上。
+ * 未收起的关系全部展示。收起按「父节点 + 关系类型」，不影响这张卡片上的其他关系。
  */
 export function buildVisibleGraph(
   source: DependencyGraph,
@@ -67,6 +77,15 @@ export function buildVisibleGraph(
   const neighbors = neighborMap(graph.edges);
   const depthOf = (id: string) => nodeById.get(id)?.depth ?? Number.MAX_SAFE_INTEGER;
 
+  const edgeType = (parentId: string, childId: string): string => {
+    const edge = graph.edges.find(
+      (item) =>
+        (item.source === parentId && item.target === childId) ||
+        (item.target === parentId && item.source === childId),
+    );
+    return canonicalType(edge?.relationType ?? 'relate');
+  };
+
   const outward = (id: string): OutwardStep[] => {
     const steps: OutwardStep[] = [];
     for (const neighbor of neighbors.get(id) ?? []) {
@@ -75,19 +94,20 @@ export function buildVisibleGraph(
         continue;
       }
       if (node.relationHub) {
+        const relationType = canonicalType(node.relationHub);
         for (const child of neighbors.get(neighbor) ?? []) {
           if (child !== id && depthOf(child) > depthOf(id)) {
-            steps.push({ hubId: neighbor, nodeId: child });
+            steps.push({ hubId: neighbor, nodeId: child, relationType });
           }
         }
         continue;
       }
       if (depthOf(neighbor) > depthOf(id)) {
-        steps.push({ nodeId: neighbor });
+        steps.push({ nodeId: neighbor, relationType: edgeType(id, neighbor) });
       }
     }
     return steps.sort(
-      (a, b) => depthOf(a.nodeId) - depthOf(b.nodeId) || a.nodeId.localeCompare(b.nodeId),
+      (a, b) => depthOf(a.nodeId) - depthOf(b.nodeId) || a.relationType.localeCompare(b.relationType) || a.nodeId.localeCompare(b.nodeId),
     );
   };
 
@@ -96,10 +116,10 @@ export function buildVisibleGraph(
   const queue = [graph.rootId];
   while (queue.length) {
     const current = queue.shift()!;
-    if (collapsedIds.has(current)) {
-      continue;
-    }
     for (const step of outward(current)) {
+      if (collapsedIds.has(relationKey(current, step.relationType))) {
+        continue;
+      }
       if (step.hubId) {
         visibleIds.add(step.hubId);
       }
@@ -112,15 +132,20 @@ export function buildVisibleGraph(
     }
   }
 
-  const expandToggleOf = (id: string): GraphEntity['expandToggle'] => {
-    const children = outward(id);
-    if (!children.length) {
+  const foldsOf = (id: string): RelationFold[] | undefined => {
+    const groups = new Map<string, number>();
+    for (const step of outward(id)) {
+      groups.set(step.relationType, (groups.get(step.relationType) ?? 0) + 1);
+    }
+    if (!groups.size) {
       return undefined;
     }
-    if (collapsedIds.has(id) || children.some((step) => !visibleIds.has(step.nodeId))) {
-      return 'collapsed';
-    }
-    return 'expanded';
+    return [...groups.entries()].map(([relationType, count]) => ({
+      key: relationKey(id, relationType),
+      relationType,
+      count,
+      expanded: !collapsedIds.has(relationKey(id, relationType)),
+    }));
   };
 
   return {
@@ -130,7 +155,7 @@ export function buildVisibleGraph(
       .filter((node) => visibleIds.has(node.id))
       .map((node) => ({
         ...node,
-        expandToggle: node.relationHub ? undefined : expandToggleOf(node.id),
+        folds: node.relationHub ? undefined : foldsOf(node.id),
         revealedByAnchorId: parentOf.get(node.id),
       })),
     edges: graph.edges.filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target)),

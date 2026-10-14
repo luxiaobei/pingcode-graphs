@@ -487,7 +487,18 @@ export class GraphCanvas {
 
     // setData 前判断：之后 getNodeData 已是新数据，分不清是否首次渲染
     const firstPaint = !(graph.getNodeData() ?? []).length;
-    this.seedPinnedPositions(positions);
+    // 思维导图相对 (0,0) 布局，而默认相机看画布中心；首次落位时整体挪到画布中心
+    const [width, height] = graph.getSize();
+    const layout =
+      options.fitView && width > 0 && height > 0
+        ? new Map(
+            [...positions].map(([id, pos]) => [
+              id,
+              { ...pos, x: pos.x + width / 2, y: pos.y + height / 2 },
+            ]),
+          )
+        : positions;
+    this.seedPinnedPositions(layout);
     this.applyGraphData(data, this.pinnedPositions);
 
     if (firstPaint) {

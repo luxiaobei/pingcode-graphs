@@ -1,4 +1,5 @@
 import { invoke, view } from '@pc-nexus/bridge';
+import { KIND_ICON_STYLE } from '../constants/graph.constants';
 import type { DependencyGraph, GetDependencyGraphPayload, GraphEdge, GraphEntity } from '../entities/graph.entity';
 import { relationLabel } from '../utils/graph.util';
 
@@ -297,6 +298,7 @@ function toEntity(reached: KgReachedNode): GraphEntity | null {
     return null;
   }
   const detail = node.detail;
+  const kindIcon = node.kind ? KIND_ICON_STYLE[node.kind] : undefined;
   return {
     id,
     identifier: node.identifier,
@@ -315,8 +317,8 @@ function toEntity(reached: KgReachedNode): GraphEntity | null {
             avatar: detail.assignee_avatar,
           }
         : undefined,
-    icon: detail?.type_icon,
-    iconColor: detail?.type_color,
+    icon: kindIcon?.icon ?? detail?.type_icon,
+    iconColor: kindIcon?.color ?? detail?.type_color,
     navigationTarget: node.kind ? KIND_NAVIGATION[node.kind] : undefined,
     depth: reached.depth,
   };

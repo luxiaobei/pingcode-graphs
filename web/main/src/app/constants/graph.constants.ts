@@ -20,11 +20,14 @@ export const GRAPH_FIT_SETTLE_MS = 300;
 
 export const DEFAULT_EDGE_COLOR = '#94a3b8';
 
+/** 关系展示名与颜色。正反向各自独立。 */
 export const RELATION_STYLE: Record<string, RelationStyle> = {
   block: { label: '阻塞', color: '#d64545' },
-  blockedBy: { label: '被阻塞', color: '#d64545', canonical: 'block' },
-  cause: { label: '导致', color: '#c47a1a' },
-  causedBy: { label: '由…导致', color: '#c47a1a', canonical: 'cause' },
+  blockedBy: { label: '被阻塞', color: '#d64545' },
+  cause: { label: '原因', color: '#c47a1a' },
+  causedBy: { label: '结果', color: '#c47a1a' },
+  clone: { label: '拷贝', color: '#475569' },
+  clonedBy: { label: '副本', color: '#475569' },
   relate: { label: '关联', color: '#3b6fd9' },
   'relate:work_item': { label: '关联工作项', color: '#3b6fd9' },
   'relate:idea': { label: '关联产品需求', color: '#7c3aed' },
@@ -34,7 +37,6 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
   duplicate: { label: '重复', color: '#6b7280' },
   depend: { label: '依赖', color: '#0f766e' },
   mention: { label: '提及', color: '#7c3aed' },
-  clone: { label: '克隆', color: '#475569' },
   parent: { label: '父工作项', color: '#0369a1' },
   child: { label: '子工作项', color: '#0369a1' },
 };

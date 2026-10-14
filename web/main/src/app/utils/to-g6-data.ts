@@ -140,13 +140,8 @@ function junction(
   return side === 'left' || side === 'right' ? { x: fork, y: center } : { x: center, y: fork };
 }
 
-function canonicalType(type: string): string {
-  return RELATION_STYLE[type]?.canonical ?? type;
-}
-
 function typeLabel(type: string): string {
-  const canonical = canonicalType(type);
-  return RELATION_STYLE[canonical]?.label ?? RELATION_STYLE[type]?.label ?? type;
+  return RELATION_STYLE[type]?.label ?? type;
 }
 
 interface LaneGroup {
@@ -168,7 +163,7 @@ function trunkEdges(
     if (child.relationHub || !child.revealedByAnchorId) {
       continue;
     }
-    const relationType = canonicalType(relationOf(graph, nodes, child.revealedByAnchorId, child.id));
+    const relationType = relationOf(graph, nodes, child.revealedByAnchorId, child.id);
     const member: TrunkMember = {
       parentId: child.revealedByAnchorId,
       childId: child.id,

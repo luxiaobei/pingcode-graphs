@@ -1,19 +1,23 @@
 import type { EventHandler } from "@pc-nexus/event";
 import { ces } from "@pc-nexus/storage";
 import { KG_NODE_ENTITY_NAME, KG_NODE_KIND, kgNodeId, type KgNode } from "../models/pc-kg-node.js";
-import { createKgEdge, KG_EDGE_ENTITY_NAME, KG_EDGE_TYPE, type KgEdge } from "../models/pc-kg-edge.js";
+import { createKgEdge, KG_EDGE_ENTITY_NAME, KG_EDGE_TYPE, type KgEdge, type KgEdgeType } from "../models/pc-kg-edge.js";
 import { linkKindMap } from "../commons/common.js";
 
-const edgeTypeMap = {
-    "relate": KG_EDGE_TYPE.relates,
-    "duplicate": KG_EDGE_TYPE.duplicates,
-    "cause": KG_EDGE_TYPE.causes,
-    "block": KG_EDGE_TYPE.blocks,
-    "mention": KG_EDGE_TYPE.mentions,
-    "clone": KG_EDGE_TYPE.clones,
-    "caused_by": KG_EDGE_TYPE.causedBy,
-    "blocked_by": KG_EDGE_TYPE.blockedBy,
-    "cloned_by": KG_EDGE_TYPE.clonedBy,
+/** relation_type.category → 图谱边类型（含 camelCase / snake_case）。 */
+const edgeTypeMap: Record<string, KgEdgeType> = {
+    relate: KG_EDGE_TYPE.relates,
+    duplicate: KG_EDGE_TYPE.duplicates,
+    mention: KG_EDGE_TYPE.mentions,
+    block: KG_EDGE_TYPE.blocks,
+    blocked_by: KG_EDGE_TYPE.blockedBy,
+    blockedBy: KG_EDGE_TYPE.blockedBy,
+    cause: KG_EDGE_TYPE.causes,
+    caused_by: KG_EDGE_TYPE.causedBy,
+    causedBy: KG_EDGE_TYPE.causedBy,
+    clone: KG_EDGE_TYPE.clones,
+    cloned_by: KG_EDGE_TYPE.clonedBy,
+    clonedBy: KG_EDGE_TYPE.clonedBy,
 };
 
 export const onLinkAddedHandler: EventHandler = async (context, event) => {

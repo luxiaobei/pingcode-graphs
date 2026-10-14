@@ -133,6 +133,9 @@ export function sideOfType(type: string): Side {
   if (type === 'child') {
     return 'bottom';
   }
+  if (type === 'parent') {
+    return 'top';
+  }
   if ((LEFT_TYPES as readonly string[]).includes(type)) {
     return 'left';
   }
@@ -152,7 +155,7 @@ export function groupRank(type: string, side: Side): number {
     return index === -1 ? RIGHT_TYPES.length : index;
   }
   if (side === 'top') {
-    return type === 'depend' ? 0 : 1;
+    return type === 'depend' || type === 'parent' ? 0 : 1;
   }
   return type === 'child' ? 0 : 1;
 }

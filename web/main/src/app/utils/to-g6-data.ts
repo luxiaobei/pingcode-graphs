@@ -219,10 +219,14 @@ function trunkEdges(
       const center = axisCenter(kids, side);
       const fork = forkAt(kids, side);
       const labelOwner = closestMember(parent, group.placed, side);
-      const straight = group.members[0]?.relationType === 'child';
-      const labelCenter = straight ? (side === 'left' || side === 'right' ? parent.y : parent.x) : center;
-      const parentId = group.members[0]?.parentId ?? '';
       const relationType = group.members[0]?.relationType ?? '';
+      const straight = relationType === 'child';
+      const alone =
+        relationType === 'parent' &&
+        kids.length === 1 &&
+        onAxis(parent, kids[0], side);
+      const labelCenter = straight || alone ? (side === 'left' || side === 'right' ? parent.y : parent.x) : center;
+      const parentId = group.members[0]?.parentId ?? '';
       forks.set(`${parentId}::${relationType}`, junction(parent, side, center, fork, straight));
       for (const item of group.placed) {
         const showLabel = item.member.childId === labelOwner;
@@ -231,11 +235,11 @@ function trunkEdges(
           : routeOf(parent, item.child, side, spine, fork, center);
         const style: EdgeData['style'] = {
           controlPoints,
-          labelPlacement: showLabel ? labelRatio(parent, item.child, side, controlPoints, labelCenter) : 'center',
-          labelOffsetX: !straight && showLabel && (side === 'top' || side === 'bottom') ? 16 : 0,
-          labelOffsetY: !straight && showLabel && (side === 'left' || side === 'right') ? -12 : 0,
+          labelPlacement: showLabel ? labelRatio(parent, item.child, side, controlPoints, labelCenter, straight) : 'center',
+          labelOffsetX: !straight && !alone && showLabel && (side === 'top' || side === 'bottom') ? 16 : 0,
+          labelOffsetY: !straight && !alone && showLabel && (side === 'left' || side === 'right') ? -12 : 0,
         };
-        if (straight && showLabel) {
+        if ((straight || alone) && showLabel) {
           style.labelTextAlign = 'center';
           style.labelTextBaseline = 'middle';
         }
@@ -404,6 +408,13 @@ function spineAt(
   return Math.max(y, fork + 24);
 }
 
+function onAxis(parent: GraphNodePosition, child: GraphNodePosition | undefined, side: Side): boolean {
+  if (!child) {
+    return false;
+  }
+  return side === 'left' || side === 'right' ? Math.abs(child.y - parent.y) < 1 : Math.abs(child.x - parent.x) < 1;
+}
+
 function axisCenter(children: GraphNodePosition[], side: Side): number {
   if (side === 'left' || side === 'right') {
     const ys = children.map((child) => child.y);
@@ -501,15 +512,21 @@ function enterPoint(child: GraphNodePosition, side: Side): [number, number] {
   return [child.x, child.y + HALF_H];
 }
 
-/** 名字落在类型线上，不落在卡片那条分叉上。 */
+/**
+ * 名字落在类型线上。
+ * 子工作项用从父卡片直下来的那一段。
+ * 其他关系在中线和类型线重合时，避开贴着卡片的短段。
+ */
 function labelRatio(
   parent: GraphNodePosition,
   child: GraphNodePosition,
   side: Side,
   points: [number, number][],
   center: number,
+  stem: boolean,
 ): number {
-  const knots = [leavePoint(parent, side), ...points, enterPoint(child, side)];
+  const leave = leavePoint(parent, side);
+  const knots = [leave, ...points, enterPoint(child, side)];
   const lengths: number[] = [];
   let total = 0;
   for (let index = 1; index < knots.length; index += 1) {
@@ -520,6 +537,8 @@ function labelRatio(
   if (total < 1) {
     return 0.5;
   }
+  const ratioAt = (cursor: number, span: number) => Math.min(0.92, Math.max(0.08, (cursor + span / 2) / total));
+  let onCard: number | undefined;
   let cursor = 0;
   for (let index = 0; index < lengths.length; index += 1) {
     const from = knots[index];
@@ -529,10 +548,18 @@ function labelRatio(
       side === 'left' || side === 'right'
         ? Math.abs(from[1] - center) < 1 && Math.abs(to[1] - center) < 1 && span > 8
         : Math.abs(from[0] - center) < 1 && Math.abs(to[0] - center) < 1 && span > 8;
-    if (onType) {
-      return Math.min(0.92, Math.max(0.08, (cursor + span / 2) / total));
+    if (onType && from && to) {
+      const ratio = ratioAt(cursor, span);
+      if (stem) {
+        return ratio;
+      }
+      const fromCard = Math.abs(from[0] - leave[0]) < 1 && Math.abs(from[1] - leave[1]) < 1;
+      if (!fromCard) {
+        return ratio;
+      }
+      onCard ??= ratio;
     }
     cursor += span;
   }
-  return 0.45;
+  return onCard ?? 0.45;
 }

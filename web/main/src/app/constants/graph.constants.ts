@@ -35,6 +35,7 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
   depend: { label: '依赖', color: '#0f766e' },
   mention: { label: '提及', color: '#7c3aed' },
   clone: { label: '克隆', color: '#475569' },
+  parent: { label: '父工作项', color: '#0369a1' },
   child: { label: '子工作项', color: '#0369a1' },
 };
 

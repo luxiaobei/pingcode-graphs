@@ -52,12 +52,13 @@ const OUTGOING_EDGE_TYPES = [
   'mentions',
   'clones',
   'relates',
+  'parent_of',
 ] as const;
 
 /**
  * 图谱边类型 → 图上的关系类型。
  * 与已有筛选值对齐：blocks → block，mentions → mention。
- * parent_of 画成从父项指向子项，所以关系类型是 child。
+ * parent_of 的方向是子项指向父项，在 toEdge 里分成「父」和「子」。
  */
 const RELATION_BY_EDGE: Record<string, string> = {
   blocks: 'block',
@@ -67,7 +68,6 @@ const RELATION_BY_EDGE: Record<string, string> = {
   mentions: 'mention',
   clones: 'clone',
   relates: 'relate',
-  parent_of: 'child',
 };
 
 /** 关联按对端 kind 分成不同关系，避免工作项和产品需求混在一起。 */
@@ -91,10 +91,10 @@ const KIND_NAVIGATION: Record<string, string> = {
   product: 'product',
 };
 
-/** 关联出边只取直接关系。 */
+/** 出边只取直接关系，其中 parent_of 是当前项指向的直属父项。 */
 const RELATION_DEPTH = 1;
 
-/** 子项经 parent_of 指向父项；incoming 展开子树。 */
+/** 子项经 parent_of 指向父项。incoming 顺着这条边展开子树。 */
 const CHILD_DEPTH = 5;
 
 /** 按当前工作项拉取真实关系图。 */
@@ -177,7 +177,7 @@ function toDependencyGraph(
 
   const edges = new Map<string, GraphEdge>();
   for (const edge of result.edges ?? []) {
-    const mapped = toEdge(edge, kindById);
+    const mapped = toEdge(edge, kindById, rootId);
     if (!mapped) {
       continue;
     }
@@ -320,19 +320,29 @@ function toEntity(reached: KgReachedNode): GraphEntity | null {
   };
 }
 
-function toEdge(edge: KgEdgeRecord, kindById: ReadonlyMap<string, string>): GraphEdge | null {
+function toEdge(edge: KgEdgeRecord, kindById: ReadonlyMap<string, string>, rootId: string): GraphEdge | null {
   if (!edge.id || !edge.from_id || !edge.to_id || !edge.type) {
     return null;
   }
+  if (edge.type === 'parent_of') {
+    const toParent = edge.from_id === rootId;
+    const source = toParent ? edge.from_id : edge.to_id;
+    const target = toParent ? edge.to_id : edge.from_id;
+    const relationType = toParent ? 'parent' : 'child';
+    return {
+      id: edge.id,
+      source,
+      target,
+      relationType,
+      label: relationLabel(relationType),
+    };
+  }
   const mapped = RELATION_BY_EDGE[edge.type] ?? edge.type;
-  const childEdge = mapped === 'child';
-  const source = childEdge ? edge.to_id : edge.from_id;
-  const target = childEdge ? edge.from_id : edge.to_id;
-  const relationType = mapped === 'relate' ? relateType(target, kindById) : mapped;
+  const relationType = mapped === 'relate' ? relateType(edge.to_id, kindById) : mapped;
   return {
     id: edge.id,
-    source,
-    target,
+    source: edge.from_id,
+    target: edge.to_id,
     relationType,
     label: relationLabel(relationType),
   };

@@ -2,6 +2,7 @@ import type { NexusAppContext } from "@pc-nexus/core";
 import { ces } from "@pc-nexus/storage";
 import { KG_EDGE_ENTITY_NAME, type KgEdge, type KgEdgeType } from "../models/pc-kg-edge.js";
 import { KG_NODE_ENTITY_NAME, type KgNode } from "../models/pc-kg-node.js";
+import { KG_VIEW_ENTITY_NAME, kgViewId, type KgView } from "../models/pc-kg-view.js";
 
 /** outgoing：from → to；incoming：to → from；both：不区分存储方向。 */
 export type KgRelationDirection = "outgoing" | "incoming" | "both";
@@ -26,6 +27,15 @@ export interface GetDeepRelationPayload {
     type: KgEdgeType | KgEdgeType[];
     depth: number;
     direction?: KgRelationDirection;
+}
+
+export interface SaveViewPositionPayload {
+    nodeId: string;
+    position: unknown;
+}
+
+export interface GetViewPositionPayload {
+    nodeId: string;
 }
 
 function neighborId(edge: KgEdge, frontier: ReadonlySet<string>, direction: KgRelationDirection): string | undefined {
@@ -160,6 +170,60 @@ export class KgService {
             edges: [...edges.values()].sort((left, right) => left.id.localeCompare(right.id)),
         };
     }
+
+    async saveViewPosition(context: NexusAppContext, nodeId: string, position: unknown): Promise<void> {
+        const userId = requireUserId(context);
+        if (!nodeId) {
+            throw new Error("Node id is required");
+        }
+        if (!isPlainObject(position)) {
+            throw new Error("Position must be an object");
+        }
+
+        const existing = await findUserView(userId, nodeId);
+        if (existing) {
+            await ces.entity<KgView>(KG_VIEW_ENTITY_NAME).update((cb) => {
+                cb.field("user_id").eq(userId);
+                cb.field("node_id").eq(nodeId);
+            }, { position });
+            return;
+        }
+        await ces.entity(KG_VIEW_ENTITY_NAME).insert({
+            id: kgViewId(userId, nodeId),
+            user_id: userId,
+            node_id: nodeId,
+            position,
+        });
+    }
+
+    async getViewPosition(context: NexusAppContext, nodeId: string): Promise<Record<string, unknown> | null> {
+        const userId = requireUserId(context);
+        if (!nodeId) {
+            throw new Error("Node id is required");
+        }
+        const view = await findUserView(userId, nodeId);
+        return view && isPlainObject(view.position) ? view.position : null;
+    }
+}
+
+function requireUserId(context: NexusAppContext): string {
+    const userId = context.user?.id;
+    if (!userId) {
+        throw new Error("User id is required");
+    }
+    return userId;
+}
+
+async function findUserView(userId: string, nodeId: string): Promise<KgView | undefined> {
+    const views = await ces.entity<KgView>(KG_VIEW_ENTITY_NAME).find((cb) => {
+        cb.field("user_id").eq(userId);
+        cb.field("node_id").eq(nodeId);
+    });
+    return views[0];
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+    return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
 export const kgService = new KgService();

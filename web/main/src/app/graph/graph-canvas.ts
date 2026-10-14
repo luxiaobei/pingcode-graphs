@@ -103,18 +103,16 @@ export class GraphCanvas {
   /** 保存入口，功能后续再接。 */
   protected save(): void {}
 
-  /** 按思维导图重新排：根在中间，上下左右各自居中。 */
+  /**
+   * 一键整理：按思维导图规则重排（根居中，左需求/工单、右目标/测试、上下其他关系）。
+   * 初次进入与拖拽打乱后共用这套坐标。
+   */
   protected organize(): void {
     const data = untracked(() => this.graph());
-    const graph = this.liveGraph();
-    if (!data?.nodes.length || !graph) {
+    if (!data?.nodes.length || !this.liveGraph()) {
       return;
     }
-    this.applyArranged(data);
-    void graph
-      .draw()
-      .then(() => this.fit())
-      .catch(() => undefined);
+    void this.layoutToMindMap(data, { fitView: true }).catch(() => undefined);
   }
 
   protected fit(): void {
@@ -292,27 +290,20 @@ export class GraphCanvas {
     if (positions && this.sameVisibleNodes(data)) {
       this.applyGraphData(data, positions);
       await this.g6.draw();
+    } else if (positions) {
+      // 展开/收起后节点有增减：按思维导图重排，不强制适应画布以免打断当前视口
+      await this.layoutToMindMap(data, { fitView: false });
     } else {
-      this.applyArranged(data);
-      if (positions) {
-        await this.g6.draw();
-      } else {
-        await this.g6.render();
-        if (seq !== this.renderSeq) {
-          return;
-        }
-        this.applyGraphData(data, this.pinnedPositions);
-        await this.g6.draw();
-        if (seq !== this.renderSeq) {
-          return;
-        }
-        this.fit();
-        this.fitTimer = window.setTimeout(() => {
-          if (seq === this.renderSeq) {
-            this.fit();
-          }
-        }, GRAPH_FIT_SETTLE_MS);
+      // 初次进入 / 换根：初始化思维导图位置并适应画布
+      await this.layoutToMindMap(data, { fitView: true });
+      if (seq !== this.renderSeq) {
+        return;
       }
+      this.fitTimer = window.setTimeout(() => {
+        if (seq === this.renderSeq) {
+          this.fit();
+        }
+      }, GRAPH_FIT_SETTLE_MS);
     }
 
     const graph = this.liveGraph();
@@ -328,13 +319,50 @@ export class GraphCanvas {
       .catch(() => undefined);
   }
 
-  private applyArranged(data: DependencyGraph): void {
-    const arranged = arrangeGraph(data);
+  /**
+   * 写入思维导图坐标并落到画布。
+   * 初次进入走 render；已有画布节点用 translateElementTo 强制归位
+   *（打乱后仅 setData+draw 往往不会更新坐标）。
+   */
+  private async layoutToMindMap(
+    data: DependencyGraph,
+    options: { fitView: boolean },
+  ): Promise<void> {
+    const graph = this.liveGraph();
+    if (!graph) {
+      return;
+    }
+
+    // setData 前判断：之后 getNodeData 已是新数据，分不清是否首次渲染
+    const firstPaint = !(graph.getNodeData() ?? []).length;
+    this.seedPinnedPositions(arrangeGraph(data));
+    this.applyGraphData(data, this.pinnedPositions);
+
+    if (firstPaint) {
+      await graph.render();
+      this.applyGraphData(data, this.pinnedPositions);
+      await graph.draw();
+    } else {
+      await graph.draw();
+      const moves = Object.fromEntries(
+        [...this.pinnedPositions].map(([id, pos]) => [id, [pos.x, pos.y] as [number, number]]),
+      );
+      if (Object.keys(moves).length) {
+        await graph.translateElementTo(moves, false).catch(() => undefined);
+      }
+      await graph.draw();
+    }
+
+    if (options.fitView) {
+      this.fit();
+    }
+  }
+
+  private seedPinnedPositions(arranged: ReadonlyMap<string, GraphNodePosition>): void {
     this.pinnedPositions.clear();
     for (const [id, pos] of arranged) {
       this.pinnedPositions.set(id, pos);
     }
-    this.applyGraphData(data, this.pinnedPositions);
   }
 
   private clearFitTimer(): void {

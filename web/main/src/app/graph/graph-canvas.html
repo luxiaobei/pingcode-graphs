@@ -2,7 +2,12 @@
   <div #g6Host class="g6-host"></div>
   <div class="canvas-tools">
     <div class="canvas-toolbar" role="toolbar" aria-label="画布操作">
-      <thy-action thyIcon="aim" thyTooltip="定位" thyTooltipPlacement="top" (click)="locate()"></thy-action>
+      <thy-action
+        thyIcon="aim"
+        thyTooltip="定位"
+        thyTooltipPlacement="top"
+        (click)="locate()"
+      ></thy-action>
       <span class="canvas-toolbar__split"></span>
       <thy-action
         thyIcon="zoom-out"
@@ -35,7 +40,12 @@
       ></thy-action>
     </div>
     <div class="canvas-save">
-      <thy-action thyIcon="save" thyTooltip="保存" thyTooltipPlacement="top" (click)="save()"></thy-action>
+      <thy-action
+        thyIcon="save"
+        thyTooltip="保存"
+        thyTooltipPlacement="top"
+        (click)="save()"
+      ></thy-action>
     </div>
   </div>
 </div>

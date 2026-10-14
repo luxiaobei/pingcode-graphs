@@ -11,6 +11,9 @@ const edgeTypeMap = {
     "block": KG_EDGE_TYPE.blocks,
     "mention": KG_EDGE_TYPE.mentions,
     "clone": KG_EDGE_TYPE.clones,
+    "caused_by": KG_EDGE_TYPE.causedBy,
+    "blocked_by": KG_EDGE_TYPE.blockedBy,
+    "cloned_by": KG_EDGE_TYPE.clonedBy,
 };
 
 export const onLinkAddedHandler: EventHandler = async (context, event) => {
@@ -23,7 +26,10 @@ export const onLinkAddedHandler: EventHandler = async (context, event) => {
     });
     if (targetInfo["target_work_item"]) {
         toId = kgNodeId(KG_NODE_KIND.workItem, targetInfo["target_work_item"]?.["id"]);
-        type = edgeTypeMap[targetInfo["relation_type"]?.["category"]] ?? KG_EDGE_TYPE.relates;
+        if (!edgeTypeMap[targetInfo["relation_type"]?.["category"]]) {
+            return;
+        }
+        type = edgeTypeMap[targetInfo["relation_type"]?.["category"]];
     } else if (targetInfo["target_type"]) {
         toId = kgNodeId(linkKindMap[targetInfo["target_type"]]!, targetInfo["target"]["id"]);
     }
@@ -53,6 +59,9 @@ export const onLinkRemovedHandler: EventHandler = async (context, event) => {
     });
     if (originInfo["target_work_item"]) {
         toId = kgNodeId(KG_NODE_KIND.workItem, originInfo["target_work_item"]?.["id"]);
+        if (!edgeTypeMap[originInfo["relation_type"]?.["category"]]) {
+            return;
+        }
         type = edgeTypeMap[originInfo["relation_type"]?.["category"]] ?? KG_EDGE_TYPE.relates;
     } else if (originInfo["target_type"]) {
         toId = kgNodeId(linkKindMap[originInfo["target_type"]]!, originInfo["target"]["id"]);

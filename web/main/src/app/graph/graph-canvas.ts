@@ -13,10 +13,9 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { Graph, GraphEvent, type IElementEvent, NodeEvent } from '@antv/g6';
+import { Graph, GraphEvent, NodeEvent, type IElementEvent } from '@antv/g6';
 import { ThyAction } from 'ngx-tethys/action';
 import { ThyTooltipDirective } from 'ngx-tethys/tooltip';
-import { bindWorkItemCardRuntime } from './work-item-card';
 import {
   GRAPH_FIT_SETTLE_MS,
   GRAPH_OPTIONS,
@@ -24,17 +23,18 @@ import {
   GRAPH_ZOOM_STEP,
 } from '../constants/graph.constants';
 import type { DependencyGraph } from '../entities/graph.entity';
+import { arrangeGraph } from '../utils/arrange-graph';
 import {
   buildElementStates,
-  graphHostSize,
   foldKeyFromEvent,
+  graphHostSize,
   nodeItemFromEvent,
   sharpenHtmlCamera,
   snapshotGraphPositions,
 } from '../utils/g6-helpers';
-import { arrangeGraph } from '../utils/arrange-graph';
 import { openPivot } from '../utils/graph.util';
 import { toG6Data, type GraphNodePosition } from '../utils/to-g6-data';
+import { bindWorkItemCardRuntime } from './work-item-card';
 
 @Component({
   selector: 'app-graph-canvas',
@@ -97,8 +97,19 @@ export class GraphCanvas {
     }
   }
 
-  /** 定位入口，功能后续再接。 */
-  protected locate(): void {}
+  /** 定位到当前工作项（图根节点）并居中显示。 */
+  protected locate(): void {
+    const data = this.graph();
+    const graph = this.liveGraph();
+    const rootId = data?.rootId;
+    if (!graph || !rootId || !data?.nodes.some((node) => node.id === rootId)) {
+      return;
+    }
+    void graph
+      .focusElement(rootId, { duration: 300 })
+      .then(() => this.syncZoomPercent())
+      .catch(() => undefined);
+  }
 
   /** 保存入口，功能后续再接。 */
   protected save(): void {}
@@ -228,7 +239,9 @@ export class GraphCanvas {
   /** 展开收起会增减卡片。集合一致才保留拖拽位置，否则按整理规则重排。 */
   private sameVisibleNodes(data: DependencyGraph): boolean {
     const ids = data.nodes.filter((node) => !node.relationHub).map((node) => node.id);
-    return ids.length === this.pinnedPositions.size && ids.every((id) => this.pinnedPositions.has(id));
+    return (
+      ids.length === this.pinnedPositions.size && ids.every((id) => this.pinnedPositions.has(id))
+    );
   }
 
   private liveGraph(): Graph | null {
@@ -311,12 +324,7 @@ export class GraphCanvas {
       return;
     }
 
-    await graph
-      .setElementState(
-        buildElementStates(data),
-        false,
-      )
-      .catch(() => undefined);
+    await graph.setElementState(buildElementStates(data), false).catch(() => undefined);
   }
 
   /**

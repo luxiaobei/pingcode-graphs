@@ -18,8 +18,8 @@
     "@angular/forms": "^22.1.0",
     "@angular/platform-browser": "^22.1.0",
     "@antv/g6": "^5.1.1",
-    "@pc-nexus/bridge": "^0.5.0",
-    "@pc-nexus/capabilities": "^0.5.0",
+    "@pc-nexus/bridge": "^0.8.0",
+    "@pc-nexus/capabilities": "^0.8.0",
     "ngx-tethys": "^22.0.4",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"

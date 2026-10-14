@@ -10,11 +10,14 @@ export const KG_EDGE_TYPE = {
     releasedIn: "released_in", // 发布在，例如 workitem 发布在 release 中
     parentOf: "parent_of", // 父项，例如 workitem 父项是 parent workitem
     blocks: "blocks", // 阻塞
+    blockedBy: "blocked_by", // 被阻塞
     causes: "causes", // 导致
+    causedBy: "caused_by", // 被导致
     dependsOn: "depends_on", // 依赖
     duplicates: "duplicates", // 重复
     mentions: "mentions", // 提及
     clones: "clones", // 克隆
+    clonedBy: "cloned_by", // 被克隆
     relates: "relates", // 关联
 } as const;
 

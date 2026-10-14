@@ -11,6 +11,7 @@ export interface IdeaNodeDetail {
     real_date_begin_at?: number;
     real_date_end_at?: number;
     real_date_granularity?: string;
+    assignee_name?: string;
     assignee_avatar?: string;
 }
 
@@ -30,6 +31,7 @@ export interface IdeaNodeInput {
     realDateBeginAt?: number;
     realDateEndAt?: number;
     realDateGranularity?: string;
+    assigneeName?: string;
     assigneeAvatar?: string;
     sourceUpdatedAt?: number;
     syncedAt?: number;
@@ -49,6 +51,7 @@ export function createIdeaNode(input: IdeaNodeInput): IdeaKgNode {
     assignDefined(detail, "real_date_end_at", input.realDateEndAt);
     assignDefined(detail, "real_date_granularity", input.realDateGranularity);
     assignDefined(detail, "assignee_avatar", input.assigneeAvatar);
+    assignDefined(detail, "assignee_name", input.assigneeName);
 
     const title = [input.identifier, input.name].filter(Boolean).join(" ");
     return createKgNode(

@@ -23,7 +23,7 @@ function toTicketNode(ticketInfo: any) {
         solution: ticketInfo["solution"]?.["name"],
         estimatedAt: ticketInfo["estimated_at"]?.["to"],
         typeName: ticketInfo["type"]?.["name"],
-        assigneeName: ticketInfo["assignee"]?.["name"],
+        assigneeName: ticketInfo["assignee"]?.["display_name"],
         assigneeAvatar: ticketInfo["assignee"]?.["avatar"],
         sourceUpdatedAt: ticketInfo["updated_at"],
         syncedAt: ticketInfo["updated_at"],

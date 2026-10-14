@@ -67,6 +67,34 @@ function scaleMove(transform: string): ScaleMove | null {
   return { scale: scaleX, x, y };
 }
 
+/**
+ * 程序化 fitView/focusElement 后，把 G6 相机矩阵写到 #g-canvas-camera。
+ * HTML 层只在 endFrame+CAMERA_CHANGED 时更新，否则卡片会停在旧视口外。
+ */
+export function syncHtmlCameraTransform(graph: Graph, container: HTMLElement): void {
+  const cameraEl = container.querySelector<HTMLElement>('#g-canvas-camera');
+  if (!cameraEl) {
+    return;
+  }
+  cameraEl.style.zoom = '';
+  delete cameraEl.dataset['htmlZoom'];
+  delete cameraEl.dataset['htmlX'];
+  delete cameraEl.dataset['htmlY'];
+  try {
+    const camera = graph.getCanvas().getCamera() as {
+      getOrthoMatrix?: () => ArrayLike<number>;
+    };
+    const matrix = camera.getOrthoMatrix?.();
+    if (!matrix || matrix.length < 14) {
+      return;
+    }
+    cameraEl.style.transform = `matrix(${[matrix[0], matrix[1], matrix[4], matrix[5], matrix[12], matrix[13]].join(',')})`;
+  } catch {
+    return;
+  }
+  sharpenHtmlCamera(cameraEl);
+}
+
 /** G6 用 transform 拉伸 HTML 卡片，字会糊。改成 zoom，平移按倍率还原。 */
 export function sharpenHtmlCamera(camera: HTMLElement): void {
   const move = scaleMove(camera.style.transform);

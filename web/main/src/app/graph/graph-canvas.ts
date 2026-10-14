@@ -37,6 +37,7 @@ import {
   nodeItemFromEvent,
   sharpenHtmlCamera,
   snapshotGraphPositions,
+  syncHtmlCameraTransform,
 } from '../utils/g6-helpers';
 import { openPivot } from '../utils/graph.util';
 import { toG6Data, type GraphNodePosition } from '../utils/to-g6-data';
@@ -130,7 +131,9 @@ export class GraphCanvas {
     }
     void graph
       .focusElement(rootId, { duration: 300 })
-      .then(() => this.syncZoomPercent())
+      .then(() => {
+        this.afterViewportChange();
+      })
       .catch(() => undefined);
   }
 
@@ -155,8 +158,17 @@ export class GraphCanvas {
     }
     void graph
       .fitView({ when: 'always', direction: 'both' })
-      .then(() => this.syncZoomPercent())
+      .then(() => this.afterViewportChange())
       .catch(() => undefined);
+  }
+
+  /** fitView/focusElement 后统一补写 HTML 相机，与卡片数量无关。 */
+  private afterViewportChange(): void {
+    const graph = this.liveGraph();
+    if (graph) {
+      syncHtmlCameraTransform(graph, this.host().nativeElement);
+    }
+    this.syncZoomPercent();
   }
 
   private initGraph(): void {
@@ -487,7 +499,10 @@ export class GraphCanvas {
 
     // setData 前判断：之后 getNodeData 已是新数据，分不清是否首次渲染
     const firstPaint = !(graph.getNodeData() ?? []).length;
-    this.seedPinnedPositions(positions);
+    // 基准布局时把内容中心对到画布中心（与卡片数量无关），默认相机即可看见
+    const [width, height] = graph.getSize();
+    const layout = options.fitView ? centerPositionsInCanvas(positions, width, height) : positions;
+    this.seedPinnedPositions(layout);
     this.applyGraphData(data, this.pinnedPositions);
 
     if (firstPaint) {
@@ -523,6 +538,34 @@ export class GraphCanvas {
       this.fitTimer = null;
     }
   }
+}
+
+/** 平移整图，使节点包围盒中心落在画布中心。 */
+function centerPositionsInCanvas(
+  positions: ReadonlyMap<string, GraphNodePosition>,
+  width: number,
+  height: number,
+): Map<string, GraphNodePosition> {
+  if (!positions.size || width <= 0 || height <= 0) {
+    return new Map(positions);
+  }
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const pos of positions.values()) {
+    minX = Math.min(minX, pos.x);
+    maxX = Math.max(maxX, pos.x);
+    minY = Math.min(minY, pos.y);
+    maxY = Math.max(maxY, pos.y);
+  }
+  const dx = width / 2 - (minX + maxX) / 2;
+  const dy = height / 2 - (minY + maxY) / 2;
+  const next = new Map<string, GraphNodePosition>();
+  for (const [id, pos] of positions) {
+    next.set(id, { ...pos, x: pos.x + dx, y: pos.y + dy });
+  }
+  return next;
 }
 
 function isWorkItem(item: GraphEntity): boolean {

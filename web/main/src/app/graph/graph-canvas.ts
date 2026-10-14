@@ -466,9 +466,10 @@ export class GraphCanvas {
       this.applyGraphData(data, positions);
       await this.g6.draw();
     } else if (positions) {
-      // 展开/收起：保留已拖拽坐标，只给新增节点补位
+      // 展开/收起：保留已拖拽坐标（含已收起节点的 pin），只给新增节点补位
       await this.applyLayoutPositions(data, this.resolveExpandCollapsePositions(data), {
         fitView: false,
+        keepHiddenPins: true,
       });
     } else {
       // 初次进入 / 换根：服务端位置优先，否则思维导图初始化
@@ -502,11 +503,12 @@ export class GraphCanvas {
   /**
    * 把给定坐标落到画布并写入 pin。
    * 初次进入走 render；已有节点用 translateElementTo 强制归位。
+   * keepHiddenPins：展开/收起时保留已隐藏节点的拖拽坐标，避免再展开回到初始位。
    */
   private async applyLayoutPositions(
     data: DependencyGraph,
     positions: ReadonlyMap<string, GraphNodePosition>,
-    options: { fitView: boolean },
+    options: { fitView: boolean; keepHiddenPins?: boolean },
   ): Promise<void> {
     const graph = this.liveGraph();
     if (!graph) {
@@ -515,17 +517,17 @@ export class GraphCanvas {
 
     // setData 前判断：之后 getNodeData 已是新数据，分不清是否首次渲染
     const firstPaint = !(graph.getNodeData() ?? []).length;
-    this.seedPinnedPositions(positions);
-    this.applyGraphData(data, this.pinnedPositions);
+    this.seedPinnedPositions(positions, options.keepHiddenPins);
+    this.applyGraphData(data, positions);
 
     if (firstPaint) {
       await graph.render();
-      this.applyGraphData(data, this.pinnedPositions);
+      this.applyGraphData(data, positions);
       await graph.draw();
     } else {
       await graph.draw();
       const moves = Object.fromEntries(
-        [...this.pinnedPositions].map(([id, pos]) => [id, [pos.x, pos.y] as [number, number]]),
+        [...positions].map(([id, pos]) => [id, [pos.x, pos.y] as [number, number]]),
       );
       if (Object.keys(moves).length) {
         await graph.translateElementTo(moves, false).catch(() => undefined);
@@ -538,8 +540,13 @@ export class GraphCanvas {
     }
   }
 
-  private seedPinnedPositions(positions: ReadonlyMap<string, GraphNodePosition>): void {
-    this.pinnedPositions.clear();
+  private seedPinnedPositions(
+    positions: ReadonlyMap<string, GraphNodePosition>,
+    keepHidden = false,
+  ): void {
+    if (!keepHidden) {
+      this.pinnedPositions.clear();
+    }
     for (const [id, pos] of positions) {
       this.pinnedPositions.set(id, pos);
     }

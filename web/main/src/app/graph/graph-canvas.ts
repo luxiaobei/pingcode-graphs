@@ -62,6 +62,9 @@ export class GraphCanvas {
 
   readonly retrace = output<string>();
 
+  /** 保存个人布局：当前可见卡片坐标 */
+  readonly saveLayout = output<Record<string, { x: number; y: number }>>();
+
   protected readonly zoomPercent = signal(100);
 
   private readonly host = viewChild.required<ElementRef<HTMLDivElement>>('g6Host');
@@ -134,8 +137,17 @@ export class GraphCanvas {
       .catch(() => undefined);
   }
 
-  /** 保存入口，功能后续再接。 */
-  protected save(): void {}
+  /** 快照当前卡片坐标，交给上层写入服务端。 */
+  protected save(): void {
+    const graph = this.liveGraph();
+    if (!graph) {
+      return;
+    }
+    snapshotGraphPositions(graph, this.pinnedPositions);
+    this.saveLayout.emit(
+      Object.fromEntries([...this.pinnedPositions].map(([id, { x, y }]) => [id, { x, y }])),
+    );
+  }
 
   /**
    * 一键整理：优先还原服务端位置；没有服务端数据时用思维导图初始化位置。

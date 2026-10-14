@@ -3,6 +3,7 @@ import { ces } from "@pc-nexus/storage";
 import { createTicketNode, type TicketKgNode, type TicketNodeInput } from "../../models/ship/ticket-node.js";
 import { KG_NODE_ENTITY_NAME, KG_NODE_KIND, kgNodeId, type KgNode } from "../../models/pc-kg-node.js";
 import { createKgEdge, deleteEdge, KG_EDGE_ENTITY_NAME, KG_EDGE_TYPE, type KgEdge } from "../../models/pc-kg-edge.js";
+import { publishEntityChanged } from "../../realtime.js";
 
 function channelName(channel: { name?: string } | string | undefined): string | undefined {
     if (typeof channel === "string") {
@@ -37,23 +38,27 @@ function toTicketNode(ticketInfo: any) {
 }
 
 export const onTicketCreatedHandler: EventHandler = async (context, event) => {
-    const ticketNode = toTicketNode((event.payload as any)["data"]);
+    const ticketInfo = (event.payload as any)["data"];
+    const ticketNode = toTicketNode(ticketInfo);
     await ces.entity(KG_NODE_ENTITY_NAME).insert(ticketNode);
-    createTicketEdges(ticketNode, (event.payload as any)["data"]);
+    createTicketEdges(ticketNode, ticketInfo);
+    await publishEntityChanged("created", KG_NODE_KIND.ticket, ticketInfo["id"]);
 };
 
 export const onTicketUpdatedHandler: EventHandler = async (context, event) => {
-    const ticketNode = toTicketNode((event.payload as any)["data"]);
+    const ticketInfo = (event.payload as any)["data"];
+    const ticketNode = toTicketNode(ticketInfo);
     await ces.entity<KgNode>(KG_NODE_ENTITY_NAME).update((cb) => {
         cb.field("kind").eq(ticketNode.kind);
         cb.field("ref_id").eq(ticketNode.ref_id);
     }, ticketNode);
     if (["assignee"].includes((event.payload as any).changelog.property.id)) {
-        createTicketEdges(ticketNode, (event.payload as any)["data"]);
+        createTicketEdges(ticketNode, ticketInfo);
         if ((event.payload as any).changelog.target === null) {
             await deleteEdge(ticketNode.id, KG_EDGE_TYPE.assignedTo);
         }
     }
+    await publishEntityChanged("updated", KG_NODE_KIND.ticket, ticketInfo["id"]);
 };
 
 async function createTicketEdges(ticketNode: TicketKgNode, ticketInfo: any) {

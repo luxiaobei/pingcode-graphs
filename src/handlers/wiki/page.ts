@@ -3,6 +3,7 @@ import { ces } from "@pc-nexus/storage";
 import { createPageNode, type PageKgNode } from "../../models/wiki/page-node.js";
 import { KG_NODE_ENTITY_NAME, KG_NODE_KIND, kgNodeId, type KgNode } from "../../models/pc-kg-node.js";
 import { createKgEdge, deleteEdge, KG_EDGE_ENTITY_NAME, KG_EDGE_TYPE, type KgEdge } from "../../models/pc-kg-edge.js";
+import { publishEntityChanged } from "../../realtime.js";
 
 export const onPageCreatedHandler: EventHandler = async (context, event) => {
     const pageInfo = (event.payload as any)["data"];
@@ -17,6 +18,7 @@ export const onPageCreatedHandler: EventHandler = async (context, event) => {
     });
     await ces.entity(KG_NODE_ENTITY_NAME).insert(pageNode);
     createPageEdges(pageNode, pageInfo);
+    await publishEntityChanged("created", KG_NODE_KIND.page, pageInfo["id"]);
 };
 
 export const onPageUpdatedHandler: EventHandler = async (context, event) => {
@@ -34,6 +36,7 @@ export const onPageUpdatedHandler: EventHandler = async (context, event) => {
         cb.field("kind").eq(pageNode.kind);
         cb.field("ref_id").eq(pageNode.ref_id);
     }, pageNode);
+    await publishEntityChanged("updated", KG_NODE_KIND.page, pageInfo["id"]);
 };
 
 export const onPageDeletedHandler: EventHandler = async (context, event) => {
@@ -42,6 +45,7 @@ export const onPageDeletedHandler: EventHandler = async (context, event) => {
         cb.field("kind").eq(KG_NODE_KIND.page);
         cb.field("ref_id").eq(pageInfo["id"]);
     }, { active: false });
+    await publishEntityChanged("deleted", KG_NODE_KIND.page, pageInfo["id"]);
 };
 
 async function createPageEdges(pageNode: PageKgNode, pageInfo: any) {

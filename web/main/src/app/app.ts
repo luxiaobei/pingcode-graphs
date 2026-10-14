@@ -1,6 +1,6 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { view } from '@pc-nexus/bridge';
+import { realtime, view } from '@pc-nexus/bridge';
 import { ThyAction } from 'ngx-tethys/action';
 import { ThyDialog, ThyDialogSizes } from 'ngx-tethys/dialog';
 import { ThyDivider } from 'ngx-tethys/divider';
@@ -10,6 +10,10 @@ import { ThyTooltipDirective } from 'ngx-tethys/tooltip';
 import type { DependencyGraph } from './entities/graph.entity';
 import { GraphCanvas } from './graph/graph-canvas';
 import { mockGraphFrom } from './graph/mock-graph';
+import {
+  ENTITY_CHANGED_CHANNEL,
+  type EntityChangedPayload,
+} from './realtime/entity-changed';
 import { getDependencyGraph } from './services/graph.service';
 import {
   applySavedDisplaySettings,
@@ -21,6 +25,9 @@ import {
 import { DisplaySettingsDialog } from './settings/display-settings-dialog';
 import { buildVisibleGraph } from './utils/expand-graph';
 import { filterGraphByDisplaySettings } from './utils/graph.util';
+
+/** 关系图关心的实体 kind，与后端 publish 对齐。 */
+const TRACKED_KINDS = new Set(['work_item', 'idea', 'ticket', 'test_case', 'page']);
 
 @Component({
   selector: 'app-root',
@@ -44,6 +51,7 @@ export class App {
   protected readonly displaySettings = signal<DisplaySetting[]>(applySavedDisplaySettings(null));
 
   private readonly dialog = inject(ThyDialog);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly collapsedAnchors = signal<readonly string[]>([]);
 
@@ -55,6 +63,7 @@ export class App {
   protected readonly error = signal<string | null>(null);
 
   private requestSeq = 0;
+  private silentRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   protected readonly graph = computed(() => {
     const source = this.source();
@@ -73,6 +82,56 @@ export class App {
 
   constructor() {
     void this.reload();
+    void this.subscribeEntityChanged();
+    this.destroyRef.onDestroy(() => {
+      if (this.silentRefreshTimer) {
+        clearTimeout(this.silentRefreshTimer);
+        this.silentRefreshTimer = null;
+      }
+    });
+  }
+
+  private async subscribeEntityChanged(): Promise<void> {
+    try {
+      const sub = await realtime.subscribe<EntityChangedPayload>(
+        ENTITY_CHANGED_CHANNEL,
+        (payload) => this.onEntityChanged(payload),
+        { scope: 'global' },
+      );
+      this.destroyRef.onDestroy(() => sub.unsubscribe());
+    } catch (error) {
+      console.error('[graphs] realtime subscribe failed', error);
+    }
+  }
+
+  private onEntityChanged(payload?: EntityChangedPayload): void {
+    if (!payload || this.usingMockData()) {
+      return;
+    }
+    if (!TRACKED_KINDS.has(payload.kind)) {
+      return;
+    }
+    const source = this.source();
+    if (!source) {
+      return;
+    }
+    const relevant =
+      payload.nodeId === source.rootId || source.nodes.some((node) => node.id === payload.nodeId);
+    if (!relevant) {
+      return;
+    }
+    this.scheduleSilentRefresh();
+  }
+
+  /** 合并短时间内的多次实体变更，避免频繁拉图。 */
+  private scheduleSilentRefresh(): void {
+    if (this.silentRefreshTimer) {
+      clearTimeout(this.silentRefreshTimer);
+    }
+    this.silentRefreshTimer = setTimeout(() => {
+      this.silentRefreshTimer = null;
+      void this.reload({ silent: true });
+    }, 400);
   }
 
   private resetFoldState(): void {
@@ -98,11 +157,14 @@ export class App {
     view.close().catch(() => undefined);
   }
 
-  protected async reload(): Promise<void> {
+  protected async reload(options?: { silent?: boolean }): Promise<void> {
+    const silent = options?.silent === true;
     const seq = ++this.requestSeq;
-    this.resetFoldState();
-    this.loading.set(true);
-    this.error.set(null);
+    if (!silent) {
+      this.resetFoldState();
+      this.loading.set(true);
+      this.error.set(null);
+    }
     try {
       const traceId = this.traceWorkItemId();
       const dataPromise = this.usingMockData()
@@ -114,14 +176,19 @@ export class App {
       }
       this.displaySettings.set(settings);
       this.source.set(data);
+      if (silent) {
+        this.error.set(null);
+      }
     } catch (err) {
       if (seq !== this.requestSeq) {
         return;
       }
-      this.source.set(null);
+      if (!silent) {
+        this.source.set(null);
+      }
       this.error.set(err instanceof Error ? err.message.trim() : String(err));
     } finally {
-      if (seq === this.requestSeq) {
+      if (seq === this.requestSeq && !silent) {
         this.loading.set(false);
       }
     }

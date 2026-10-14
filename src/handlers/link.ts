@@ -3,6 +3,7 @@ import { ces } from "@pc-nexus/storage";
 import { KG_NODE_ENTITY_NAME, KG_NODE_KIND, kgNodeId, type KgNode } from "../models/pc-kg-node.js";
 import { createKgEdge, KG_EDGE_ENTITY_NAME, KG_EDGE_TYPE, type KgEdge } from "../models/pc-kg-edge.js";
 import { linkKindMap } from "../commons/common.js";
+import { publishEntityChanged, type EntityChangeAction } from "../realtime.js";
 
 const edgeTypeMap = {
     "relate": KG_EDGE_TYPE.relates,
@@ -43,6 +44,7 @@ export const onLinkAddedHandler: EventHandler = async (context, event) => {
                 type,
             }));
         }
+        await publishLinkChanged("link_added", principalNodes[0]!, toId);
     }
 };
 
@@ -75,5 +77,22 @@ export const onLinkRemovedHandler: EventHandler = async (context, event) => {
                 });
             });
         });
+        await publishLinkChanged("link_removed", principalNodes[0]!, toId);
     }
 };
+
+async function publishLinkChanged(
+    action: EntityChangeAction,
+    principal: KgNode,
+    toId: string,
+): Promise<void> {
+    await publishEntityChanged(action, principal.kind, principal.ref_id);
+    const sep = toId.indexOf(":");
+    if (sep > 0) {
+        const kind = toId.slice(0, sep) as KgNode["kind"];
+        const refId = toId.slice(sep + 1);
+        if (refId) {
+            await publishEntityChanged(action, kind, refId);
+        }
+    }
+}

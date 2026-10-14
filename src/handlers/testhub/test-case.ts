@@ -3,6 +3,7 @@ import { ces } from "@pc-nexus/storage";
 import { createTestCaseNode, type TestCaseKgNode } from "../../models/testhub/test-case-node.js";
 import { KG_NODE_ENTITY_NAME, KG_NODE_KIND, kgNodeId, type KgNode } from "../../models/pc-kg-node.js";
 import { createKgEdge, deleteEdge, KG_EDGE_ENTITY_NAME, KG_EDGE_TYPE, type KgEdge } from "../../models/pc-kg-edge.js";
+import { publishEntityChanged } from "../../realtime.js";
 
 export const onTestCaseCreatedHandler: EventHandler = async (context, event) => {
     const testCaseInfo = (event.payload as any)["data"];
@@ -21,6 +22,7 @@ export const onTestCaseCreatedHandler: EventHandler = async (context, event) => 
     });
     await ces.entity(KG_NODE_ENTITY_NAME).insert(testCaseNode);
     createTestCaseEdges(testCaseNode, testCaseInfo);
+    await publishEntityChanged("created", KG_NODE_KIND.testCase, testCaseInfo["id"]);
 };
 
 export const onTestCaseUpdatedHandler: EventHandler = async (context, event) => {
@@ -42,6 +44,7 @@ export const onTestCaseUpdatedHandler: EventHandler = async (context, event) => 
         cb.field("kind").eq(testCaseNode.kind);
         cb.field("ref_id").eq(testCaseNode.ref_id);
     }, testCaseNode);
+    await publishEntityChanged("updated", KG_NODE_KIND.testCase, testCaseInfo["id"]);
 };
 
 export const onTestCaseDeletedHandler: EventHandler = async (context, event) => {
@@ -50,6 +53,7 @@ export const onTestCaseDeletedHandler: EventHandler = async (context, event) => 
         cb.field("kind").eq(KG_NODE_KIND.testCase);
         cb.field("ref_id").eq(testCaseInfo["id"]);
     }, { active: false });
+    await publishEntityChanged("deleted", KG_NODE_KIND.testCase, testCaseInfo["id"]);
 };
 
 async function createTestCaseEdges(testCaseNode: TestCaseKgNode, testCaseInfo: any) {

@@ -13,8 +13,9 @@
   },
   "dependencies": {
     "@pc-nexus/core": "^0.8.0-next.14",
+    "@pc-nexus/event": "^0.8.0-next.14",
     "@pc-nexus/network": "^0.8.0-next.14",
-    "@pc-nexus/storage": "^0.8.0-next.14",
-    "@pc-nexus/event": "^0.8.0-next.14"
+    "@pc-nexus/realtime": "^0.8.0-next.14",
+    "@pc-nexus/storage": "^0.8.0-next.14"
   }
 }

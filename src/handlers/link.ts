@@ -24,7 +24,7 @@ export const onLinkAddedHandler: EventHandler = async (context, event) => {
     const principalInfo = (event.payload as any)["data"];
     const targetInfo = (event.payload as any)["changelog"]["target"];
     let toId = "";
-    let type = KG_EDGE_TYPE.relates;
+    let type: KgEdgeType = KG_EDGE_TYPE.relates;
     const principalNodes = await ces.entity<KgNode>(KG_NODE_ENTITY_NAME).find((cb) => {
         cb.field("ref_id").eq(principalInfo["id"]);
     });
@@ -54,7 +54,7 @@ export const onLinkRemovedHandler: EventHandler = async (context, event) => {
     const principalInfo = (event.payload as any)["data"];
     const originInfo = (event.payload as any)["changelog"]["origin"];
     let toId = "";
-    let type = KG_EDGE_TYPE.relates;
+    let type: KgEdgeType = KG_EDGE_TYPE.relates;
     const principalNodes = await ces.entity<KgNode>(KG_NODE_ENTITY_NAME).find((cb) => {
         cb.field("ref_id").eq(principalInfo["id"]);
     });

@@ -1,4 +1,5 @@
 import type { DependencyGraph, GraphEdge, RelationFold } from '../entities/graph.entity';
+import { relationFoldKey } from './graph.util';
 
 /** 无向邻接表：source/target 互为邻居 */
 function neighborMap(edges: GraphEdge[]): Map<string, Set<string>> {
@@ -56,10 +57,6 @@ interface OutwardStep {
   relationType: string;
 }
 
-function relationKey(parentId: string, relationType: string): string {
-  return `${parentId}::${relationType}`;
-}
-
 /**
  * 未收起的关系全部展示。收起按「父节点 + 关系类型」，不影响这张卡片上的其他关系。
  */
@@ -112,7 +109,7 @@ export function buildVisibleGraph(
   while (queue.length) {
     const current = queue.shift()!;
     for (const step of outward(current)) {
-      if (collapsedIds.has(relationKey(current, step.relationType))) {
+      if (collapsedIds.has(relationFoldKey(current, step.relationType))) {
         continue;
       }
       if (step.hubId) {
@@ -136,10 +133,10 @@ export function buildVisibleGraph(
       return undefined;
     }
     return [...groups.entries()].map(([relationType, count]) => ({
-      key: relationKey(id, relationType),
+      key: relationFoldKey(id, relationType),
       relationType,
       count,
-      expanded: !collapsedIds.has(relationKey(id, relationType)),
+      expanded: !collapsedIds.has(relationFoldKey(id, relationType)),
     }));
   };
 

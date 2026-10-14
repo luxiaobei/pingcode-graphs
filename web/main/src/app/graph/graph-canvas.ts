@@ -28,8 +28,8 @@ import {
   GRAPH_ZOOM_RANGE,
   GRAPH_ZOOM_STEP,
 } from '../constants/graph.constants';
-import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
-import { arrangeGraph } from '../utils/arrange-graph';
+import type { DependencyGraph } from '../entities/graph.entity';
+import { arrangeGraph, mergeLayoutPositions } from '../utils/arrange-graph';
 import {
   buildElementStates,
   foldKeyFromEvent,
@@ -38,7 +38,8 @@ import {
   sharpenHtmlCamera,
   snapshotGraphPositions,
 } from '../utils/g6-helpers';
-import { openPivot } from '../utils/graph.util';
+import { cardPositionsFromNodes } from '../utils/graph-layout';
+import { isWorkItemEntity, openPivot } from '../utils/graph.util';
 import { toG6Data, type GraphNodePosition } from '../utils/to-g6-data';
 import { bindWorkItemCardRuntime } from './work-item-card';
 
@@ -284,7 +285,7 @@ export class GraphCanvas {
   private traceCandidate(id: string | undefined): string | null {
     const data = untracked(() => this.graph());
     const item = data?.nodes.find((node) => node.id === id);
-    if (!item || item.relationHub || item.id === data?.rootId || !isWorkItem(item)) {
+    if (!item || item.relationHub || item.id === data?.rootId || !isWorkItemEntity(item)) {
       return null;
     }
     return item.id;
@@ -342,14 +343,8 @@ export class GraphCanvas {
   /** 从节点上的 position（服务端字段）同步已保存布局。 */
   private syncSavedPositions(data: DependencyGraph): void {
     this.savedPositions.clear();
-    for (const node of data.nodes) {
-      if (node.relationHub || !node.position) {
-        continue;
-      }
-      const { x, y } = node.position;
-      if (Number.isFinite(x) && Number.isFinite(y)) {
-        this.savedPositions.set(node.id, { x, y });
-      }
+    for (const [id, pos] of cardPositionsFromNodes(data.nodes)) {
+      this.savedPositions.set(id, pos);
     }
   }
 
@@ -358,34 +353,14 @@ export class GraphCanvas {
    */
   private resolveBaselinePositions(data: DependencyGraph): Map<string, GraphNodePosition> {
     this.syncSavedPositions(data);
-    const arranged = arrangeGraph(data);
-    const hasSaved = data.nodes.some(
-      (node) => !node.relationHub && this.savedPositions.has(node.id),
-    );
-    if (!hasSaved) {
-      return arranged;
-    }
-    const next = new Map(arranged);
-    for (const [id, pos] of this.savedPositions) {
-      if (next.has(id)) {
-        next.set(id, { ...next.get(id), ...pos });
-      }
-    }
-    return next;
+    return mergeLayoutPositions(arrangeGraph(data), this.savedPositions);
   }
 
   /**
    * 展开/收起：保留已有 pin（含拖拽），只给新出现的节点用思维导图坐标。
    */
   private resolveExpandCollapsePositions(data: DependencyGraph): Map<string, GraphNodePosition> {
-    const arranged = arrangeGraph(data);
-    const next = new Map(arranged);
-    for (const [id, pos] of this.pinnedPositions) {
-      if (next.has(id)) {
-        next.set(id, { ...next.get(id), ...pos });
-      }
-    }
-    return next;
+    return mergeLayoutPositions(arrangeGraph(data), this.pinnedPositions);
   }
 
   /** 展开收起会增减卡片。集合一致才保留拖拽位置，否则按整理规则重排。 */
@@ -569,10 +544,6 @@ export class GraphCanvas {
       this.fitTimer = null;
     }
   }
-}
-
-function isWorkItem(item: GraphEntity): boolean {
-  return item.navigationTarget === 'workitem' || item.id.startsWith('work_item:');
 }
 
 function cardOf(event: Event): HTMLElement | null {

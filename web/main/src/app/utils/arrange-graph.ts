@@ -1,5 +1,6 @@
 import { GRAPH_NODE_SIZE } from '../constants/graph.constants';
-import type { DependencyGraph, GraphEdge, GraphEntity } from '../entities/graph.entity';
+import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
+import { relationBetween } from './graph.util';
 
 /** 左右分支和父卡片之间的空白，留给关系名。 */
 const H_GAP = 148;
@@ -77,38 +78,6 @@ function unionExtent(extents: Extent[]): Extent {
   };
 }
 
-function findLink(
-  edges: GraphEdge[],
-  nodes: ReadonlyMap<string, GraphEntity>,
-  parentId: string,
-  childId: string,
-): string {
-  const direct = edges.find(
-    (edge) =>
-      (edge.source === parentId && edge.target === childId) ||
-      (edge.target === parentId && edge.source === childId),
-  );
-  if (direct) {
-    return direct.relationType;
-  }
-  for (const edge of edges) {
-    const hubId = edge.source === parentId ? edge.target : edge.target === parentId ? edge.source : undefined;
-    const hub = hubId ? nodes.get(hubId) : undefined;
-    if (!hub?.relationHub) {
-      continue;
-    }
-    const linked = edges.some(
-      (item) =>
-        (item.source === hubId && item.target === childId) ||
-        (item.target === hubId && item.source === childId),
-    );
-    if (linked) {
-      return hub.relationHub;
-    }
-  }
-  return 'relate';
-}
-
 function groupsOf(graph: DependencyGraph, parentId: string): RelationGroup[] {
   const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
   const groups = new Map<string, RelationGroup>();
@@ -116,12 +85,26 @@ function groupsOf(graph: DependencyGraph, parentId: string): RelationGroup[] {
     .filter((node) => node.revealedByAnchorId === parentId && !node.relationHub)
     .sort((a, b) => a.id.localeCompare(b.id));
   for (const child of children) {
-    const type = findLink(graph.edges, nodes, parentId, child.id);
+    const type = relationBetween(graph.edges, nodes, parentId, child.id);
     const group = groups.get(type) ?? { type, memberIds: [] };
     group.memberIds.push(child.id);
     groups.set(type, group);
   }
   return [...groups.values()];
+}
+
+/** 在思维导图坐标上覆盖已有位置（保存坐标 / 拖拽 pin）。 */
+export function mergeLayoutPositions<T extends { x: number; y: number }>(
+  arranged: ReadonlyMap<string, T>,
+  overrides: ReadonlyMap<string, Partial<T>>,
+): Map<string, T> {
+  const next = new Map(arranged);
+  for (const [id, pos] of overrides) {
+    if (next.has(id)) {
+      next.set(id, { ...next.get(id)!, ...pos });
+    }
+  }
+  return next;
 }
 
 /** 根节点四向分边。子级沿着这一侧继续向外，避免穿回中心。 */

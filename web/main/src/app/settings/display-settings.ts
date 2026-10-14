@@ -49,10 +49,21 @@ export function saveDisplaySettings(settings: readonly DisplaySetting[]): Promis
   );
 }
 
-/** 展示配置对应的关系类型。未列入的关系不受开关控制。反向关系按规范类型归入同一开关。 */
+/** 展示开关覆盖的关系类型。未列入的关系始终展示。 */
 export const DISPLAY_SETTING_RELATIONS: Record<string, readonly string[]> = {
   parent: ['parent', 'child'],
-  relate: ['relate', 'relate:work_item', 'block', 'cause', 'mention', 'clone', 'duplicate'],
+  relate: [
+    'relate',
+    'relate:work_item',
+    'block',
+    'blockedBy',
+    'cause',
+    'causedBy',
+    'clone',
+    'clonedBy',
+    'mention',
+    'duplicate',
+  ],
   dependency: ['depend'],
   product: ['relate:idea'],
   ticket: ['relate:ticket'],

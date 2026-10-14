@@ -1,5 +1,4 @@
 import type { DependencyGraph, GraphEdge, RelationFold } from '../entities/graph.entity';
-import { RELATION_STYLE } from '../constants/graph.constants';
 
 /** 无向邻接表：source/target 互为邻居 */
 function neighborMap(edges: GraphEdge[]): Map<string, Set<string>> {
@@ -57,10 +56,6 @@ interface OutwardStep {
   relationType: string;
 }
 
-function canonicalType(type: string): string {
-  return RELATION_STYLE[type]?.canonical ?? type;
-}
-
 function relationKey(parentId: string, relationType: string): string {
   return `${parentId}::${relationType}`;
 }
@@ -83,7 +78,7 @@ export function buildVisibleGraph(
         (item.source === parentId && item.target === childId) ||
         (item.target === parentId && item.source === childId),
     );
-    return canonicalType(edge?.relationType ?? 'relate');
+    return edge?.relationType ?? 'relate';
   };
 
   const outward = (id: string): OutwardStep[] => {
@@ -94,7 +89,7 @@ export function buildVisibleGraph(
         continue;
       }
       if (node.relationHub) {
-        const relationType = canonicalType(node.relationHub);
+        const relationType = node.relationHub;
         for (const child of neighbors.get(neighbor) ?? []) {
           if (child !== id && depthOf(child) > depthOf(id)) {
             steps.push({ hubId: neighbor, nodeId: child, relationType });

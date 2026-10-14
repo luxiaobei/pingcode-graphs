@@ -84,6 +84,18 @@ const nodes: GraphEntity[] = [
     priority: { name: '中' },
     assignee: { id: 'u2', display_name: '李四' },
   }),
+  item('n-clone', 'PORTAL-116', '登录模块重构（拷贝）', {
+    type: { name: '用户故事' },
+    state: { name: '待处理', type: 'pending' },
+    priority: { name: '中' },
+    assignee: { id: 'u1', display_name: '张三' },
+  }),
+  item('n-origin', 'PORTAL-80', '登录模块初版', {
+    type: { name: '用户故事' },
+    state: { name: '已关闭', type: 'closed' },
+    priority: { name: '中' },
+    assignee: { id: 'u2', display_name: '李四' },
+  }),
   item('n-cache', 'PORTAL-130', '登录会话缓存策略', {
     type: { name: '任务' },
     state: { name: '待处理', type: 'pending' },
@@ -98,16 +110,22 @@ const nodes: GraphEntity[] = [
   }),
   item('n-idea', 'IDEA-12', '登录体验改版', {
     type: { name: '产品需求' },
+    icon: 'bulb-square-fill',
+    iconColor: '#f98a7c',
     navigationTarget: 'idea',
     assignee: { id: 'u4', display_name: '赵六' },
   }),
   item('n-idea-2', 'IDEA-18', '多因子登录', {
     type: { name: '产品需求' },
+    icon: 'bulb-square-fill',
+    iconColor: '#f98a7c',
     navigationTarget: 'idea',
     assignee: { id: 'u5', display_name: '陈七' },
   }),
   item('n-ticket', 'TCK-7', '无法收到验证码', {
     type: { name: '工单' },
+    icon: 'project-support',
+    iconColor: '#f6c659',
     navigationTarget: 'ticket',
     assignee: { id: 'u2', display_name: '李四' },
   }),
@@ -128,6 +146,8 @@ const nodes: GraphEntity[] = [
   }),
   item('n-test', 'TC-21', '登录主流程', {
     type: { name: '测试用例' },
+    icon: 'test-case-square-fill',
+    iconColor: '#3ddc91',
     navigationTarget: 'testcase',
     assignee: { id: 'u3', display_name: '王五' },
   }),
@@ -183,15 +203,17 @@ const nodes: GraphEntity[] = [
 
 const edges: GraphEdge[] = (
   [
-    ['e1', 'n-auth', 'n-root', 'block'],
-    ['e2', 'n-api', 'n-root', 'block'],
-    ['e3', 'n-sso', 'n-root', 'block'],
+    ['e1', 'n-root', 'n-auth', 'blockedBy'],
+    ['e2', 'n-root', 'n-api', 'blockedBy'],
+    ['e3', 'n-root', 'n-sso', 'blockedBy'],
     ['e4', 'n-root', 'n-mobile', 'block'],
     ['e5', 'n-root', 'n-release', 'block'],
-    ['e6', 'n-ui', 'n-root', 'cause'],
+    ['e6', 'n-root', 'n-ui', 'causedBy'],
     ['e7', 'n-root', 'n-audit', 'relate'],
     ['e8', 'n-root', 'n-dup', 'duplicate'],
     ['e9', 'n-root', 'n-perf', 'cause'],
+    ['e9b', 'n-root', 'n-clone', 'clone'],
+    ['e9c', 'n-root', 'n-origin', 'clonedBy'],
     ['e11', 'n-root', 'n-cache', 'relate'],
     ['e12', 'n-root', 'n-monitor', 'relate'],
     ['e13', 'n-root', 'n-idea', 'relate:idea'],

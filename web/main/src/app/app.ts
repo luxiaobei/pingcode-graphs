@@ -1,6 +1,7 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { realtime, view } from '@pc-nexus/bridge';
+import { notify } from '@pc-nexus/capabilities';
 import { ThyAction } from 'ngx-tethys/action';
 import { ThyDialog, ThyDialogSizes } from 'ngx-tethys/dialog';
 import { ThyDivider } from 'ngx-tethys/divider';
@@ -10,10 +11,7 @@ import { ThyTooltipDirective } from 'ngx-tethys/tooltip';
 import type { DependencyGraph } from './entities/graph.entity';
 import { GraphCanvas } from './graph/graph-canvas';
 import { mockGraphFrom } from './graph/mock-graph';
-import {
-  ENTITY_CHANGED_CHANNEL,
-  type EntityChangedPayload,
-} from './realtime/entity-changed';
+import { ENTITY_CHANGED_CHANNEL, type EntityChangedPayload } from './realtime/entity-changed';
 import { getDependencyGraph } from './services/graph.service';
 import {
   applySavedDisplaySettings,
@@ -24,6 +22,12 @@ import {
 } from './settings/display-settings';
 import { DisplaySettingsDialog } from './settings/display-settings-dialog';
 import { buildVisibleGraph } from './utils/expand-graph';
+import {
+  applySavedGraphLayout,
+  loadSavedGraphLayout,
+  saveGraphLayout,
+  type SavedGraphLayout,
+} from './utils/graph-layout';
 import { filterGraphByDisplaySettings } from './utils/graph.util';
 
 /** 关系图关心的实体 kind，与后端 publish 对齐。 */
@@ -174,11 +178,17 @@ export class App {
       if (seq !== this.requestSeq) {
         return;
       }
+      const layout = await loadSavedGraphLayout(data.rootId);
+      if (seq !== this.requestSeq) {
+        return;
+      }
       this.displaySettings.set(settings);
       this.source.set(data);
       if (silent) {
         this.error.set(null);
       }
+      this.collapsedAnchors.set(layout?.collapsedKeys ?? []);
+      this.source.set(applySavedGraphLayout(data, layout));
     } catch (err) {
       if (seq !== this.requestSeq) {
         return;
@@ -191,6 +201,26 @@ export class App {
       if (seq === this.requestSeq && !silent) {
         this.loading.set(false);
       }
+    }
+  }
+
+  /** 保存当前根工作项下的坐标与收起状态。 */
+  protected async onSaveLayout(positions: Record<string, { x: number; y: number }>): Promise<void> {
+    const rootId = this.source()?.rootId;
+    if (!rootId) {
+      return;
+    }
+    const layout: SavedGraphLayout = {
+      rootId,
+      positions,
+      collapsedKeys: [...this.collapsedAnchors()],
+    };
+    try {
+      await saveGraphLayout(layout);
+      this.source.update((source) => (source ? applySavedGraphLayout(source, layout) : source));
+      void notify.success({ title: '保存成功' });
+    } catch {
+      void notify.error({ title: '保存失败' });
     }
   }
 

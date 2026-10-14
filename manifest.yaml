@@ -394,6 +394,32 @@ storage:
           keys:
             - to_id: 1
             - type: 1
+    - name: pc_kg_view
+      attributes:
+        - name: id
+          type: string
+          required: true
+        - name: user_id
+          type: string
+          required: true
+        - name: node_id
+          type: string
+          required: true
+        - name: position
+          type: object
+          required: true
+      indexes:
+        - name: id_unique
+          keys:
+            - id: 1
+          options:
+            unique: true
+        - name: user_node
+          keys:
+            - user_id: 1
+            - node_id: 1
+          options:
+            unique: true
 permissions:
   scopes:
     - pcp:storage:app

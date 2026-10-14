@@ -76,7 +76,7 @@ export class App {
     this.collapsedAnchors.set([]);
   }
 
-  /** 卸掉再挂上画布，让展示配置和手动刷新走同一套初次布局。 */
+  /** 卸掉再挂上画布，让展示配置变更走同一套初次布局。 */
   private remountCanvas(): void {
     this.showCanvas.set(false);
     setTimeout(() => this.showCanvas.set(true));

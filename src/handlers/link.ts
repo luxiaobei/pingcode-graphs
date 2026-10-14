@@ -26,10 +26,7 @@ export const onLinkAddedHandler: EventHandler = async (context, event) => {
     });
     if (targetInfo["target_work_item"]) {
         toId = kgNodeId(KG_NODE_KIND.workItem, targetInfo["target_work_item"]?.["id"]);
-        if (!edgeTypeMap[targetInfo["relation_type"]?.["category"]]) {
-            return;
-        }
-        type = edgeTypeMap[targetInfo["relation_type"]?.["category"]];
+        type = edgeTypeMap[targetInfo["relation_type"]?.["category"]] ?? KG_EDGE_TYPE.relates;
     } else if (targetInfo["target_type"]) {
         toId = kgNodeId(linkKindMap[targetInfo["target_type"]]!, targetInfo["target"]["id"]);
     }
@@ -59,9 +56,6 @@ export const onLinkRemovedHandler: EventHandler = async (context, event) => {
     });
     if (originInfo["target_work_item"]) {
         toId = kgNodeId(KG_NODE_KIND.workItem, originInfo["target_work_item"]?.["id"]);
-        if (!edgeTypeMap[originInfo["relation_type"]?.["category"]]) {
-            return;
-        }
         type = edgeTypeMap[originInfo["relation_type"]?.["category"]] ?? KG_EDGE_TYPE.relates;
     } else if (originInfo["target_type"]) {
         toId = kgNodeId(linkKindMap[originInfo["target_type"]]!, originInfo["target"]["id"]);

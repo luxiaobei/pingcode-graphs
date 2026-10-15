@@ -6,6 +6,7 @@ import {
   resolvePinnedExpandCollapse,
 } from './arrange-graph';
 import { snapshotGraphPositions } from './g6-helpers';
+import { isFoldSummaryId } from './graph.util';
 import { cardPositionsFromNodes } from './saved-graph-layout';
 import type { GraphNodePosition } from './to-g6-data';
 
@@ -34,7 +35,7 @@ export class CanvasPositionSession {
   toSaveRecord(): Record<string, { x: number; y: number }> {
     return Object.fromEntries(
       [...this.pins]
-        .filter(([id]) => !id.startsWith('fold:'))
+        .filter(([id]) => !isFoldSummaryId(id))
         .map(([id, { x, y }]) => [id, { x, y }]),
     );
   }
@@ -84,12 +85,11 @@ export class CanvasPositionSession {
    */
   resolveExpandCollapse(data: DependencyGraph): Map<string, GraphNodePosition> {
     for (const id of [...this.pins.keys()]) {
-      if (id.startsWith('fold:')) {
+      if (isFoldSummaryId(id)) {
         this.pins.delete(id);
       }
     }
-    const arranged = arrangeGraph(data);
-    return resolvePinnedExpandCollapse(data, arranged, this.pins);
+    return resolvePinnedExpandCollapse(data, arrangeGraph(data), this.pins);
   }
 
   /**

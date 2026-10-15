@@ -10,8 +10,6 @@ const V_GAP = 112;
 const SIBLING_GAP = 28;
 /** 两种关系之间再隔开，主干不会粘在一起。 */
 const GROUP_GAP = 56;
-/** 折叠占位之间再拉开一点，边标签不易挤在一起。 */
-const FOLD_GROUP_GAP = 80;
 
 const LEFT_TYPES = ['relate:idea', 'relate:ticket'] as const;
 const RIGHT_TYPES = ['relate:objective', 'relate:test_case'] as const;
@@ -46,25 +44,14 @@ interface StackItem {
   gapAfter: number;
 }
 
-function cardExtent(): Extent {
-  return {
-    left: -GRAPH_NODE_SIZE.width / 2,
-    right: GRAPH_NODE_SIZE.width / 2,
-    top: -GRAPH_NODE_SIZE.height / 2,
-    bottom: GRAPH_NODE_SIZE.height / 2,
-  };
-}
-
 function nodeExtent(node: GraphEntity | undefined): Extent {
-  if (isFoldSummaryNode(node)) {
-    return {
-      left: -FOLD_SUMMARY_SIZE.width / 2,
-      right: FOLD_SUMMARY_SIZE.width / 2,
-      top: -FOLD_SUMMARY_SIZE.height / 2,
-      bottom: FOLD_SUMMARY_SIZE.height / 2,
-    };
-  }
-  return cardExtent();
+  const size = isFoldSummaryNode(node) ? FOLD_SUMMARY_SIZE : GRAPH_NODE_SIZE;
+  return {
+    left: -size.width / 2,
+    right: size.width / 2,
+    top: -size.height / 2,
+    bottom: size.height / 2,
+  };
 }
 
 function shiftPlaced(placed: Placed, dx: number, dy: number): Placed {
@@ -97,14 +84,13 @@ function groupsOf(graph: DependencyGraph, parentId: string): RelationGroup[] {
   const groups = new Map<string, RelationGroup>();
   const children = graph.nodes
     .filter((node) => node.revealedByAnchorId === parentId && !node.relationHub)
-    .sort((a, b) => {
-      // 折叠占位排在同关系真实卡片之后，避免和展开态错位感过大
-      const af = isFoldSummaryNode(a) ? 1 : 0;
-      const bf = isFoldSummaryNode(b) ? 1 : 0;
-      return af - bf || a.id.localeCompare(b.id);
-    });
+    .sort(
+      (a, b) =>
+        Number(isFoldSummaryNode(a)) - Number(isFoldSummaryNode(b)) || a.id.localeCompare(b.id),
+    );
   for (const child of children) {
-    const type = child.foldSummary?.relationType ?? relationBetween(graph.edges, nodes, parentId, child.id);
+    const type =
+      child.foldSummary?.relationType ?? relationBetween(graph.edges, nodes, parentId, child.id);
     const group = groups.get(type) ?? { type, memberIds: [] };
     group.memberIds.push(child.id);
     groups.set(type, group);
@@ -225,21 +211,14 @@ function withSide(placed: Placed, id: string, side: Side): Placed {
 }
 
 function itemsOf(graph: DependencyGraph, groups: RelationGroup[], side: Side, seen: Set<string>): StackItem[] {
-  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
   const items: StackItem[] = [];
   groups.forEach((group, groupIndex) => {
     group.memberIds.forEach((memberId, index) => {
       const lastInGroup = index === group.memberIds.length - 1;
       const lastGroup = groupIndex === groups.length - 1;
-      const nextGroup = groups[groupIndex + 1];
-      const foldGap =
-        lastInGroup &&
-        !lastGroup &&
-        group.memberIds.every((id) => isFoldSummaryNode(nodeById.get(id))) &&
-        nextGroup?.memberIds.every((id) => isFoldSummaryNode(nodeById.get(id)));
       items.push({
         placed: withSide(arrangeNode(graph, memberId, side, seen), memberId, side),
-        gapAfter: lastInGroup && !lastGroup ? (foldGap ? FOLD_GROUP_GAP : GROUP_GAP) : SIBLING_GAP,
+        gapAfter: lastInGroup && !lastGroup ? GROUP_GAP : SIBLING_GAP,
       });
     });
   });
@@ -247,70 +226,61 @@ function itemsOf(graph: DependencyGraph, groups: RelationGroup[], side: Side, se
 }
 
 /**
- * 展开/收起落位：已拖拽/已 pin 的工作项卡片绝对保位；
- * 仅给新出现的节点（含 +N）按「相对父卡」的思维导图偏移补位。
+ * 展开/收起：有 pin 的工作项保位；其余节点（含 +N）相对父卡按思维导图偏移补位。
  */
 export function resolvePinnedExpandCollapse<T extends { x: number; y: number; side?: Side }>(
   graph: DependencyGraph,
   arranged: ReadonlyMap<string, T>,
   pins: ReadonlyMap<string, T>,
 ): Map<string, T> {
-  const result = new Map<string, T>();
-
-  // 1) 真实卡片：有 pin 则必须停在拖拽后的位置（忽略旧的 fold pin）
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const childrenOf = new Map<string, string[]>();
   for (const node of graph.nodes) {
-    if (node.relationHub || isFoldSummaryNode(node)) {
+    if (node.relationHub || !node.revealedByAnchorId || !arranged.has(node.id)) {
       continue;
     }
-    const pin = pins.get(node.id);
-    const arrangedPos = arranged.get(node.id);
+    const list = childrenOf.get(node.revealedByAnchorId) ?? [];
+    list.push(node.id);
+    childrenOf.set(node.revealedByAnchorId, list);
+  }
+
+  const result = new Map<string, T>();
+  const queue = arranged.has(graph.rootId) ? [graph.rootId] : [];
+
+  while (queue.length) {
+    const id = queue.shift()!;
+    const arrangedPos = arranged.get(id);
+    if (!arrangedPos) {
+      continue;
+    }
+    const node = nodeById.get(id);
+    const pin = node && !isFoldSummaryNode(node) ? pins.get(id) : undefined;
     if (pin) {
-      result.set(node.id, {
-        ...((arrangedPos ?? pin) as T),
-        x: pin.x,
-        y: pin.y,
-        side: pin.side ?? arrangedPos?.side,
-      });
-    }
-  }
-
-  // 2) 其余可见节点（新展开的子卡 / 折叠占位）：相对父卡当前坐标补位
-  const pending = graph.nodes.filter(
-    (node) => !node.relationHub && !result.has(node.id) && arranged.has(node.id),
-  );
-  let guard = pending.length + 1;
-  while (pending.length && guard > 0) {
-    guard -= 1;
-    let progressed = false;
-    for (let index = pending.length - 1; index >= 0; index -= 1) {
-      const node = pending[index]!;
-      const arrangedPos = arranged.get(node.id)!;
-      const parentId = node.revealedByAnchorId;
-      const parentPos = parentId ? (result.get(parentId) ?? pins.get(parentId)) : undefined;
+      result.set(id, { ...arrangedPos, x: pin.x, y: pin.y, side: pin.side ?? arrangedPos.side });
+    } else {
+      const parentId = node?.revealedByAnchorId;
+      const parent = parentId ? result.get(parentId) : undefined;
       const arrangedParent = parentId ? arranged.get(parentId) : undefined;
-      if (parentPos && arrangedParent) {
-        result.set(node.id, {
-          ...arrangedPos,
-          x: parentPos.x + (arrangedPos.x - arrangedParent.x),
-          y: parentPos.y + (arrangedPos.y - arrangedParent.y),
-          side: arrangedPos.side ?? parentPos.side,
-        });
-      } else if (!parentId || !arrangedParent) {
-        result.set(node.id, arrangedPos);
-      } else {
-        continue;
-      }
-      pending.splice(index, 1);
-      progressed = true;
+      result.set(
+        id,
+        parent && arrangedParent
+          ? {
+              ...arrangedPos,
+              x: parent.x + (arrangedPos.x - arrangedParent.x),
+              y: parent.y + (arrangedPos.y - arrangedParent.y),
+              side: arrangedPos.side ?? parent.side,
+            }
+          : arrangedPos,
+      );
     }
-    if (!progressed) {
-      for (const node of pending) {
-        result.set(node.id, arranged.get(node.id)!);
-      }
-      break;
-    }
+    queue.push(...(childrenOf.get(id) ?? []));
   }
 
+  for (const [id, pos] of arranged) {
+    if (!result.has(id)) {
+      result.set(id, pos);
+    }
+  }
   return result;
 }
 

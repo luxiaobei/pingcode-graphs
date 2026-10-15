@@ -25,6 +25,10 @@ export function foldSummaryNodeId(foldKey: string): string {
   return `fold:${foldKey}`;
 }
 
+export function isFoldSummaryId(id: string): boolean {
+  return id.startsWith('fold:');
+}
+
 /** 是否为折叠「+ N」占位 */
 export function isFoldSummaryNode(node: GraphEntity | null | undefined): boolean {
   return Boolean(node?.foldSummary);

@@ -2,6 +2,7 @@ import type { GraphData, NodeData } from '@antv/g6';
 import type { DependencyGraph, FoldMark, GraphEntity, RelationFold } from '../entities/graph.entity';
 import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
 import { groupRank, sideOfType, type Side } from './arrange-graph';
+import { isFoldSummaryNode } from './graph.util';
 import { trunkEdges, type GraphNodePosition } from './route-graph-edges';
 
 export type { GraphNodePosition } from './route-graph-edges';
@@ -32,9 +33,8 @@ function toG6Node(
   forks: ReadonlyMap<string, { x: number; y: number }>,
 ): NodeData {
   const position = positions?.get(item.id) ?? item.position;
-  const fold = item.foldSummary;
-  const width = fold ? FOLD_SUMMARY_SIZE.width : GRAPH_NODE_SIZE.width;
-  const height = fold ? FOLD_SUMMARY_SIZE.height : GRAPH_NODE_SIZE.height;
+  const fold = isFoldSummaryNode(item);
+  const size = fold ? FOLD_SUMMARY_SIZE : GRAPH_NODE_SIZE;
   const node: NodeData = {
     id: item.id,
     type: 'work-item-card',
@@ -42,8 +42,8 @@ function toG6Node(
       foldMarks: fold ? [] : foldMarks(item, position, rootId, forks),
       item,
       root: item.id === rootId,
-      width,
-      height,
+      width: size.width,
+      height: size.height,
     },
   };
   if (position) {
@@ -51,6 +51,13 @@ function toG6Node(
   }
   return node;
 }
+
+const CHEVRON: Record<Side, string> = {
+  top: '▴',
+  bottom: '▾',
+  left: '◂',
+  right: '▸',
+};
 
 function foldMarks(
   item: GraphEntity,
@@ -62,49 +69,30 @@ function foldMarks(
   const collapsed = new Map<Side, RelationFold[]>();
   for (const side of ['left', 'right', 'top', 'bottom'] as const) {
     for (const fold of foldsOnSide(item.folds, side, item.id === rootId, position?.side)) {
-      const at = fold.expanded ? forks?.get(fold.key) : undefined;
-      if (at && position) {
-        marks.push({
-          key: fold.key,
-          text: '−',
-          left: HALF_W + at.x - position.x,
-          top: HALF_H + at.y - position.y,
-        });
+      if (fold.expanded) {
+        const at = forks?.get(fold.key);
+        if (at && position) {
+          marks.push({
+            key: fold.key,
+            text: '−',
+            left: HALF_W + at.x - position.x,
+            top: HALF_H + at.y - position.y,
+          });
+        }
         continue;
       }
-      if (!fold.expanded) {
-        const list = collapsed.get(side) ?? [];
-        list.push(fold);
-        collapsed.set(side, list);
-      }
+      const list = collapsed.get(side) ?? [];
+      list.push(fold);
+      collapsed.set(side, list);
     }
   }
-  // 收起：卡片边上只留展开箭头；数量在「+ N」占位与边标签上
   for (const [side, list] of collapsed) {
     list.forEach((fold, index) => {
       const point = badgeOnCard(side, index, list.length);
-      marks.push({
-        key: fold.key,
-        text: chevronOf(side),
-        left: point.left,
-        top: point.top,
-      });
+      marks.push({ key: fold.key, text: CHEVRON[side], left: point.left, top: point.top });
     });
   }
   return marks;
-}
-
-function chevronOf(side: Side): string {
-  if (side === 'top') {
-    return '▴';
-  }
-  if (side === 'bottom') {
-    return '▾';
-  }
-  if (side === 'left') {
-    return '◂';
-  }
-  return '▸';
 }
 
 function foldsOnSide(

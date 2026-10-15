@@ -1,6 +1,7 @@
 import type { Graph, IElementEvent } from '@antv/g6';
 import { GRAPH_MIN_SIZE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
+import { isFoldSummaryId, isFoldSummaryNode } from './graph.util';
 import type { GraphNodePosition } from './to-g6-data';
 
 /** 按容器尺寸取画布宽高，不低于最小值 */
@@ -12,14 +13,14 @@ export function graphHostSize(container: HTMLElement): { width: number; height: 
   };
 }
 
-/** 把当前可见节点坐标写入 pins（收起节点坐标不覆盖；折叠占位不写入，避免下次盖住补位） */
+/** 把当前可见节点坐标写入 pins（折叠占位不写入） */
 export function snapshotGraphPositions(
   g6: Graph,
   pins: Map<string, GraphNodePosition>,
 ): void {
   for (const node of g6.getNodeData()) {
     const id = String(node.id);
-    if (id.startsWith('fold:')) {
+    if (isFoldSummaryId(id)) {
       continue;
     }
     const [x, y] = g6.getElementPosition(id);
@@ -34,7 +35,7 @@ export function snapshotGraphPositions(
 export function buildElementStates(data: DependencyGraph): Record<string, string[]> {
   const stateMap: Record<string, string[]> = {};
   for (const node of data.nodes) {
-    if (!node.relationHub && !node.foldSummary) {
+    if (!node.relationHub && !isFoldSummaryNode(node)) {
       stateMap[node.id] = node.id === data.rootId ? ['root'] : [];
     }
   }

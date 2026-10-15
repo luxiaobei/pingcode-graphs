@@ -1,5 +1,10 @@
 import type { DependencyGraph, GraphEdge, GraphEntity, RelationFold } from '../entities/graph.entity';
-import { foldEdgeLabel, foldSummaryNodeId, relationFoldKey } from './graph.util';
+import {
+  foldEdgeLabel,
+  foldSummaryNodeId,
+  isFoldSummaryNode,
+  relationFoldKey,
+} from './graph.util';
 
 /** 无向邻接表：source/target 互为邻居 */
 function neighborMap(edges: GraphEdge[]): Map<string, Set<string>> {
@@ -132,12 +137,10 @@ export function buildVisibleGraph(
     if (!groups.size) {
       return undefined;
     }
-    return [...groups.entries()].map(([relationType, count]) => ({
-      key: relationFoldKey(id, relationType),
-      relationType,
-      count,
-      expanded: !collapsedIds.has(relationFoldKey(id, relationType)),
-    }));
+    return [...groups.entries()].map(([relationType, count]) => {
+      const key = relationFoldKey(id, relationType);
+      return { key, relationType, count, expanded: !collapsedIds.has(key) };
+    });
   };
 
   const visible: DependencyGraph = {
@@ -161,7 +164,7 @@ function withFoldSummaries(graph: DependencyGraph): DependencyGraph {
   const extraEdges: GraphEdge[] = [];
 
   for (const node of graph.nodes) {
-    if (node.relationHub || node.foldSummary || !node.folds?.length) {
+    if (node.relationHub || isFoldSummaryNode(node) || !node.folds?.length) {
       continue;
     }
     for (const fold of node.folds) {

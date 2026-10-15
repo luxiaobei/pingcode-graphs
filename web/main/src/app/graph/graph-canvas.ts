@@ -37,7 +37,7 @@ import {
   nodeItemFromEvent,
   sharpenHtmlCamera,
 } from '../utils/g6-helpers';
-import { isWorkItemEntity, openPivot } from '../utils/graph.util';
+import { isFoldSummaryNode, isWorkItemEntity, openPivot } from '../utils/graph.util';
 import { toG6Data, type GraphNodePosition } from '../utils/to-g6-data';
 import { bindWorkItemCardRuntime } from './work-item-card';
 
@@ -276,7 +276,7 @@ export class GraphCanvas {
     if (
       !item ||
       item.relationHub ||
-      item.foldSummary ||
+      isFoldSummaryNode(item) ||
       item.id === data?.rootId ||
       !isWorkItemEntity(item)
     ) {

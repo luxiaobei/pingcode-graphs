@@ -64,16 +64,15 @@ export function trunkEdges(
     if (child.relationHub || !child.revealedByAnchorId) {
       continue;
     }
+    const fold = child.foldSummary;
     const relationType =
-      child.foldSummary?.relationType ??
+      fold?.relationType ??
       relationBetween(graph.edges, nodes, child.revealedByAnchorId, child.id);
     const member: TrunkMember = {
       parentId: child.revealedByAnchorId,
       childId: child.id,
       relationType,
-      label: child.foldSummary
-        ? foldEdgeLabel(relationType, child.foldSummary.count)
-        : relationLabel(relationType),
+      label: fold ? foldEdgeLabel(relationType, fold.count) : relationLabel(relationType),
     };
     const key = relationFoldKey(member.parentId, relationType);
     const list = groups.get(key) ?? [];
@@ -138,6 +137,8 @@ export function trunkEdges(
       const parentId = group.members[0]?.parentId ?? '';
       forks.set(relationFoldKey(parentId, relationType), junction(parent, side, center, fork, straight));
       const stagger = labelStagger(groupIndex);
+      const offsetX = !straight && !alone ? 16 : 0;
+      const offsetY = !straight && !alone ? -12 : 0;
       for (const item of group.placed) {
         const showLabel = item.member.childId === labelOwner;
         const controlPoints = straight
@@ -148,16 +149,8 @@ export function trunkEdges(
           labelPlacement: showLabel
             ? labelRatio(parent, item.child, side, controlPoints, labelCenter, straight)
             : 'center',
-          labelOffsetX: showLabel
-            ? (side === 'top' || side === 'bottom'
-                ? (!straight && !alone ? 16 : 0) + stagger
-                : 0)
-            : 0,
-          labelOffsetY: showLabel
-            ? (side === 'left' || side === 'right'
-                ? (!straight && !alone ? -12 : 0) + stagger
-                : 0)
-            : 0,
+          labelOffsetX: showLabel && (side === 'top' || side === 'bottom') ? offsetX + stagger : 0,
+          labelOffsetY: showLabel && (side === 'left' || side === 'right') ? offsetY + stagger : 0,
         };
         if ((straight || alone) && showLabel) {
           style.labelTextAlign = 'center';

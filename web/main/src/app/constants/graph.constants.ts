@@ -57,26 +57,20 @@ function entityOf(datum: NodeData): GraphEntity | undefined {
   return datum.data?.['item'] as GraphEntity | undefined;
 }
 
-function relationHubOf(datum: NodeData): string | undefined {
-  return entityOf(datum)?.relationHub;
-}
-
-function foldSummaryOf(datum: NodeData) {
-  return entityOf(datum)?.foldSummary;
-}
-
-function cardOrHub<T>(datum: NodeData, card: T, hub: T): T {
-  return relationHubOf(datum) ? hub : card;
+function nodeKind(datum: NodeData): 'hub' | 'fold' | 'card' {
+  const item = entityOf(datum);
+  if (item?.relationHub) {
+    return 'hub';
+  }
+  if (item?.foldSummary) {
+    return 'fold';
+  }
+  return 'card';
 }
 
 function nodeChrome<T>(datum: NodeData, card: T, fold: T, hub: T): T {
-  if (relationHubOf(datum)) {
-    return hub;
-  }
-  if (foldSummaryOf(datum)) {
-    return fold;
-  }
-  return card;
+  const kind = nodeKind(datum);
+  return kind === 'hub' ? hub : kind === 'fold' ? fold : card;
 }
 
 /** 右键留给追溯菜单，拖动只认左键。 */
@@ -104,10 +98,10 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
       fill: (d: NodeData) => nodeChrome(d, '#ffffff', '#f5f3ff', 'transparent'),
       stroke: (d: NodeData) => nodeChrome(d, '#94a3b8', '#7c3aed', 'transparent'),
       lineWidth: (d: NodeData) => nodeChrome(d, 2, 1, 0),
-      opacity: (d: NodeData) => cardOrHub(d, 1, 0),
+      opacity: (d: NodeData) => nodeChrome(d, 1, 1, 0),
       label: false,
-      cursor: (d: NodeData) => cardOrHub(d, 'pointer', 'default'),
-      pointerEvents: (d: NodeData) => cardOrHub(d, 'auto', 'none'),
+      cursor: (d: NodeData) => nodeChrome(d, 'pointer', 'pointer', 'default'),
+      pointerEvents: (d: NodeData) => nodeChrome(d, 'auto', 'auto', 'none'),
     },
     state: {
       root: { stroke: '#6698ff', lineWidth: 2, fill: '#eff6ff' },

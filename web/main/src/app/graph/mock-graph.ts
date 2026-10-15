@@ -129,31 +129,12 @@ const nodes: GraphEntity[] = [
     navigationTarget: 'ticket',
     assignee: { id: 'u2', display_name: '李四' },
   }),
-  item('n-objective', 'OBJ-3', '登录成功率 99.9%', {
-    type: { name: '目标' },
-    navigationTarget: 'workitem',
-    assignee: { id: 'u5', display_name: '陈七' },
-  }),
-  item('n-objective-2', 'OBJ-8', '登录耗时低于 1 秒', {
-    type: { name: '目标' },
-    navigationTarget: 'workitem',
-    assignee: { id: 'u1', display_name: '张三' },
-  }),
-  item('n-objective-3', 'OBJ-11', '账号投诉下降 30%', {
-    type: { name: '目标' },
-    navigationTarget: 'workitem',
-    assignee: { id: 'u4', display_name: '赵六' },
-  }),
   item('n-test', 'TC-21', '登录主流程', {
     type: { name: '测试用例' },
     icon: 'test-case-square-fill',
     iconColor: '#3ddc91',
     navigationTarget: 'testcase',
     assignee: { id: 'u3', display_name: '王五' },
-  }),
-  item('n-depend', 'PORTAL-140', '账号服务可用', {
-    type: { name: '任务' },
-    assignee: { id: 'u1', display_name: '张三' },
   }),
   item('n-parent', 'PORTAL-80', '客户门户登录能力', {
     type: { name: '史诗' },
@@ -219,11 +200,7 @@ const edges: GraphEdge[] = (
     ['e13', 'n-root', 'n-idea', 'relate:idea'],
     ['e14', 'n-root', 'n-idea-2', 'relate:idea'],
     ['e15', 'n-root', 'n-ticket', 'relate:ticket'],
-    ['e16', 'n-root', 'n-objective', 'relate:objective'],
-    ['e16b', 'n-root', 'n-objective-2', 'relate:objective'],
-    ['e16c', 'n-root', 'n-objective-3', 'relate:objective'],
     ['e17', 'n-root', 'n-test', 'relate:test_case'],
-    ['e18', 'n-root', 'n-depend', 'depend'],
     ['e18b', 'n-root', 'n-parent', 'parent'],
     ['e19', 'n-root', 'n-c1', 'child'],
     ['e20', 'n-root', 'n-c1b', 'child'],

@@ -46,7 +46,6 @@ const RELATION_BY_EDGE: Record<string, string> = {
   caused_by: 'causedBy',
   clones: 'clone',
   cloned_by: 'clonedBy',
-  depends_on: 'depend',
   duplicates: 'duplicate',
   mentions: 'mention',
   relates: 'relate',
@@ -58,7 +57,6 @@ const RELATE_TYPE_BY_KIND: Record<string, string> = {
   idea: 'relate:idea',
   ticket: 'relate:ticket',
   test_case: 'relate:test_case',
-  objective: 'relate:objective',
 };
 
 const KIND_NAVIGATION: Record<string, string> = {

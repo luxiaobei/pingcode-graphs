@@ -12,7 +12,7 @@ const SIBLING_GAP = 28;
 const GROUP_GAP = 56;
 
 const LEFT_TYPES = ['relate:idea', 'relate:ticket'] as const;
-const RIGHT_TYPES = ['relate:objective', 'relate:test_case'] as const;
+const RIGHT_TYPES = ['relate:test_case'] as const;
 
 export type Side = 'left' | 'right' | 'top' | 'bottom';
 
@@ -139,7 +139,7 @@ export function groupRank(type: string, side: Side): number {
     return index === -1 ? RIGHT_TYPES.length : index;
   }
   if (side === 'top') {
-    return type === 'depend' || type === 'parent' ? 0 : 1;
+    return type === 'parent' ? 0 : 1;
   }
   return type === 'child' ? 0 : 1;
 }
@@ -345,7 +345,7 @@ function arrangeNode(graph: DependencyGraph, id: string, flow: Side | 'cross', s
   };
 }
 
-/** 根在中间。左产品需求/工单，右目标/测试，上依赖和其他，下子级。每边相对中线对齐。 */
+/** 根在中间。左产品需求/工单，右测试，上父项和其他，下子级。每边相对中线对齐。 */
 export function arrangeGraph(graph: DependencyGraph): Map<string, { x: number; y: number }> {
   const root = arrangeNode(graph, graph.rootId, 'cross', new Set());
   const positions = new Map(root.positions);

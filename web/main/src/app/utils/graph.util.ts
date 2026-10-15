@@ -98,17 +98,35 @@ const pivotOpeners: Partial<Record<NavigationTarget, (identifier: string) => Pro
   [NavigationTarget.Page]: (identifier) => page.openDetail(identifier),
 };
 
-/** 通过 SDK 打开对应对象的 pivot 详情。identifier 为编号，如 GRA-3。 */
+/** 通过 SDK 打开详情。工作项等传编号（如 GRA-3），测试用例传用例 id。 */
 export function openPivot(item: GraphEntity): void {
-  const identifier = item.identifier?.trim();
+  const target = resolveNavigationTarget(item) ?? NavigationTarget.Workitem;
+  const identifier = pivotIdentifier(item, target);
   if (!identifier) {
     return;
   }
-  const open = pivotOpeners[resolveNavigationTarget(item) ?? NavigationTarget.Workitem];
+  const open = pivotOpeners[target];
   if (!open) {
     return;
   }
   void open(identifier).catch(() => undefined);
+}
+
+function pivotIdentifier(item: GraphEntity, target: NavigationTarget): string {
+  if (target === NavigationTarget.Testcase) {
+    return testCaseId(item);
+  }
+  return typeof item.identifier === 'string' ? item.identifier.trim() : '';
+}
+
+/** 节点 id 为 test_case:{用例 id}；同一对象多次出现时 id 会带前缀，取最后一段。 */
+function testCaseId(item: GraphEntity): string {
+  const marker = 'test_case:';
+  const index = item.id.lastIndexOf(marker);
+  if (index < 0) {
+    return '';
+  }
+  return item.id.slice(index + marker.length).trim();
 }
 
 /** 按展示配置裁剪。开关关掉的关系隐藏，未列入配置的关系保留。 */

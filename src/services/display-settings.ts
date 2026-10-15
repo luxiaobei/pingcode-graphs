@@ -6,7 +6,7 @@ const KEY_PREFIX = "graph-display-settings:";
 /** 展示配置开关。没有用户、没有记录或读失败时，resolver 返回全部打开。 */
 export type DisplaySettingFlags = Record<string, boolean>;
 
-const SETTING_IDS = ["parent", "relate", "dependency", "product", "ticket", "test", "objective"] as const;
+const SETTING_IDS = ["parent", "relate", "product", "ticket", "test"] as const;
 
 function allOn(): DisplaySettingFlags {
     return Object.fromEntries(SETTING_IDS.map((id) => [id, true]));

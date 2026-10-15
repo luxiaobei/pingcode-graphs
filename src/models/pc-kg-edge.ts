@@ -13,7 +13,6 @@ export const KG_EDGE_TYPE = {
     blockedBy: "blocked_by", // 被阻塞
     causes: "causes", // 导致
     causedBy: "caused_by", // 被导致
-    dependsOn: "depends_on", // 依赖
     duplicates: "duplicates", // 重复
     mentions: "mentions", // 提及
     clones: "clones", // 克隆

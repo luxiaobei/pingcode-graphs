@@ -122,6 +122,8 @@ export function trunkEdges(
       .filter((group) => group.members[0]?.relationType === 'parent')
       .flatMap((group) => group.placed.map((item) => item.child));
     const spines = splitParentBundleSpines(parent, side, parentKids, bundleKids, others);
+    // 同侧既有父又有其它关系时，必须两条出线：父独立干 + 其它公共干
+    const dualExit = Boolean(parentKids.length && bundleKids.length);
     // 同侧多组关系（含多个 +N）错开标签，避免叠字
     const labelStagger = (index: number): number =>
       lane.length <= 1 ? 0 : (index - (lane.length - 1) / 2) * 16;
@@ -142,10 +144,16 @@ export function trunkEdges(
       const straight = relationType === 'child' && !foldOnly;
       const parentOwn = relationType === 'parent';
       const alone = parentOwn && kids.length === 1 && onAxis(parent, kids[0], side);
+      // 双出线且父组正好在卡中线上时，把父干略偏一侧，避免仍和公共中线重合
+      const stemCenter =
+        parentOwn && dualExit ? parentStemCenter(parent, center, side) : center;
       const labelCenter =
-        straight || alone ? (side === 'left' || side === 'right' ? parent.y : parent.x) : center;
+        straight || alone ? (side === 'left' || side === 'right' ? parent.y : parent.x) : stemCenter;
       const parentId = group.members[0]?.parentId ?? '';
-      forks.set(relationFoldKey(parentId, relationType), junction(parent, side, center, fork, straight));
+      forks.set(
+        relationFoldKey(parentId, relationType),
+        junction(parent, side, stemCenter, fork, straight),
+      );
       // 折叠文案贴在类型线上，不再做偏移/错位（短竖段时否则会漂到横干上）
       const stagger = foldOnly ? 0 : labelStagger(groupIndex);
       const offsetX = foldOnly || straight || alone ? 0 : 16;
@@ -155,10 +163,12 @@ export function trunkEdges(
         : (spines.bundle ?? spines.parent ?? fork);
       for (const item of group.placed) {
         const showLabel = item.member.childId === labelOwner;
-        // 父与其它关系均走正交 routeOf；父走内侧独立脊，不经过关联等公共横脊
+        // 双出线：父贴边横移到父干再竖出；其它关系从卡中线出到公共脊
         const controlPoints = straight
           ? layerRoute(parent, item.child, side, fork)
-          : routeOf(parent, item.child, side, spine, fork, center);
+          : parentOwn && dualExit
+            ? parentSeparateRoute(parent, item.child, side, spine, fork, stemCenter)
+            : routeOf(parent, item.child, side, spine, fork, center);
         const style: EdgeData['style'] = {
           controlPoints,
           labelPlacement: showLabel
@@ -274,8 +284,8 @@ function forkAt(
 const SPINE_SPLIT = 56;
 
 /**
- * 算出父内侧脊 + 其它关系外侧公共脊，并强制错开。
- * 同侧有父时，父绝不走关联/阻塞那条横脊（便于其它关系日后整体收起）。
+ * 父内侧脊 + 其它关系外侧公共脊。
+ * 只挪父脊去躲开公共脊，绝不改 bundle 脊——否则拖父工作项会带动整条公共干。
  */
 function splitParentBundleSpines(
   parent: GraphNodePosition,
@@ -285,38 +295,22 @@ function splitParentBundleSpines(
   others: GraphNodePosition[],
 ): { parent?: number; bundle?: number } {
   let parentSpine = parentKids.length ? spineAt(parent, parentKids, side, others) : undefined;
-  let bundleSpine = bundleKids.length ? spineAt(parent, bundleKids, side, others) : undefined;
+  const bundleSpine = bundleKids.length ? spineAt(parent, bundleKids, side, others) : undefined;
   if (parentSpine == null || bundleSpine == null) {
     return { parent: parentSpine, bundle: bundleSpine };
   }
   if (side === 'top') {
-    // 靠父卡 = y 更大；外侧公共脊再往上（y 更小）
     const near = parent.y - HALF_H - SPINE_PAD;
     parentSpine = Math.min(near, Math.max(parentSpine, bundleSpine + SPINE_SPLIT));
-    if (parentSpine < bundleSpine + SPINE_SPLIT) {
-      bundleSpine = parentSpine - SPINE_SPLIT;
-    }
   } else if (side === 'bottom') {
-    // 靠父卡 = y 更小；外侧公共脊再往下（y 更大）
     const near = parent.y + HALF_H + SPINE_PAD;
     parentSpine = Math.max(near, Math.min(parentSpine, bundleSpine - SPINE_SPLIT));
-    if (parentSpine > bundleSpine - SPINE_SPLIT) {
-      bundleSpine = parentSpine + SPINE_SPLIT;
-    }
   } else if (side === 'left') {
-    // 靠父卡 = x 更大；外侧公共脊再往左（x 更小）
     const near = parent.x - HALF_W - SPINE_PAD;
     parentSpine = Math.min(near, Math.max(parentSpine, bundleSpine + SPINE_SPLIT));
-    if (parentSpine < bundleSpine + SPINE_SPLIT) {
-      bundleSpine = parentSpine - SPINE_SPLIT;
-    }
   } else {
-    // 靠父卡 = x 更小；外侧公共脊再往右（x 更大）
     const near = parent.x + HALF_W + SPINE_PAD;
     parentSpine = Math.max(near, Math.min(parentSpine, bundleSpine - SPINE_SPLIT));
-    if (parentSpine > bundleSpine - SPINE_SPLIT) {
-      bundleSpine = parentSpine + SPINE_SPLIT;
-    }
   }
   return { parent: parentSpine, bundle: bundleSpine };
 }
@@ -421,7 +415,7 @@ function layerRoute(
 
 /**
  * 父卡片 → 脊柱 → 类型线（名字在这一段）→ 本组自己的分叉 → 卡片。
- * 同一关系的线叠在一起，不同关系各开一条。
+ * 关联等：从卡中线出到公共脊（图二）。
  */
 function routeOf(
   parent: GraphNodePosition,
@@ -445,6 +439,64 @@ function routeOf(
           [center, fork],
           [child.x, fork],
         ];
+  return dedupePoints(raw);
+}
+
+/** 父干与卡中线重合时偏开一段，保证能看出两条出线。 */
+function parentStemCenter(parent: GraphNodePosition, center: number, side: Side): number {
+  const axis = side === 'left' || side === 'right' ? parent.y : parent.x;
+  return Math.abs(center - axis) < 12 ? axis - 48 : center;
+}
+
+/**
+ * 父独立出线：先贴父卡边缘横移到父干，再竖出到父脊。
+ * 不经过卡中线→公共脊那一段，因此和关联等是两条线；拖父也不会带动公共干。
+ */
+function parentSeparateRoute(
+  parent: GraphNodePosition,
+  child: GraphNodePosition,
+  side: Side,
+  spine: number,
+  fork: number,
+  center: number,
+): [number, number][] {
+  if (side === 'top') {
+    const edge = parent.y - HALF_H;
+    return dedupePoints([
+      [center, edge],
+      [center, spine],
+      [center, fork],
+      [child.x, fork],
+    ]);
+  }
+  if (side === 'bottom') {
+    const edge = parent.y + HALF_H;
+    return dedupePoints([
+      [center, edge],
+      [center, spine],
+      [center, fork],
+      [child.x, fork],
+    ]);
+  }
+  if (side === 'left') {
+    const edge = parent.x - HALF_W;
+    return dedupePoints([
+      [edge, center],
+      [spine, center],
+      [fork, center],
+      [fork, child.y],
+    ]);
+  }
+  const edge = parent.x + HALF_W;
+  return dedupePoints([
+    [edge, center],
+    [spine, center],
+    [fork, center],
+    [fork, child.y],
+  ]);
+}
+
+function dedupePoints(raw: [number, number][]): [number, number][] {
   const points: [number, number][] = [];
   for (const point of raw) {
     const prev = points[points.length - 1];

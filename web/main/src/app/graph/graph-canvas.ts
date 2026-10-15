@@ -376,10 +376,11 @@ export class GraphCanvas {
     const reused = this.positions.prepare(data, canvasNodeIds, this.g6);
     if (reused && this.positions.sameVisibleNodes(data)) {
       // 可见节点未变：保留拖拽位置
+      this.positions.rememberGraph(data);
       this.applyGraphData(data, reused);
       await this.g6.draw();
     } else if (reused) {
-      // 展开/收起：保留已拖拽坐标（含已收起节点的 pin），只给新增节点补位
+      // 展开/收起：保留已拖拽坐标（含已收起节点的 pin），+N 对齐展开位
       await this.applyLayoutPositions(data, this.positions.resolveExpandCollapse(data), {
         fitView: false,
         keepHiddenPins: true,

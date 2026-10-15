@@ -6,7 +6,7 @@ import {
   resolvePinnedExpandCollapse,
 } from './arrange-graph';
 import { snapshotGraphPositions } from './g6-helpers';
-import { isFoldSummaryId } from './graph.util';
+import { isFoldSummaryId, isFoldSummaryNode, relationBetween } from './graph.util';
 import { cardPositionsFromNodes } from './saved-graph-layout';
 import type { GraphNodePosition } from './to-g6-data';
 
@@ -16,12 +16,15 @@ export class CanvasPositionSession {
   readonly pins = new Map<string, GraphNodePosition>();
   /** 服务端下发 / 已保存；一键整理优先还原 */
   private readonly saved = new Map<string, GraphNodePosition>();
+  /** 上一帧可见图：收起时用展开子卡坐标给 +N 占位 */
+  private lastGraph: DependencyGraph | null = null;
   private lastDepth: number | null = null;
   private lastRootId: string | null = null;
 
   clear(): void {
     this.pins.clear();
     this.saved.clear();
+    this.lastGraph = null;
     this.lastDepth = null;
     this.lastRootId = null;
   }
@@ -54,6 +57,7 @@ export class CanvasPositionSession {
 
     if (!reusePins) {
       this.pins.clear();
+      this.lastGraph = null;
       this.lastDepth = data.depth;
       this.lastRootId = data.rootId;
       this.syncSaved(data);
@@ -73,15 +77,22 @@ export class CanvasPositionSession {
     return ids.length > 0 && ids.every((id) => this.pins.has(id));
   }
 
+  /** 记录当前可见图，供下次收起时对齐 +N 占位。 */
+  rememberGraph(data: DependencyGraph): void {
+    this.lastGraph = data;
+  }
+
   /** 基准布局：saved 优先，缺的用思维导图补齐。 */
   resolveBaseline(data: DependencyGraph): Map<string, GraphNodePosition> {
     this.syncSaved(data);
-    return mergeLayoutPositions(arrangeGraph(data), this.saved);
+    const layout = mergeLayoutPositions(arrangeGraph(data), this.saved);
+    this.lastGraph = data;
+    return layout;
   }
 
   /**
    * 展开/收起：工作项拖拽位置绝对保留；丢掉旧的 fold pin，
-   * 只给新节点（含 +N）相对父卡当前坐标补位。
+   * +N 落在展开时子卡坐标中心，与展开位对齐。
    */
   resolveExpandCollapse(data: DependencyGraph): Map<string, GraphNodePosition> {
     for (const id of [...this.pins.keys()]) {
@@ -89,7 +100,10 @@ export class CanvasPositionSession {
         this.pins.delete(id);
       }
     }
-    return resolvePinnedExpandCollapse(data, arrangeGraph(data), this.pins);
+    const layout = resolvePinnedExpandCollapse(data, arrangeGraph(data), this.pins);
+    placeFoldsAtExpandedSlots(data, this.lastGraph, this.pins, layout);
+    this.lastGraph = data;
+    return layout;
   }
 
   /**
@@ -127,5 +141,44 @@ export class CanvasPositionSession {
     for (const [id, pos] of cardPositionsFromNodes(data.nodes)) {
       this.saved.set(id, pos);
     }
+  }
+}
+
+/**
+ * 收起时把 +N 放到该关系展开子卡的原坐标中心，避免占位被思维导图重新排开。
+ */
+function placeFoldsAtExpandedSlots(
+  data: DependencyGraph,
+  prev: DependencyGraph | null,
+  pins: ReadonlyMap<string, GraphNodePosition>,
+  layout: Map<string, GraphNodePosition>,
+): void {
+  if (!prev) {
+    return;
+  }
+  const prevNodes = new Map(prev.nodes.map((node) => [node.id, node]));
+  for (const node of data.nodes) {
+    const fold = node.foldSummary;
+    const parentId = node.revealedByAnchorId;
+    if (!fold || !parentId || !isFoldSummaryNode(node)) {
+      continue;
+    }
+    const kids = prev.nodes.filter((child) => {
+      if (child.relationHub || isFoldSummaryNode(child) || child.revealedByAnchorId !== parentId) {
+        return false;
+      }
+      return relationBetween(prev.edges, prevNodes, parentId, child.id) === fold.relationType;
+    });
+    const points = kids
+      .map((child) => pins.get(child.id))
+      .filter((pos): pos is GraphNodePosition => Boolean(pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)));
+    if (!points.length) {
+      continue;
+    }
+    const x = points.reduce((sum, pos) => sum + pos.x, 0) / points.length;
+    const y = points.reduce((sum, pos) => sum + pos.y, 0) / points.length;
+    const base = layout.get(node.id);
+    const side = points.find((pos) => pos.side)?.side ?? base?.side;
+    layout.set(node.id, { ...(base ?? { x, y }), x, y, side });
   }
 }

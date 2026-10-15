@@ -259,6 +259,51 @@ function stackOnAxis(items: StackItem[], side: Side): Placed[] {
   });
 }
 
+/**
+ * 同侧同时有「父」与其它关系时：父排在靠父卡的一圈，其它关系再往外一圈。
+ * 避免父与关联/阻塞等并排共脊，便于其它关系日后整体收起。
+ */
+function stackSideSeparatingParent(
+  graph: DependencyGraph,
+  groups: RelationGroup[],
+  side: Side,
+  seen: Set<string>,
+  preferred?: ReadonlyMap<string, Side> | null,
+): Placed[] {
+  const parentGroups = groups.filter((group) => group.type === 'parent');
+  const otherGroups = groups.filter((group) => group.type !== 'parent');
+  if (!parentGroups.length || !otherGroups.length) {
+    return stackOnAxis(itemsOf(graph, groups, side, seen, preferred), side);
+  }
+  const parentPlaced = stackOnAxis(itemsOf(graph, parentGroups, side, seen, preferred), side);
+  let otherPlaced = stackOnAxis(itemsOf(graph, otherGroups, side, seen, preferred), side);
+  const parentExt = unionExtent(parentPlaced.map((item) => item.extent));
+  const otherExt = unionExtent(otherPlaced.map((item) => item.extent));
+  // 把其它关系整体推到父带外侧
+  if (side === 'top') {
+    const dy = Math.min(0, parentExt.top - GROUP_GAP - otherExt.bottom);
+    if (dy) {
+      otherPlaced = otherPlaced.map((item) => shiftPlaced(item, 0, dy));
+    }
+  } else if (side === 'bottom') {
+    const dy = Math.max(0, parentExt.bottom + GROUP_GAP - otherExt.top);
+    if (dy) {
+      otherPlaced = otherPlaced.map((item) => shiftPlaced(item, 0, dy));
+    }
+  } else if (side === 'left') {
+    const dx = Math.min(0, parentExt.left - GROUP_GAP - otherExt.right);
+    if (dx) {
+      otherPlaced = otherPlaced.map((item) => shiftPlaced(item, dx, 0));
+    }
+  } else {
+    const dx = Math.max(0, parentExt.right + GROUP_GAP - otherExt.left);
+    if (dx) {
+      otherPlaced = otherPlaced.map((item) => shiftPlaced(item, dx, 0));
+    }
+  }
+  return [...parentPlaced, ...otherPlaced];
+}
+
 function withSide(placed: Placed, id: string, side: Side): Placed {
   const positions = new Map(placed.positions);
   const pos = positions.get(id);
@@ -483,7 +528,13 @@ function arrangeNode(
     if (!visible.length) {
       continue;
     }
-    placedBySide.set(side, stackOnAxis(itemsOf(graph, visible, side, seen, preferred), side));
+    // 下侧仍是子项直出；其它侧父与关联等分层，避免共脊
+    placedBySide.set(
+      side,
+      side === 'bottom'
+        ? stackOnAxis(itemsOf(graph, visible, side, seen, preferred), side)
+        : stackSideSeparatingParent(graph, visible, side, seen, preferred),
+    );
   }
 
   if (flow === 'cross') {

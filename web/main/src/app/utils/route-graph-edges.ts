@@ -114,15 +114,14 @@ export function trunkEdges(
     const skip = new Set(lane.flatMap((group) => group.members.map((member) => member.childId)));
     skip.add(lane[0]?.members[0]?.parentId ?? '');
     const others = otherNodes(positions, skip);
-    // 关联/重复/阻塞等共用一条脊柱（图二）；父单独脊柱，不与其它关系同干
+    // 关联/重复/阻塞等共用外侧脊柱（图二）；父用内侧独立脊柱，绝不并进公共横脊
     const bundleKids = lane
       .filter((group) => group.members[0]?.relationType !== 'parent')
       .flatMap((group) => group.placed.map((item) => item.child));
     const parentKids = lane
       .filter((group) => group.members[0]?.relationType === 'parent')
       .flatMap((group) => group.placed.map((item) => item.child));
-    const bundleSpine = bundleKids.length ? spineAt(parent, bundleKids, side, others) : undefined;
-    const parentSpine = parentKids.length ? spineAt(parent, parentKids, side, others) : undefined;
+    const spines = splitParentBundleSpines(parent, side, parentKids, bundleKids, others);
     // 同侧多组关系（含多个 +N）错开标签，避免叠字
     const labelStagger = (index: number): number =>
       lane.length <= 1 ? 0 : (index - (lane.length - 1) / 2) * 16;
@@ -152,11 +151,11 @@ export function trunkEdges(
       const offsetX = foldOnly || straight || alone ? 0 : 16;
       const offsetY = foldOnly || straight || alone ? 0 : -12;
       const spine = parentOwn
-        ? (parentSpine ?? fork)
-        : (bundleSpine ?? parentSpine ?? fork);
+        ? (spines.parent ?? fork)
+        : (spines.bundle ?? spines.parent ?? fork);
       for (const item of group.placed) {
         const showLabel = item.member.childId === labelOwner;
-        // 父与其它关系均走正交 routeOf，父用独立脊柱，不斜切
+        // 父与其它关系均走正交 routeOf；父走内侧独立脊，不经过关联等公共横脊
         const controlPoints = straight
           ? layerRoute(parent, item.child, side, fork)
           : routeOf(parent, item.child, side, spine, fork, center);
@@ -269,6 +268,57 @@ function forkAt(
     return Math.min(...children.map((child) => child.pos.y - child.half.h)) - FORK_PAD;
   }
   return Math.max(...children.map((child) => child.pos.y + child.half.h)) + FORK_PAD;
+}
+
+/** 父脊与关联等公共脊至少隔开这么多，避免画成一条横线。 */
+const SPINE_SPLIT = 56;
+
+/**
+ * 算出父内侧脊 + 其它关系外侧公共脊，并强制错开。
+ * 同侧有父时，父绝不走关联/阻塞那条横脊（便于其它关系日后整体收起）。
+ */
+function splitParentBundleSpines(
+  parent: GraphNodePosition,
+  side: Side,
+  parentKids: GraphNodePosition[],
+  bundleKids: GraphNodePosition[],
+  others: GraphNodePosition[],
+): { parent?: number; bundle?: number } {
+  let parentSpine = parentKids.length ? spineAt(parent, parentKids, side, others) : undefined;
+  let bundleSpine = bundleKids.length ? spineAt(parent, bundleKids, side, others) : undefined;
+  if (parentSpine == null || bundleSpine == null) {
+    return { parent: parentSpine, bundle: bundleSpine };
+  }
+  if (side === 'top') {
+    // 靠父卡 = y 更大；外侧公共脊再往上（y 更小）
+    const near = parent.y - HALF_H - SPINE_PAD;
+    parentSpine = Math.min(near, Math.max(parentSpine, bundleSpine + SPINE_SPLIT));
+    if (parentSpine < bundleSpine + SPINE_SPLIT) {
+      bundleSpine = parentSpine - SPINE_SPLIT;
+    }
+  } else if (side === 'bottom') {
+    // 靠父卡 = y 更小；外侧公共脊再往下（y 更大）
+    const near = parent.y + HALF_H + SPINE_PAD;
+    parentSpine = Math.max(near, Math.min(parentSpine, bundleSpine - SPINE_SPLIT));
+    if (parentSpine > bundleSpine - SPINE_SPLIT) {
+      bundleSpine = parentSpine + SPINE_SPLIT;
+    }
+  } else if (side === 'left') {
+    // 靠父卡 = x 更大；外侧公共脊再往左（x 更小）
+    const near = parent.x - HALF_W - SPINE_PAD;
+    parentSpine = Math.min(near, Math.max(parentSpine, bundleSpine + SPINE_SPLIT));
+    if (parentSpine < bundleSpine + SPINE_SPLIT) {
+      bundleSpine = parentSpine - SPINE_SPLIT;
+    }
+  } else {
+    // 靠父卡 = x 更小；外侧公共脊再往右（x 更大）
+    const near = parent.x + HALF_W + SPINE_PAD;
+    parentSpine = Math.max(near, Math.min(parentSpine, bundleSpine - SPINE_SPLIT));
+    if (parentSpine > bundleSpine - SPINE_SPLIT) {
+      bundleSpine = parentSpine + SPINE_SPLIT;
+    }
+  }
+  return { parent: parentSpine, bundle: bundleSpine };
 }
 
 /** 父卡片外侧的公共脊柱。让开左右（或上下）已经占住的卡片，避免横穿。 */

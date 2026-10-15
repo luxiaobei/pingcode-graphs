@@ -38,7 +38,9 @@ interface LaneGroup {
   side: Side;
 }
 
-/** 展开收起落在这条关系开始分叉的位置。 */
+/**
+ * − 落在关系分叉处；仅沿出线方向相对父卡外缘留空，不改 lane / 不钳死边路径。
+ */
 function junction(
   parent: GraphNodePosition,
   side: Side,
@@ -46,10 +48,25 @@ function junction(
   fork: number,
   straight: boolean,
 ): { x: number; y: number } {
+  const clear = 22;
   if (straight) {
-    return side === 'left' || side === 'right' ? { x: fork, y: parent.y } : { x: parent.x, y: fork };
+    if (side === 'left' || side === 'right') {
+      const edge = side === 'left' ? parent.x - HALF_W - clear : parent.x + HALF_W + clear;
+      const x = side === 'left' ? Math.min(fork, edge) : Math.max(fork, edge);
+      return { x, y: parent.y };
+    }
+    const edge = side === 'top' ? parent.y - HALF_H - clear : parent.y + HALF_H + clear;
+    const y = side === 'top' ? Math.min(fork, edge) : Math.max(fork, edge);
+    return { x: parent.x, y };
   }
-  return side === 'left' || side === 'right' ? { x: fork, y: center } : { x: center, y: fork };
+  if (side === 'left' || side === 'right') {
+    const edge = side === 'left' ? parent.x - HALF_W - clear : parent.x + HALF_W + clear;
+    const x = side === 'left' ? Math.min(fork, edge) : Math.max(fork, edge);
+    return { x, y: center };
+  }
+  const edge = side === 'top' ? parent.y - HALF_H - clear : parent.y + HALF_H + clear;
+  const y = side === 'top' ? Math.min(fork, edge) : Math.max(fork, edge);
+  return { x: center, y };
 }
 
 /** 先沿父卡片走出关系类型，再从类型线另开一条分支接到这组卡片。类型只是线上的名字。 */
@@ -95,8 +112,13 @@ export function trunkEdges(
     }
     const placedIds = new Set(placed.map((item) => item.member.childId));
     loose.push(...members.filter((member) => !placedIds.has(member.childId)));
+    // 优先 pin.side（折叠拖拽 / 布局写入）；勿对宽排顶侧做几何推翻，否则会误成左/右
     const side =
-      placed.find((item) => item.child.side)?.child.side ?? sideOf(parent, placed.map((item) => item.child));
+      placed.find((item) => item.child.side)?.child.side ??
+      sideOf(
+        parent,
+        placed.map((item) => item.child),
+      );
     const key = `${members[0]?.parentId}::${side}`;
     const lane = lanes.get(key) ?? [];
     lane.push({ members, parent, placed, side });
@@ -144,9 +166,13 @@ export function trunkEdges(
       const straight = relationType === 'child' && !foldOnly;
       const parentOwn = relationType === 'parent';
       const alone = parentOwn && kids.length === 1 && onAxis(parent, kids[0], side);
-      // 双出线且父组正好在卡中线上时，把父干略偏一侧，避免仍和公共中线重合
-      const stemCenter =
-        parentOwn && dualExit ? parentStemCenter(parent, center, side) : center;
+      // 父始终另起干（贴父卡中线）；与公共脊同侧时略偏，保证看得出两条出线
+      const parentAxis = side === 'left' || side === 'right' ? parent.y : parent.x;
+      const stemCenter = parentOwn
+        ? dualExit
+          ? parentStemCenter(parent, center, side)
+          : parentAxis
+        : center;
       const labelCenter =
         straight || alone ? (side === 'left' || side === 'right' ? parent.y : parent.x) : stemCenter;
       const parentId = group.members[0]?.parentId ?? '';
@@ -163,10 +189,10 @@ export function trunkEdges(
         : (spines.bundle ?? spines.parent ?? fork);
       for (const item of group.placed) {
         const showLabel = item.member.childId === labelOwner;
-        // 双出线：父贴边横移到父干再竖出；其它关系从卡中线出到公共脊
+        // 父：独立干出线；其它关系：公共脊（图二）
         const controlPoints = straight
           ? layerRoute(parent, item.child, side, fork)
-          : parentOwn && dualExit
+          : parentOwn
             ? parentSeparateRoute(parent, item.child, side, spine, fork, stemCenter)
             : routeOf(parent, item.child, side, spine, fork, center);
         const style: EdgeData['style'] = {
@@ -442,15 +468,18 @@ function routeOf(
   return dedupePoints(raw);
 }
 
-/** 父干与卡中线重合时偏开一段，保证能看出两条出线。 */
-function parentStemCenter(parent: GraphNodePosition, center: number, side: Side): number {
+/**
+ * 父干始终贴父卡中线；仅与公共干重合时偏开。
+ * 勿回落到子组 center，否则拖父后出线会横拉去追子卡。
+ */
+function parentStemCenter(parent: GraphNodePosition, bundleCenter: number, side: Side): number {
   const axis = side === 'left' || side === 'right' ? parent.y : parent.x;
-  return Math.abs(center - axis) < 12 ? axis - 48 : center;
+  return Math.abs(bundleCenter - axis) < 12 ? axis - 48 : axis;
 }
 
 /**
- * 父独立出线：先贴父卡边缘横移到父干，再竖出到父脊。
- * 不经过卡中线→公共脊那一段，因此和关联等是两条线；拖父也不会带动公共干。
+ * 父独立出线：贴父卡沿父干出到父脊，再横移到子卡落下。
+ * 竖干钉在 stem（父卡），不跟子组中心跑。
  */
 function parentSeparateRoute(
   parent: GraphNodePosition,
@@ -458,40 +487,40 @@ function parentSeparateRoute(
   side: Side,
   spine: number,
   fork: number,
-  center: number,
+  stem: number,
 ): [number, number][] {
   if (side === 'top') {
     const edge = parent.y - HALF_H;
     return dedupePoints([
-      [center, edge],
-      [center, spine],
-      [center, fork],
+      [stem, edge],
+      [stem, spine],
+      [child.x, spine],
       [child.x, fork],
     ]);
   }
   if (side === 'bottom') {
     const edge = parent.y + HALF_H;
     return dedupePoints([
-      [center, edge],
-      [center, spine],
-      [center, fork],
+      [stem, edge],
+      [stem, spine],
+      [child.x, spine],
       [child.x, fork],
     ]);
   }
   if (side === 'left') {
     const edge = parent.x - HALF_W;
     return dedupePoints([
-      [edge, center],
-      [spine, center],
-      [fork, center],
+      [edge, stem],
+      [spine, stem],
+      [spine, child.y],
       [fork, child.y],
     ]);
   }
   const edge = parent.x + HALF_W;
   return dedupePoints([
-    [edge, center],
-    [spine, center],
-    [fork, center],
+    [edge, stem],
+    [spine, stem],
+    [spine, child.y],
     [fork, child.y],
   ]);
 }

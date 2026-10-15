@@ -1,7 +1,6 @@
 import type { GraphData, NodeData } from '@antv/g6';
-import type { DependencyGraph, FoldMark, GraphEntity, RelationFold } from '../entities/graph.entity';
+import type { DependencyGraph, FoldMark, GraphEntity } from '../entities/graph.entity';
 import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
-import { groupRank, sideOfType, type Side } from './arrange-graph';
 import { isFoldSummaryNode } from './graph.util';
 import { trunkEdges, type GraphNodePosition } from './route-graph-edges';
 
@@ -51,52 +50,34 @@ function toG6Node(
   return node;
 }
 
-/** 仅展开态：在分叉处画「−」。收起态入口是「+ N」占位，不再画卡片边 chevron。 */
+/**
+ * 仅展开态：在分叉处画「−」。
+ * 位置完全跟 trunkEdges 的 forks 走，不用非根 nodeSide 过滤（左拖后否则会挂错）。
+ */
 function foldMarks(
   item: GraphEntity,
   position: GraphNodePosition | undefined,
-  rootId: string,
+  _rootId: string,
   forks?: ReadonlyMap<string, { x: number; y: number }>,
 ): FoldMark[] {
   if (!position || !forks) {
     return [];
   }
   const marks: FoldMark[] = [];
-  for (const side of ['left', 'right', 'top', 'bottom'] as const) {
-    for (const fold of foldsOnSide(item.folds, side, item.id === rootId, position.side)) {
-      if (!fold.expanded) {
-        continue;
-      }
-      const at = forks.get(fold.key);
-      if (!at) {
-        continue;
-      }
-      marks.push({
-        key: fold.key,
-        text: '−',
-        left: HALF_W + at.x - position.x,
-        top: HALF_H + at.y - position.y,
-      });
+  for (const fold of item.folds ?? []) {
+    if (!fold.expanded) {
+      continue;
     }
+    const at = forks.get(fold.key);
+    if (!at) {
+      continue;
+    }
+    marks.push({
+      key: fold.key,
+      text: '−',
+      left: HALF_W + at.x - position.x,
+      top: HALF_H + at.y - position.y,
+    });
   }
   return marks;
-}
-
-function foldsOnSide(
-  folds: RelationFold[] | undefined,
-  side: Side,
-  isRoot: boolean,
-  nodeSide?: Side,
-): RelationFold[] {
-  return (folds ?? [])
-    .filter(
-      (fold) =>
-        (isRoot ? sideOfType(fold.relationType) : (nodeSide ?? sideOfType(fold.relationType))) ===
-        side,
-    )
-    .sort(
-      (a, b) =>
-        groupRank(a.relationType, side) - groupRank(b.relationType, side) ||
-        a.relationType.localeCompare(b.relationType),
-    );
 }

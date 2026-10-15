@@ -115,7 +115,7 @@ export function mergeLayoutPositions<T extends { x: number; y: number }>(
 /**
  * 根节点默认四向分边（保持原逻辑）：
  * 父在上、子在下，产品需求/工单偏左，测试偏右，关联/重复/阻塞等在上。
- * preferred 仅用于折叠拖拽后的个人方位偏好。
+ * preferred 仅来自折叠占位拖拽（普通工作项拖拽不改方位）。
  */
 export function sideOfType(type: string, preferred?: ReadonlyMap<string, Side> | null): Side {
   const override = preferred?.get(type);
@@ -139,7 +139,7 @@ export function sideOfType(type: string, preferred?: ReadonlyMap<string, Side> |
 
 /**
  * 根按 sideOfType；嵌套默认沿父侧继续向外。
- * 有个人偏好时该关系类型跟偏好走（折叠拖拽改侧）。
+ * 有个人偏好时该关系类型跟偏好走（仅折叠占位拖拽写入）。
  */
 function effectiveSide(
   type: string,

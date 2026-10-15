@@ -88,6 +88,8 @@ export class GraphCanvas {
   private readonly traceStop = new AbortController();
   private traceTargetId: string | null = null;
   private traceMenuTimer = 0;
+  /** 当前拖拽的节点；仅折叠占位松手时改方位 */
+  private draggingNodeId: string | null = null;
 
   private readonly zoomMinPercent = Math.round(GRAPH_ZOOM_RANGE[0] * 100);
   private readonly zoomMaxPercent = Math.round(GRAPH_ZOOM_RANGE[1] * 100);
@@ -245,13 +247,19 @@ export class GraphCanvas {
       this.syncZoomPercent();
       this.syncTraceMenuScale();
     });
-    this.g6.on(NodeEvent.DRAG_START, () => this.g6?.stopLayout());
+    this.g6.on(NodeEvent.DRAG_START, (event: IElementEvent) => {
+      this.g6?.stopLayout();
+      this.draggingNodeId = String(event.target.id);
+    });
     this.g6.on(NodeEvent.DRAG_END, () => {
       if (!this.g6) {
         return;
       }
       const data = untracked(() => this.graph());
-      this.positions.snapshot(this.g6, data);
+      const draggedId = this.draggingNodeId;
+      this.draggingNodeId = null;
+      // 折叠：写 relationSides；普通卡：只更新该卡出线 side（不写偏好）
+      this.positions.snapshot(this.g6, data, draggedId);
       if (data) {
         this.applyGraphData(data);
         void this.g6.draw();

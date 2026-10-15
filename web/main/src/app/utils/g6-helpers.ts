@@ -1,7 +1,6 @@
 import type { Graph, IElementEvent } from '@antv/g6';
-import { FOLD_SUMMARY_SIZE, GRAPH_MIN_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
+import { GRAPH_MIN_SIZE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
-import { sideFromParent } from './arrange-graph';
 import { isFoldSummaryNode } from './graph.util';
 import type { GraphNodePosition } from './to-g6-data';
 
@@ -16,15 +15,13 @@ export function graphHostSize(container: HTMLElement): { width: number; height: 
 
 /**
  * 把当前可见节点坐标写入 pins（含折叠占位）。
- * 相对父卡重算 side，拖到另一侧后出线方位跟着变。
+ * 只更新 x/y，保留已有 side —— 普通卡拖拽不改方位；方位仅由折叠占位拖拽写入。
  */
 export function snapshotGraphPositions(
   g6: Graph,
   pins: Map<string, GraphNodePosition>,
-  graph?: DependencyGraph | null,
 ): ReadonlyMap<string, { x: number; y: number }> {
   const live = new Map<string, { x: number; y: number }>();
-  const items = new Map<string, GraphEntity>();
   for (const node of g6.getNodeData()) {
     const id = String(node.id);
     const [x, y] = g6.getElementPosition(id);
@@ -32,23 +29,8 @@ export function snapshotGraphPositions(
       continue;
     }
     live.set(id, { x, y });
-    const item = node.data?.['item'] as GraphEntity | undefined;
-    if (item) {
-      items.set(id, item);
-    }
-  }
-
-  for (const [id, { x, y }] of live) {
-    const item = items.get(id) ?? graph?.nodes.find((node) => node.id === id);
-    const parentId = item?.revealedByAnchorId;
-    const parentLive = parentId ? live.get(parentId) : undefined;
-    const parentPin = parentId ? pins.get(parentId) : undefined;
-    const parent = parentLive ?? parentPin;
-    const half = isFoldSummaryNode(item)
-      ? { w: FOLD_SUMMARY_SIZE.width / 2, h: FOLD_SUMMARY_SIZE.height / 2 }
-      : { w: GRAPH_NODE_SIZE.width / 2, h: GRAPH_NODE_SIZE.height / 2 };
-    const side = parent ? sideFromParent(parent, { x, y }, half) : pins.get(id)?.side;
-    pins.set(id, { x, y, side });
+    const prev = pins.get(id);
+    pins.set(id, { x, y, side: prev?.side });
   }
   return live;
 }

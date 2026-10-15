@@ -1,5 +1,5 @@
-import type { DependencyGraph, GraphEdge, RelationFold } from '../entities/graph.entity';
-import { relationFoldKey } from './graph.util';
+import type { DependencyGraph, GraphEdge, GraphEntity, RelationFold } from '../entities/graph.entity';
+import { foldSummaryNodeId, isFoldSummaryNode, relationFoldKey, relationLabel } from './graph.util';
 
 /** 无向邻接表：source/target 互为邻居 */
 function neighborMap(edges: GraphEdge[]): Map<string, Set<string>> {
@@ -132,15 +132,13 @@ export function buildVisibleGraph(
     if (!groups.size) {
       return undefined;
     }
-    return [...groups.entries()].map(([relationType, count]) => ({
-      key: relationFoldKey(id, relationType),
-      relationType,
-      count,
-      expanded: !collapsedIds.has(relationFoldKey(id, relationType)),
-    }));
+    return [...groups.entries()].map(([relationType, count]) => {
+      const key = relationFoldKey(id, relationType);
+      return { key, relationType, count, expanded: !collapsedIds.has(key) };
+    });
   };
 
-  return {
+  const visible: DependencyGraph = {
     rootId: graph.rootId,
     depth: graph.depth,
     nodes: graph.nodes
@@ -151,5 +149,47 @@ export function buildVisibleGraph(
         revealedByAnchorId: parentOf.get(node.id),
       })),
     edges: graph.edges.filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target)),
+  };
+  return withFoldSummaries(visible);
+}
+
+/** 收起的关系每种变成一个「+ N」占位节点，边上带关系名与数量。 */
+function withFoldSummaries(graph: DependencyGraph): DependencyGraph {
+  const extras: GraphEntity[] = [];
+  const extraEdges: GraphEdge[] = [];
+
+  for (const node of graph.nodes) {
+    if (node.relationHub || isFoldSummaryNode(node) || !node.folds?.length) {
+      continue;
+    }
+    for (const fold of node.folds) {
+      if (fold.expanded) {
+        continue;
+      }
+      const id = foldSummaryNodeId(fold.key);
+      extras.push({
+        id,
+        title: `+ ${fold.count}`,
+        foldSummary: fold,
+        revealedByAnchorId: node.id,
+        depth: (node.depth ?? 0) + 1,
+      });
+      extraEdges.push({
+        id: `${id}:link`,
+        source: node.id,
+        target: id,
+        relationType: fold.relationType,
+        label: relationLabel(fold.relationType),
+      });
+    }
+  }
+
+  if (!extras.length) {
+    return graph;
+  }
+  return {
+    ...graph,
+    nodes: [...graph.nodes, ...extras],
+    edges: [...graph.edges, ...extraEdges],
   };
 }

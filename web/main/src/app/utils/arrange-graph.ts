@@ -1,6 +1,6 @@
-import { GRAPH_NODE_SIZE } from '../constants/graph.constants';
+import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
-import { relationBetween } from './graph.util';
+import { isFoldSummaryNode, relationBetween } from './graph.util';
 
 /** 左右分支和父卡片之间的空白，留给关系名。 */
 const H_GAP = 148;
@@ -44,12 +44,13 @@ interface StackItem {
   gapAfter: number;
 }
 
-function cardExtent(): Extent {
+function nodeExtent(node: GraphEntity | undefined): Extent {
+  const size = isFoldSummaryNode(node) ? FOLD_SUMMARY_SIZE : GRAPH_NODE_SIZE;
   return {
-    left: -GRAPH_NODE_SIZE.width / 2,
-    right: GRAPH_NODE_SIZE.width / 2,
-    top: -GRAPH_NODE_SIZE.height / 2,
-    bottom: GRAPH_NODE_SIZE.height / 2,
+    left: -size.width / 2,
+    right: size.width / 2,
+    top: -size.height / 2,
+    bottom: size.height / 2,
   };
 }
 
@@ -83,9 +84,13 @@ function groupsOf(graph: DependencyGraph, parentId: string): RelationGroup[] {
   const groups = new Map<string, RelationGroup>();
   const children = graph.nodes
     .filter((node) => node.revealedByAnchorId === parentId && !node.relationHub)
-    .sort((a, b) => a.id.localeCompare(b.id));
+    .sort(
+      (a, b) =>
+        Number(isFoldSummaryNode(a)) - Number(isFoldSummaryNode(b)) || a.id.localeCompare(b.id),
+    );
   for (const child of children) {
-    const type = relationBetween(graph.edges, nodes, parentId, child.id);
+    const type =
+      child.foldSummary?.relationType ?? relationBetween(graph.edges, nodes, parentId, child.id);
     const group = groups.get(type) ?? { type, memberIds: [] };
     group.memberIds.push(child.id);
     groups.set(type, group);
@@ -220,6 +225,65 @@ function itemsOf(graph: DependencyGraph, groups: RelationGroup[], side: Side, se
   return items;
 }
 
+/**
+ * 展开/收起：有 pin 的工作项保位；其余节点（含 +N）相对父卡按思维导图偏移补位。
+ */
+export function resolvePinnedExpandCollapse<T extends { x: number; y: number; side?: Side }>(
+  graph: DependencyGraph,
+  arranged: ReadonlyMap<string, T>,
+  pins: ReadonlyMap<string, T>,
+): Map<string, T> {
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
+  const childrenOf = new Map<string, string[]>();
+  for (const node of graph.nodes) {
+    if (node.relationHub || !node.revealedByAnchorId || !arranged.has(node.id)) {
+      continue;
+    }
+    const list = childrenOf.get(node.revealedByAnchorId) ?? [];
+    list.push(node.id);
+    childrenOf.set(node.revealedByAnchorId, list);
+  }
+
+  const result = new Map<string, T>();
+  const queue = arranged.has(graph.rootId) ? [graph.rootId] : [];
+
+  while (queue.length) {
+    const id = queue.shift()!;
+    const arrangedPos = arranged.get(id);
+    if (!arrangedPos) {
+      continue;
+    }
+    const node = nodeById.get(id);
+    const pin = node && !isFoldSummaryNode(node) ? pins.get(id) : undefined;
+    if (pin) {
+      result.set(id, { ...arrangedPos, x: pin.x, y: pin.y, side: pin.side ?? arrangedPos.side });
+    } else {
+      const parentId = node?.revealedByAnchorId;
+      const parent = parentId ? result.get(parentId) : undefined;
+      const arrangedParent = parentId ? arranged.get(parentId) : undefined;
+      result.set(
+        id,
+        parent && arrangedParent
+          ? {
+              ...arrangedPos,
+              x: parent.x + (arrangedPos.x - arrangedParent.x),
+              y: parent.y + (arrangedPos.y - arrangedParent.y),
+              side: arrangedPos.side ?? parent.side,
+            }
+          : arrangedPos,
+      );
+    }
+    queue.push(...(childrenOf.get(id) ?? []));
+  }
+
+  for (const [id, pos] of arranged) {
+    if (!result.has(id)) {
+      result.set(id, pos);
+    }
+  }
+  return result;
+}
+
 /** 上下分支让开左右两列，同时保持相对根节点水平居中。 */
 function clearVertical(placed: Placed[], side: 'top' | 'bottom', limit: number): Placed[] {
   if (!placed.length) {
@@ -234,10 +298,20 @@ function clearVertical(placed: Placed[], side: 'top' | 'bottom', limit: number):
 }
 
 function arrangeNode(graph: DependencyGraph, id: string, flow: Side | 'cross', seen: Set<string>): Placed {
+  const self = graph.nodes.find((node) => node.id === id);
+  const selfExtent = nodeExtent(self);
   if (seen.has(id)) {
-    return { positions: new Map(), extent: cardExtent() };
+    return { positions: new Map(), extent: selfExtent };
   }
   seen.add(id);
+
+  // 折叠占位是叶子，不再向下排
+  if (isFoldSummaryNode(self)) {
+    return {
+      positions: new Map([[id, { x: 0, y: 0 }]]),
+      extent: selfExtent,
+    };
+  }
 
   const positions = new Map<string, { x: number; y: number }>([[id, { x: 0, y: 0 }]]);
   const groups = groupsOf(graph, id);
@@ -254,7 +328,7 @@ function arrangeNode(graph: DependencyGraph, id: string, flow: Side | 'cross', s
 
   if (flow === 'cross') {
     const beside = [...(placedBySide.get('left') ?? []), ...(placedBySide.get('right') ?? [])];
-    const besideExtent = unionExtent([cardExtent(), ...beside.map((item) => item.extent)]);
+    const besideExtent = unionExtent([selfExtent, ...beside.map((item) => item.extent)]);
     placedBySide.set('top', clearVertical(placedBySide.get('top') ?? [], 'top', besideExtent.top));
     placedBySide.set('bottom', clearVertical(placedBySide.get('bottom') ?? [], 'bottom', besideExtent.bottom));
   }
@@ -267,7 +341,7 @@ function arrangeNode(graph: DependencyGraph, id: string, flow: Side | 'cross', s
   }
   return {
     positions,
-    extent: unionExtent([cardExtent(), ...placed.map((item) => item.extent)]),
+    extent: unionExtent([selfExtent, ...placed.map((item) => item.extent)]),
   };
 }
 
@@ -275,11 +349,14 @@ function arrangeNode(graph: DependencyGraph, id: string, flow: Side | 'cross', s
 export function arrangeGraph(graph: DependencyGraph): Map<string, { x: number; y: number }> {
   const root = arrangeNode(graph, graph.rootId, 'cross', new Set());
   const positions = new Map(root.positions);
-  const missing = graph.nodes.filter((node) => !positions.has(node.id) && !node.relationHub);
+  const missing = graph.nodes.filter(
+    (node) => !positions.has(node.id) && !node.relationHub,
+  );
   let cursor = root.extent.right + H_GAP + GRAPH_NODE_SIZE.width / 2;
   for (const node of missing) {
+    const half = isFoldSummaryNode(node) ? FOLD_SUMMARY_SIZE.width / 2 : GRAPH_NODE_SIZE.width / 2;
     positions.set(node.id, { x: cursor, y: 0 });
-    cursor += GRAPH_NODE_SIZE.width + SIBLING_GAP;
+    cursor += half * 2 + SIBLING_GAP;
   }
   return positions;
 }

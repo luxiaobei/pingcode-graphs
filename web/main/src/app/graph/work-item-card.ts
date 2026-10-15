@@ -44,6 +44,7 @@ export class WorkItemCard {
   readonly root = input(false);
 
   protected readonly assignee = computed(() => entityAssigneeName(this.item()));
+  protected readonly fold = computed(() => this.item().foldSummary);
 }
 
 /** 把 app-work-item-card 挂到 G6 的 HTML 节点上。 */
@@ -54,7 +55,9 @@ class WorkItemCardNode extends HTML {
     const style = attributes ?? this.parsedAttributes;
     const host = container ?? this;
     const item = this.itemOf();
-    const [width = 200, height = 56] = this.getSize(style);
+    const data = this.context.graph.getNodeData(this.id)?.data;
+    const width = Number(data?.['width']) || this.getSize(style)[0] || 200;
+    const height = Number(data?.['height']) || this.getSize(style)[1] || 56;
     if (!item || item.relationHub || !environmentInjector || !applicationRef) {
       this.destroyView();
       super.render({ ...style, innerHTML: '', dx: 0, dy: 0 }, host);
@@ -67,7 +70,7 @@ class WorkItemCardNode extends HTML {
     }
     this.view.setInput('item', item);
     this.view.setInput('marks', this.marksOf());
-    this.view.setInput('root', this.context.graph.getNodeData(this.id)?.data?.['root'] === true);
+    this.view.setInput('root', data?.['root'] === true);
     this.view.changeDetectorRef.detectChanges();
 
     super.render(

@@ -1,5 +1,6 @@
 import { invoke } from '@pc-nexus/bridge';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
+import { isFoldSummaryNode } from './graph.util';
 
 /** 个人关系图布局（saveViewPosition.position，服务端原样存取） */
 export interface SavedGraphLayout {
@@ -8,13 +9,13 @@ export interface SavedGraphLayout {
   collapsedKeys: string[];
 }
 
-/** 从卡片节点收集有效坐标（跳过 relationHub）。 */
+/** 从卡片节点收集有效坐标（跳过 relationHub / 折叠占位）。 */
 export function cardPositionsFromNodes(
   nodes: readonly GraphEntity[],
 ): Map<string, { x: number; y: number }> {
   const positions = new Map<string, { x: number; y: number }>();
   for (const node of nodes) {
-    if (node.relationHub || !node.position) {
+    if (node.relationHub || isFoldSummaryNode(node) || !node.position) {
       continue;
     }
     const { x, y } = node.position;
@@ -36,7 +37,8 @@ export function applySavedGraphLayout(
   return {
     ...graph,
     nodes: graph.nodes.map((node) => {
-      const pos = !node.relationHub ? layout.positions[node.id] : undefined;
+      const pos =
+        !node.relationHub && !isFoldSummaryNode(node) ? layout.positions[node.id] : undefined;
       return pos ? { ...node, position: { ...pos } } : node;
     }),
   };

@@ -1,36 +1,47 @@
-<article class="card" [class.card--root]="root()" [attr.data-node-id]="item().id">
-  <div class="card__main">
-    <div class="card__head">
-      <div class="card__head-left">
-        @if (item().icon) {
-          <thy-icon
-            class="card__icon"
-            [thyName]="item().icon"
-            [style.color]="item().iconColor"
-          ></thy-icon>
+@if (fold(); as summary) {
+  <button
+    type="button"
+    class="fold-summary"
+    [attr.data-fold]="summary.key"
+    [attr.data-node-id]="item().id"
+  >
+    + {{ summary.count }}
+  </button>
+} @else {
+  <article class="card" [class.card--root]="root()" [attr.data-node-id]="item().id">
+    <div class="card__main">
+      <div class="card__head">
+        <div class="card__head-left">
+          @if (item().icon) {
+            <thy-icon
+              class="card__icon"
+              [thyName]="item().icon"
+              [style.color]="item().iconColor"
+            ></thy-icon>
+          }
+          <div class="card__id">{{ item().identifier || item().id }}</div>
+        </div>
+
+        @if (item().assignee?.avatar || assignee()) {
+          <thy-avatar
+            class="card__avatar"
+            thySize="24"
+            [thySrc]="item().assignee?.avatar"
+            [thyName]="assignee()"
+          ></thy-avatar>
         }
-        <div class="card__id">{{ item().identifier || item().id }}</div>
       </div>
-
-      @if (item().assignee?.avatar || assignee()) {
-        <thy-avatar
-          class="card__avatar"
-          thySize="24"
-          [thySrc]="item().assignee?.avatar"
-          [thyName]="assignee()"
-        ></thy-avatar>
-      }
+      <div class="card__title">{{ item().title || '未命名' }}</div>
     </div>
-    <div class="card__title">{{ item().title || '未命名' }}</div>
-  </div>
 
-  @for (mark of marks(); track mark.key) {
-    <span
-      class="card-badge"
-      [style.left.px]="mark.left"
-      [style.top.px]="mark.top"
-      [attr.data-fold]="mark.key"
-      >{{ mark.text }}</span
-    >
-  }
-</article>
+    @for (mark of marks(); track mark.key) {
+      <span
+        class="card-badge"
+        [style.left.px]="mark.left"
+        [style.top.px]="mark.top"
+        [attr.data-fold]="mark.key"
+        >{{ mark.text }}</span
+      >
+    }
+  </article>
+}

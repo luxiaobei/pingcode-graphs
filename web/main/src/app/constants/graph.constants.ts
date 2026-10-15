@@ -5,7 +5,7 @@ import type {
   IPointerEvent,
   NodeData,
 } from '@antv/g6';
-import type { RelationStyle } from '../entities/graph.entity';
+import type { GraphEntity, RelationStyle } from '../entities/graph.entity';
 
 export const GRAPH_MIN_SIZE = 320;
 
@@ -50,12 +50,27 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
 
 export const GRAPH_NODE_SIZE = { width: 240, height: 68 } as const;
 
-function relationHubOf(datum: NodeData): string | undefined {
-  return (datum.data?.['item'] as { relationHub?: string } | undefined)?.relationHub;
+/** 收起关系时的「+ N」占位节点尺寸 */
+export const FOLD_SUMMARY_SIZE = { width: 52, height: 28 } as const;
+
+function entityOf(datum: NodeData): GraphEntity | undefined {
+  return datum.data?.['item'] as GraphEntity | undefined;
 }
 
-function cardOrHub<T>(datum: NodeData, card: T, hub: T): T {
-  return relationHubOf(datum) ? hub : card;
+function nodeKind(datum: NodeData): 'hub' | 'fold' | 'card' {
+  const item = entityOf(datum);
+  if (item?.relationHub) {
+    return 'hub';
+  }
+  if (item?.foldSummary) {
+    return 'fold';
+  }
+  return 'card';
+}
+
+function nodeChrome<T>(datum: NodeData, card: T, fold: T, hub: T): T {
+  const kind = nodeKind(datum);
+  return kind === 'hub' ? hub : kind === 'fold' ? fold : card;
 }
 
 /** 右键留给追溯菜单，拖动只认左键。 */
@@ -72,15 +87,21 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
   node: {
     type: 'work-item-card',
     style: {
-      size: (d: NodeData) => cardOrHub(d, [GRAPH_NODE_SIZE.width, GRAPH_NODE_SIZE.height], [1, 1]),
-      radius: 8,
-      fill: (d: NodeData) => cardOrHub(d, '#ffffff', 'transparent'),
-      stroke: (d: NodeData) => cardOrHub(d, '#94a3b8', 'transparent'),
-      lineWidth: (d: NodeData) => cardOrHub(d, 2, 0),
-      opacity: (d: NodeData) => cardOrHub(d, 1, 0),
+      size: (d: NodeData) =>
+        nodeChrome(
+          d,
+          [GRAPH_NODE_SIZE.width, GRAPH_NODE_SIZE.height],
+          [FOLD_SUMMARY_SIZE.width, FOLD_SUMMARY_SIZE.height],
+          [1, 1],
+        ),
+      radius: (d: NodeData) => nodeChrome(d, 8, 999, 0),
+      fill: (d: NodeData) => nodeChrome(d, '#ffffff', '#f5f3ff', 'transparent'),
+      stroke: (d: NodeData) => nodeChrome(d, '#94a3b8', '#7c3aed', 'transparent'),
+      lineWidth: (d: NodeData) => nodeChrome(d, 2, 1, 0),
+      opacity: (d: NodeData) => nodeChrome(d, 1, 1, 0),
       label: false,
-      cursor: (d: NodeData) => cardOrHub(d, 'pointer', 'default'),
-      pointerEvents: (d: NodeData) => cardOrHub(d, 'auto', 'none'),
+      cursor: (d: NodeData) => nodeChrome(d, 'pointer', 'pointer', 'default'),
+      pointerEvents: (d: NodeData) => nodeChrome(d, 'auto', 'auto', 'none'),
     },
     state: {
       root: { stroke: '#6698ff', lineWidth: 2, fill: '#eff6ff' },

@@ -26,7 +26,7 @@ import {
   loadSavedGraphLayout,
   saveGraphLayout,
   type SavedGraphLayout,
-} from './utils/graph-layout';
+} from './utils/saved-graph-layout';
 import { filterGraphByDisplaySettings } from './utils/graph.util';
 
 @Component({

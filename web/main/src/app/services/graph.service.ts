@@ -23,7 +23,6 @@ const OUTGOING_EDGE_TYPES = [
   'caused_by',
   'clones',
   'cloned_by',
-  'depends_on',
   'duplicates',
   'mentions',
   'relates',

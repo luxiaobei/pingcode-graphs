@@ -10,11 +10,9 @@ export interface DisplaySetting {
 export const DEFAULT_DISPLAY_SETTINGS: readonly DisplaySetting[] = [
   { id: 'parent', label: '父子关系', enabled: true },
   { id: 'relate', label: '关联关系', enabled: true },
-  { id: 'dependency', label: '依赖关系', enabled: true },
   { id: 'product', label: '关联产品需求', enabled: true },
   { id: 'ticket', label: '关联工单', enabled: true },
   { id: 'test', label: '关联测试', enabled: true },
-  { id: 'objective', label: '关联目标', enabled: true },
 ];
 
 export function cloneDisplaySettings(settings: readonly DisplaySetting[]): DisplaySetting[] {
@@ -64,11 +62,9 @@ export const DISPLAY_SETTING_RELATIONS: Record<string, readonly string[]> = {
     'mention',
     'duplicate',
   ],
-  dependency: ['depend'],
   product: ['relate:idea'],
   ticket: ['relate:ticket'],
   test: ['relate:test_case'],
-  objective: ['relate:objective'],
 };
 
 /** 这种关系是否展示。没有对应开关的关系始终展示。 */

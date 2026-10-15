@@ -4,6 +4,7 @@ import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import { type Side } from './arrange-graph';
 import {
   foldEdgeLabel,
+  isFoldSummaryId,
   isFoldSummaryNode,
   relationBetween,
   relationColor,
@@ -130,7 +131,9 @@ export function trunkEdges(
       const labelOwner = closestMember(parent, group.placed, side);
       const relationType = group.members[0]?.relationType ?? '';
       // 折叠占位不走 straight：否则同侧多条边共用父卡中线，线与文案叠在一起
-      const straight = relationType === 'child';
+      const straight =
+        relationType === 'child' &&
+        !group.members.some((member) => isFoldSummaryId(member.childId));
       const alone = relationType === 'parent' && kids.length === 1 && onAxis(parent, kids[0], side);
       const labelCenter =
         straight || alone ? (side === 'left' || side === 'right' ? parent.y : parent.x) : center;

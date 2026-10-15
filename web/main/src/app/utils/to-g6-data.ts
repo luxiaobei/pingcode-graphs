@@ -9,8 +9,6 @@ export type { GraphNodePosition } from './route-graph-edges';
 
 const HALF_W = GRAPH_NODE_SIZE.width / 2;
 const HALF_H = GRAPH_NODE_SIZE.height / 2;
-/** 同一侧多种关系的展开收起沿边拉开，避免叠在同一个起点。 */
-const BADGE_GAP = 28;
 
 /** 领域图 → G6 节点/边。展开收起画在关系分叉处；收起时每种关系一个「+ N」。 */
 export function toG6Data(
@@ -39,6 +37,7 @@ function toG6Node(
     id: item.id,
     type: 'work-item-card',
     data: {
+      // 收起入口只保留「+ N」占位；卡片上仅展示展开态的「−」
       foldMarks: fold ? [] : foldMarks(item, position, rootId, forks),
       item,
       root: item.id === rootId,
@@ -52,45 +51,33 @@ function toG6Node(
   return node;
 }
 
-const CHEVRON: Record<Side, string> = {
-  top: '▴',
-  bottom: '▾',
-  left: '◂',
-  right: '▸',
-};
-
+/** 仅展开态：在分叉处画「−」。收起态入口是「+ N」占位，不再画卡片边 chevron。 */
 function foldMarks(
   item: GraphEntity,
   position: GraphNodePosition | undefined,
   rootId: string,
   forks?: ReadonlyMap<string, { x: number; y: number }>,
 ): FoldMark[] {
+  if (!position || !forks) {
+    return [];
+  }
   const marks: FoldMark[] = [];
-  const collapsed = new Map<Side, RelationFold[]>();
   for (const side of ['left', 'right', 'top', 'bottom'] as const) {
-    for (const fold of foldsOnSide(item.folds, side, item.id === rootId, position?.side)) {
-      if (fold.expanded) {
-        const at = forks?.get(fold.key);
-        if (at && position) {
-          marks.push({
-            key: fold.key,
-            text: '−',
-            left: HALF_W + at.x - position.x,
-            top: HALF_H + at.y - position.y,
-          });
-        }
+    for (const fold of foldsOnSide(item.folds, side, item.id === rootId, position.side)) {
+      if (!fold.expanded) {
         continue;
       }
-      const list = collapsed.get(side) ?? [];
-      list.push(fold);
-      collapsed.set(side, list);
+      const at = forks.get(fold.key);
+      if (!at) {
+        continue;
+      }
+      marks.push({
+        key: fold.key,
+        text: '−',
+        left: HALF_W + at.x - position.x,
+        top: HALF_H + at.y - position.y,
+      });
     }
-  }
-  for (const [side, list] of collapsed) {
-    list.forEach((fold, index) => {
-      const point = badgeOnCard(side, index, list.length);
-      marks.push({ key: fold.key, text: CHEVRON[side], left: point.left, top: point.top });
-    });
   }
   return marks;
 }
@@ -112,18 +99,4 @@ function foldsOnSide(
         groupRank(a.relationType, side) - groupRank(b.relationType, side) ||
         a.relationType.localeCompare(b.relationType),
     );
-}
-
-function badgeOnCard(side: Side, index: number, count: number): { left: number; top: number } {
-  const shift = (index - (count - 1) / 2) * BADGE_GAP;
-  if (side === 'top') {
-    return { left: HALF_W + shift, top: 0 };
-  }
-  if (side === 'bottom') {
-    return { left: HALF_W + shift, top: GRAPH_NODE_SIZE.height };
-  }
-  if (side === 'left') {
-    return { left: 0, top: HALF_H + shift };
-  }
-  return { left: GRAPH_NODE_SIZE.width, top: HALF_H + shift };
 }

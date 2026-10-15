@@ -6,7 +6,6 @@ import {
   mergeLayoutPositions,
   resolvePinnedExpandCollapse,
   settleReanchoredSubtree,
-  sideFromDelta,
   sideFromParent,
   type Side,
 } from './arrange-graph';
@@ -149,10 +148,10 @@ export class CanvasPositionSession {
    * 折叠占位若拖到新方位，丢掉旧侧子卡 pin，按新侧 arrange 重锚整棵子树。
    */
   resolveExpandCollapse(data: DependencyGraph): Map<string, GraphNodePosition> {
+    // 先取出 fold pin（含即将展开消失的），供写偏好 + 清旧侧子树；勿先删掉
     const foldPins = new Map(
       [...this.pins].filter(([id]) => isFoldSummaryId(id)),
     );
-    // 仅把「已拖过的折叠占位」side 写入偏好，供 arrange / 展开落位
     syncRelationSidesFromFolds(this.lastGraph, foldPins, this.relationSides);
     const reanchored = clearStalePinsAfterFoldDrag(data, this.lastGraph, foldPins, this.pins);
     const arranged = arrangeGraph(data, this.relationSides);
@@ -160,7 +159,16 @@ export class CanvasPositionSession {
     for (const cluster of reanchored) {
       settleReanchoredSubtree(data, layout, cluster.ids, cluster.side, cluster.anchor);
     }
-    placeFoldsAtExpandedSlots(data, this.lastGraph, this.pins, layout, foldPins);
+    placeFoldsAtExpandedSlots(
+      data,
+      this.lastGraph,
+      this.pins,
+      layout,
+      foldPins,
+      this.relationSides,
+    );
+    // 展开完成后再清已消失的 +N pin，避免下次收起复用旧坐标
+    clearFoldPinsNoLongerVisible(data, this.lastGraph, this.pins);
     this.lastGraph = data;
     return layout;
   }
@@ -232,8 +240,30 @@ export class CanvasPositionSession {
   }
 }
 
+/** 展开后删掉已不在图上的 +N pin，避免下次收起仍用旧方位。 */
+function clearFoldPinsNoLongerVisible(
+  data: DependencyGraph,
+  prev: DependencyGraph | null,
+  pins: Map<string, GraphNodePosition>,
+): void {
+  if (!prev) {
+    return;
+  }
+  const visible = new Set(data.nodes.map((node) => node.id));
+  for (const node of prev.nodes) {
+    if (!isFoldSummaryNode(node)) {
+      continue;
+    }
+    if (!visible.has(node.id)) {
+      pins.delete(node.id);
+    }
+  }
+}
+
 /**
- * 收起时把 +N 放到该关系展开子卡的原坐标中心；若用户已拖过该占位则保留。
+ * 收起时把 +N 放到该关系展开子卡的原坐标中心；
+ * 仅当上一帧占位仍在（用户刚拖过）才保 fold pin，并写回 relationSides。
+ * 从子卡对齐时只带 pin.side，不写全局偏好（偏好只由拖 +N 写入）。
  */
 function placeFoldsAtExpandedSlots(
   data: DependencyGraph,
@@ -241,13 +271,15 @@ function placeFoldsAtExpandedSlots(
   pins: ReadonlyMap<string, GraphNodePosition>,
   layout: Map<string, GraphNodePosition>,
   foldPins: ReadonlyMap<string, GraphNodePosition>,
+  relationSides: Map<string, Side>,
 ): void {
+  const prevIds = new Set(prev?.nodes.map((node) => node.id) ?? []);
   for (const node of data.nodes) {
     if (!isFoldSummaryNode(node)) {
       continue;
     }
     const kept = foldPins.get(node.id);
-    if (kept && Number.isFinite(kept.x) && Number.isFinite(kept.y)) {
+    if (kept && prevIds.has(node.id) && Number.isFinite(kept.x) && Number.isFinite(kept.y)) {
       const base = layout.get(node.id);
       layout.set(node.id, {
         ...(base ?? kept),
@@ -255,6 +287,9 @@ function placeFoldsAtExpandedSlots(
         y: kept.y,
         side: kept.side ?? base?.side,
       });
+      if (kept.side && node.foldSummary) {
+        relationSides.set(node.foldSummary.relationType, kept.side);
+      }
       continue;
     }
     if (!prev) {
@@ -281,7 +316,11 @@ function placeFoldsAtExpandedSlots(
     const x = points.reduce((sum, pos) => sum + pos.x, 0) / points.length;
     const y = points.reduce((sum, pos) => sum + pos.y, 0) / points.length;
     const base = layout.get(node.id);
-    const side = points.find((pos) => pos.side)?.side ?? base?.side;
+    // 优先子卡已声明 side / 已有偏好；勿用几何重判写回全局
+    const side =
+      points.find((pos) => pos.side)?.side ??
+      relationSides.get(fold.relationType) ??
+      base?.side;
     layout.set(node.id, { ...(base ?? { x, y }), x, y, side });
   }
 }
@@ -362,12 +401,9 @@ function clearStalePinsAfterFoldDrag(
         continue;
       }
       const childPin = pins.get(child.id);
-      if (childPin) {
-        const geoSide = sideFromDelta(childPin.x - parentPin.x, childPin.y - parentPin.y);
-        if (geoSide === foldPin.side) {
-          pins.set(child.id, { ...childPin, side: foldPin.side });
-          continue;
-        }
+      // 只比声明 side，不用几何投票（宽排会误判）
+      if (childPin?.side === foldPin.side) {
+        continue;
       }
       const queue = [child.id];
       while (queue.length) {

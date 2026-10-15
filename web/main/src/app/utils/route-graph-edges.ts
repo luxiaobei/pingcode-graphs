@@ -39,34 +39,30 @@ interface LaneGroup {
 }
 
 /**
- * − 落在关系分叉处；仅沿出线方向相对父卡外缘留空，不改 lane / 不钳死边路径。
+ * − 钉在分岔口（干/类型线与叉线交点），与 controlPoints 角点一致。
+ * 勿取路径段中点——同类型多卡时中点会落在横梁上跑偏。
  */
-function junction(
+function foldJunction(
   parent: GraphNodePosition,
   side: Side,
-  center: number,
   fork: number,
-  straight: boolean,
+  spine: number,
+  axis: number,
+  mode: 'layer' | 'parent' | 'bundle',
 ): { x: number; y: number } {
-  const clear = 22;
-  if (straight) {
-    if (side === 'left' || side === 'right') {
-      const edge = side === 'left' ? parent.x - HALF_W - clear : parent.x + HALF_W + clear;
-      const x = side === 'left' ? Math.min(fork, edge) : Math.max(fork, edge);
-      return { x, y: parent.y };
-    }
-    const edge = side === 'top' ? parent.y - HALF_H - clear : parent.y + HALF_H + clear;
-    const y = side === 'top' ? Math.min(fork, edge) : Math.max(fork, edge);
-    return { x: parent.x, y };
+  if (mode === 'layer') {
+    return side === 'left' || side === 'right'
+      ? { x: fork, y: parent.y }
+      : { x: parent.x, y: fork };
   }
-  if (side === 'left' || side === 'right') {
-    const edge = side === 'left' ? parent.x - HALF_W - clear : parent.x + HALF_W + clear;
-    const x = side === 'left' ? Math.min(fork, edge) : Math.max(fork, edge);
-    return { x, y: center };
+  if (mode === 'parent') {
+    return side === 'left' || side === 'right'
+      ? { x: spine, y: axis }
+      : { x: axis, y: spine };
   }
-  const edge = side === 'top' ? parent.y - HALF_H - clear : parent.y + HALF_H + clear;
-  const y = side === 'top' ? Math.min(fork, edge) : Math.max(fork, edge);
-  return { x: center, y };
+  return side === 'left' || side === 'right'
+    ? { x: fork, y: axis }
+    : { x: axis, y: fork };
 }
 
 /** 先沿父卡片走出关系类型，再从类型线另开一条分支接到这组卡片。类型只是线上的名字。 */
@@ -112,9 +108,10 @@ export function trunkEdges(
     }
     const placedIds = new Set(placed.map((item) => item.member.childId));
     loose.push(...members.filter((member) => !placedIds.has(member.childId)));
-    // 优先 pin.side（折叠拖拽 / 布局写入）；勿对宽排顶侧做几何推翻，否则会误成左/右
+    // 只认声明的 pin.side；全无时才几何兜底（arrange 漏写）
+    const declared = placed.map((item) => item.child.side).find(Boolean);
     const side =
-      placed.find((item) => item.child.side)?.child.side ??
+      declared ??
       sideOf(
         parent,
         placed.map((item) => item.child),
@@ -136,7 +133,7 @@ export function trunkEdges(
     const skip = new Set(lane.flatMap((group) => group.members.map((member) => member.childId)));
     skip.add(lane[0]?.members[0]?.parentId ?? '');
     const others = otherNodes(positions, skip);
-    // 关联/重复/阻塞等共用外侧脊柱（图二）；父用内侧独立脊柱，绝不并进公共横脊
+    // B 私有干(parent) + C 公共脊(其它)；同侧双出线互不并脊
     const bundleKids = lane
       .filter((group) => group.members[0]?.relationType !== 'parent')
       .flatMap((group) => group.placed.map((item) => item.child));
@@ -144,9 +141,8 @@ export function trunkEdges(
       .filter((group) => group.members[0]?.relationType === 'parent')
       .flatMap((group) => group.placed.map((item) => item.child));
     const spines = splitParentBundleSpines(parent, side, parentKids, bundleKids, others);
-    // 同侧既有父又有其它关系时，必须两条出线：父独立干 + 其它公共干
     const dualExit = Boolean(parentKids.length && bundleKids.length);
-    // 同侧多组关系（含多个 +N）错开标签，避免叠字
+    const bundleAxis = bundleKids.length ? axisCenter(bundleKids, side) : undefined;
     const labelStagger = (index: number): number =>
       lane.length <= 1 ? 0 : (index - (lane.length - 1) / 2) * 16;
     lane.forEach((group, groupIndex) => {
@@ -162,34 +158,30 @@ export function trunkEdges(
       );
       const labelOwner = closestMember(parent, group.placed, side);
       const relationType = group.members[0]?.relationType ?? '';
-      // 折叠占位不走 straight：否则同侧多条边共用父卡中线，线与文案叠在一起
+      // A 直出(child) / B 私有干(parent) / C 公共脊(其它)
       const straight = relationType === 'child' && !foldOnly;
       const parentOwn = relationType === 'parent';
       const alone = parentOwn && kids.length === 1 && onAxis(parent, kids[0], side);
-      // 父始终另起干（贴父卡中线）；与公共脊同侧时略偏，保证看得出两条出线
       const parentAxis = side === 'left' || side === 'right' ? parent.y : parent.x;
       const stemCenter = parentOwn
         ? dualExit
-          ? parentStemCenter(parent, center, side)
+          ? parentStemCenter(parent, bundleAxis ?? center, side)
           : parentAxis
         : center;
       const labelCenter =
         straight || alone ? (side === 'left' || side === 'right' ? parent.y : parent.x) : stemCenter;
       const parentId = group.members[0]?.parentId ?? '';
-      forks.set(
-        relationFoldKey(parentId, relationType),
-        junction(parent, side, stemCenter, fork, straight),
-      );
-      // 折叠文案贴在类型线上，不再做偏移/错位（短竖段时否则会漂到横干上）
       const stagger = foldOnly ? 0 : labelStagger(groupIndex);
       const offsetX = foldOnly || straight || alone ? 0 : 16;
       const offsetY = foldOnly || straight || alone ? 0 : -12;
       const spine = parentOwn
         ? (spines.parent ?? fork)
         : (spines.bundle ?? spines.parent ?? fork);
+      const foldMode = straight ? 'layer' : parentOwn ? 'parent' : 'bundle';
+      const foldAxis = straight || alone ? parentAxis : stemCenter;
+      const foldAnchor = foldJunction(parent, side, fork, spine, foldAxis, foldMode);
       for (const item of group.placed) {
         const showLabel = item.member.childId === labelOwner;
-        // 父：独立干出线；其它关系：公共脊（图二）
         const controlPoints = straight
           ? layerRoute(parent, item.child, side, fork)
           : parentOwn
@@ -217,6 +209,7 @@ export function trunkEdges(
         }
         edges.push(straightEdge(item.member, style, showLabel));
       }
+      forks.set(relationFoldKey(parentId, relationType), foldAnchor);
     });
   }
   return { edges, forks };
@@ -469,12 +462,17 @@ function routeOf(
 }
 
 /**
- * 父干始终贴父卡中线；仅与公共干重合时偏开。
+ * 双出线时父干贴父卡中线，但必须与公共干错开，卡边能看出两条出线。
  * 勿回落到子组 center，否则拖父后出线会横拉去追子卡。
  */
 function parentStemCenter(parent: GraphNodePosition, bundleCenter: number, side: Side): number {
   const axis = side === 'left' || side === 'right' ? parent.y : parent.x;
-  return Math.abs(bundleCenter - axis) < 12 ? axis - 48 : axis;
+  const gap = 48;
+  if (Math.abs(bundleCenter - axis) >= gap) {
+    return axis;
+  }
+  // 公共干靠近中线时，父干往反方向偏，避免和「其它关系」收起钮叠在同一点
+  return bundleCenter >= axis ? axis - gap : axis + gap;
 }
 
 /**

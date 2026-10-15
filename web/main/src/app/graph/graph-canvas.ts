@@ -29,16 +29,14 @@ import {
   GRAPH_ZOOM_STEP,
 } from '../constants/graph.constants';
 import type { DependencyGraph } from '../entities/graph.entity';
-import { arrangeGraph, mergeLayoutPositions } from '../utils/arrange-graph';
+import { CanvasPositionSession } from '../utils/canvas-position-session';
 import {
   buildElementStates,
   foldKeyFromEvent,
   graphHostSize,
   nodeItemFromEvent,
   sharpenHtmlCamera,
-  snapshotGraphPositions,
 } from '../utils/g6-helpers';
-import { cardPositionsFromNodes } from '../utils/graph-layout';
 import { isWorkItemEntity, openPivot } from '../utils/graph.util';
 import { toG6Data, type GraphNodePosition } from '../utils/to-g6-data';
 import { bindWorkItemCardRuntime } from './work-item-card';
@@ -79,12 +77,7 @@ export class GraphCanvas {
   private htmlCameraObserver: MutationObserver | null = null;
   private fitTimer: number | null = null;
   private renderSeq = 0;
-  private lastDepth: number | null = null;
-  private lastRootId: string | null = null;
-  /** 当前会话拖拽后的坐标 */
-  private readonly pinnedPositions = new Map<string, GraphNodePosition>();
-  /** 服务端下发 / 已保存的布局；一键整理优先还原 */
-  private readonly savedPositions = new Map<string, GraphNodePosition>();
+  private readonly positions = new CanvasPositionSession();
   private readonly traceStop = new AbortController();
   private traceTargetId: string | null = null;
   private traceMenuTimer = 0;
@@ -144,10 +137,8 @@ export class GraphCanvas {
     if (!graph) {
       return;
     }
-    snapshotGraphPositions(graph, this.pinnedPositions);
-    this.saveLayout.emit(
-      Object.fromEntries([...this.pinnedPositions].map(([id, { x, y }]) => [id, { x, y }])),
-    );
+    this.positions.snapshot(graph);
+    this.saveLayout.emit(this.positions.toSaveRecord());
   }
 
   /**
@@ -195,10 +186,7 @@ export class GraphCanvas {
     this.resizeObserver = null;
     this.htmlCameraObserver?.disconnect();
     this.htmlCameraObserver = null;
-    this.pinnedPositions.clear();
-    this.savedPositions.clear();
-    this.lastDepth = null;
-    this.lastRootId = null;
+    this.positions.clear();
     window.clearTimeout(this.traceMenuTimer);
     this.traceStop.abort();
     this.g6?.off();
@@ -209,12 +197,12 @@ export class GraphCanvas {
 
   private applyGraphData(
     data: DependencyGraph,
-    positions?: ReadonlyMap<string, GraphNodePosition>,
+    layout?: ReadonlyMap<string, GraphNodePosition>,
   ): void {
     if (!this.g6) {
       return;
     }
-    this.g6.setData(toG6Data(data, positions ?? this.pinnedPositions));
+    this.g6.setData(toG6Data(data, layout ?? this.positions.pins));
   }
 
   private bindGraphEvents(): void {
@@ -247,7 +235,7 @@ export class GraphCanvas {
       if (!this.g6) {
         return;
       }
-      snapshotGraphPositions(this.g6, this.pinnedPositions);
+      this.positions.snapshot(this.g6);
       const data = untracked(() => this.graph());
       if (data) {
         this.applyGraphData(data);
@@ -317,60 +305,6 @@ export class GraphCanvas {
     }
   }
 
-  /** 同一根节点、同一深度时取出现有坐标，不在这里给新卡片找位置。 */
-  private preparePositions(data: DependencyGraph): ReadonlyMap<string, GraphNodePosition> | null {
-    const canvasNodeIds = new Set((this.g6?.getNodeData() ?? []).map((node) => String(node.id)));
-    const sharesNode = data.nodes.some((node) => canvasNodeIds.has(node.id));
-    const reusePins =
-      this.lastRootId === data.rootId && this.lastDepth === data.depth && sharesNode;
-
-    if (!reusePins) {
-      this.pinnedPositions.clear();
-      this.lastDepth = data.depth;
-      this.lastRootId = data.rootId;
-      this.syncSavedPositions(data);
-      return null;
-    }
-
-    const graph = this.liveGraph();
-    if (!graph) {
-      return null;
-    }
-    snapshotGraphPositions(graph, this.pinnedPositions);
-    return this.pinnedPositions.size ? this.pinnedPositions : null;
-  }
-
-  /** 从节点上的 position（服务端字段）同步已保存布局。 */
-  private syncSavedPositions(data: DependencyGraph): void {
-    this.savedPositions.clear();
-    for (const [id, pos] of cardPositionsFromNodes(data.nodes)) {
-      this.savedPositions.set(id, pos);
-    }
-  }
-
-  /**
-   * 基准布局：有服务端位置则还原（缺的节点用思维导图补齐），否则整图初始化。
-   */
-  private resolveBaselinePositions(data: DependencyGraph): Map<string, GraphNodePosition> {
-    this.syncSavedPositions(data);
-    return mergeLayoutPositions(arrangeGraph(data), this.savedPositions);
-  }
-
-  /**
-   * 展开/收起：保留已有 pin（含拖拽），只给新出现的节点用思维导图坐标。
-   */
-  private resolveExpandCollapsePositions(data: DependencyGraph): Map<string, GraphNodePosition> {
-    return mergeLayoutPositions(arrangeGraph(data), this.pinnedPositions);
-  }
-
-  /** 展开收起会增减卡片。集合一致才保留拖拽位置，否则按整理规则重排。 */
-  private sameVisibleNodes(data: DependencyGraph): boolean {
-    const ids = data.nodes.filter((node) => !node.relationHub).map((node) => node.id);
-    return (
-      ids.length === this.pinnedPositions.size && ids.every((id) => this.pinnedPositions.has(id))
-    );
-  }
-
   private liveGraph(): Graph | null {
     return this.g6 && !this.g6.destroyed ? this.g6 : null;
   }
@@ -426,23 +360,21 @@ export class GraphCanvas {
     this.clearFitTimer();
 
     if (!data?.nodes.length) {
-      this.pinnedPositions.clear();
-      this.savedPositions.clear();
-      this.lastDepth = null;
-      this.lastRootId = null;
+      this.positions.clear();
       this.g6.setData({ nodes: [], edges: [] });
       await this.g6.render();
       return;
     }
 
-    const positions = this.preparePositions(data);
-    if (positions && this.sameVisibleNodes(data)) {
+    const canvasNodeIds = new Set(this.g6.getNodeData().map((node) => String(node.id)));
+    const reused = this.positions.prepare(data, canvasNodeIds, this.g6);
+    if (reused && this.positions.sameVisibleNodes(data)) {
       // 可见节点未变：保留拖拽位置
-      this.applyGraphData(data, positions);
+      this.applyGraphData(data, reused);
       await this.g6.draw();
-    } else if (positions) {
+    } else if (reused) {
       // 展开/收起：保留已拖拽坐标（含已收起节点的 pin），只给新增节点补位
-      await this.applyLayoutPositions(data, this.resolveExpandCollapsePositions(data), {
+      await this.applyLayoutPositions(data, this.positions.resolveExpandCollapse(data), {
         fitView: false,
         keepHiddenPins: true,
       });
@@ -472,17 +404,16 @@ export class GraphCanvas {
     data: DependencyGraph,
     options: { fitView: boolean },
   ): Promise<void> {
-    await this.applyLayoutPositions(data, this.resolveBaselinePositions(data), options);
+    await this.applyLayoutPositions(data, this.positions.resolveBaseline(data), options);
   }
 
   /**
    * 把给定坐标落到画布并写入 pin。
    * 初次进入走 render；已有节点用 translateElementTo 强制归位。
-   * keepHiddenPins：展开/收起时保留已隐藏节点的拖拽坐标，避免再展开回到初始位。
    */
   private async applyLayoutPositions(
     data: DependencyGraph,
-    positions: ReadonlyMap<string, GraphNodePosition>,
+    layoutPositions: ReadonlyMap<string, GraphNodePosition>,
     options: { fitView: boolean; keepHiddenPins?: boolean },
   ): Promise<void> {
     const graph = this.liveGraph();
@@ -492,18 +423,12 @@ export class GraphCanvas {
 
     // setData 前判断：之后 getNodeData 已是新数据，分不清是否首次渲染
     const firstPaint = !(graph.getNodeData() ?? []).length;
-    // 思维导图相对 (0,0) 布局，而默认相机看画布中心；fitView 落位时整体挪到画布中心
     const [width, height] = graph.getSize();
     const layout =
       options.fitView && width > 0 && height > 0
-        ? new Map(
-            [...positions].map(([id, pos]) => [
-              id,
-              { ...pos, x: pos.x + width / 2, y: pos.y + height / 2 },
-            ]),
-          )
-        : positions;
-    this.seedPinnedPositions(layout, options.keepHiddenPins);
+        ? this.positions.centerForViewport(layoutPositions, width, height)
+        : layoutPositions;
+    this.positions.seed(layout, options.keepHiddenPins);
     this.applyGraphData(data, layout);
 
     if (firstPaint) {
@@ -523,18 +448,6 @@ export class GraphCanvas {
 
     if (options.fitView) {
       this.fit();
-    }
-  }
-
-  private seedPinnedPositions(
-    positions: ReadonlyMap<string, GraphNodePosition>,
-    keepHidden = false,
-  ): void {
-    if (!keepHidden) {
-      this.pinnedPositions.clear();
-    }
-    for (const [id, pos] of positions) {
-      this.pinnedPositions.set(id, pos);
     }
   }
 

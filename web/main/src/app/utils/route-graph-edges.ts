@@ -120,6 +120,7 @@ export function trunkEdges(
       lane.length <= 1 ? 0 : (index - (lane.length - 1) / 2) * 16;
     lane.forEach((group, groupIndex) => {
       const kids = group.placed.map((item) => item.child);
+      const foldOnly = group.members.every((member) => isFoldSummaryId(member.childId));
       const center = axisCenter(kids, side);
       const fork = forkAt(
         group.placed.map((item) => ({
@@ -131,17 +132,16 @@ export function trunkEdges(
       const labelOwner = closestMember(parent, group.placed, side);
       const relationType = group.members[0]?.relationType ?? '';
       // 折叠占位不走 straight：否则同侧多条边共用父卡中线，线与文案叠在一起
-      const straight =
-        relationType === 'child' &&
-        !group.members.some((member) => isFoldSummaryId(member.childId));
+      const straight = relationType === 'child' && !foldOnly;
       const alone = relationType === 'parent' && kids.length === 1 && onAxis(parent, kids[0], side);
       const labelCenter =
         straight || alone ? (side === 'left' || side === 'right' ? parent.y : parent.x) : center;
       const parentId = group.members[0]?.parentId ?? '';
       forks.set(relationFoldKey(parentId, relationType), junction(parent, side, center, fork, straight));
-      const stagger = labelStagger(groupIndex);
-      const offsetX = !straight && !alone ? 16 : 0;
-      const offsetY = !straight && !alone ? -12 : 0;
+      // 折叠文案贴在类型线上，不再做偏移/错位（短竖段时否则会漂到横干上）
+      const stagger = foldOnly ? 0 : labelStagger(groupIndex);
+      const offsetX = foldOnly || straight || alone ? 0 : 16;
+      const offsetY = foldOnly || straight || alone ? 0 : -12;
       for (const item of group.placed) {
         const showLabel = item.member.childId === labelOwner;
         const controlPoints = straight
@@ -150,12 +150,20 @@ export function trunkEdges(
         const style: EdgeData['style'] = {
           controlPoints,
           labelPlacement: showLabel
-            ? labelRatio(parent, item.child, side, controlPoints, labelCenter, straight)
+            ? labelRatio(
+                parent,
+                item.child,
+                side,
+                controlPoints,
+                labelCenter,
+                straight || foldOnly,
+                foldOnly ? 1 : 8,
+              )
             : 'center',
           labelOffsetX: showLabel && (side === 'top' || side === 'bottom') ? offsetX + stagger : 0,
           labelOffsetY: showLabel && (side === 'left' || side === 'right') ? offsetY + stagger : 0,
         };
-        if ((straight || alone) && showLabel) {
+        if ((straight || alone || foldOnly) && showLabel) {
           style.labelTextAlign = 'center';
           style.labelTextBaseline = 'middle';
         }
@@ -423,6 +431,7 @@ function labelRatio(
   points: [number, number][],
   center: number,
   stem: boolean,
+  minSpan = 8,
 ): number {
   const leave = leavePoint(parent, side);
   const knots = [leave, ...points, rootEnterPoint(child, side)];
@@ -446,8 +455,8 @@ function labelRatio(
     const span = lengths[index] ?? 0;
     const onType =
       side === 'left' || side === 'right'
-        ? Math.abs(from[1] - center) < 1 && Math.abs(to[1] - center) < 1 && span > 8
-        : Math.abs(from[0] - center) < 1 && Math.abs(to[0] - center) < 1 && span > 8;
+        ? Math.abs(from[1] - center) < 1 && Math.abs(to[1] - center) < 1 && span > minSpan
+        : Math.abs(from[0] - center) < 1 && Math.abs(to[0] - center) < 1 && span > minSpan;
     if (onType && from && to) {
       const ratio = ratioAt(cursor, span);
       if (stem) {

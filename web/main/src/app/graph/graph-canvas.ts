@@ -218,7 +218,7 @@ export class GraphCanvas {
       if (!item || item.relationHub) {
         return;
       }
-      const foldKey = foldKeyFromEvent(event);
+      const foldKey = item.foldSummary?.key ?? foldKeyFromEvent(event);
       if (foldKey) {
         this.toggleExpand.emit(foldKey);
         return;
@@ -269,11 +269,17 @@ export class GraphCanvas {
     }
   };
 
-  /** 当前中心、分叉点和非工作项不能换根。 */
+  /** 当前中心、分叉点、折叠占位和非工作项不能换根。 */
   private traceCandidate(id: string | undefined): string | null {
     const data = untracked(() => this.graph());
     const item = data?.nodes.find((node) => node.id === id);
-    if (!item || item.relationHub || item.id === data?.rootId || !isWorkItemEntity(item)) {
+    if (
+      !item ||
+      item.relationHub ||
+      item.foldSummary ||
+      item.id === data?.rootId ||
+      !isWorkItemEntity(item)
+    ) {
       return null;
     }
     return item.id;

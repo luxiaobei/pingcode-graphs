@@ -1,6 +1,6 @@
-import { GRAPH_NODE_SIZE } from '../constants/graph.constants';
+import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
-import { relationBetween } from './graph.util';
+import { isFoldSummaryNode, relationBetween } from './graph.util';
 
 /** 左右分支和父卡片之间的空白，留给关系名。 */
 const H_GAP = 148;
@@ -10,6 +10,8 @@ const V_GAP = 112;
 const SIBLING_GAP = 28;
 /** 两种关系之间再隔开，主干不会粘在一起。 */
 const GROUP_GAP = 56;
+/** 折叠占位之间再拉开一点，边标签不易挤在一起。 */
+const FOLD_GROUP_GAP = 80;
 
 const LEFT_TYPES = ['relate:idea', 'relate:ticket'] as const;
 const RIGHT_TYPES = ['relate:objective', 'relate:test_case'] as const;
@@ -53,6 +55,18 @@ function cardExtent(): Extent {
   };
 }
 
+function nodeExtent(node: GraphEntity | undefined): Extent {
+  if (isFoldSummaryNode(node)) {
+    return {
+      left: -FOLD_SUMMARY_SIZE.width / 2,
+      right: FOLD_SUMMARY_SIZE.width / 2,
+      top: -FOLD_SUMMARY_SIZE.height / 2,
+      bottom: FOLD_SUMMARY_SIZE.height / 2,
+    };
+  }
+  return cardExtent();
+}
+
 function shiftPlaced(placed: Placed, dx: number, dy: number): Placed {
   const positions = new Map<string, NodePos>();
   for (const [id, pos] of placed.positions) {
@@ -83,9 +97,14 @@ function groupsOf(graph: DependencyGraph, parentId: string): RelationGroup[] {
   const groups = new Map<string, RelationGroup>();
   const children = graph.nodes
     .filter((node) => node.revealedByAnchorId === parentId && !node.relationHub)
-    .sort((a, b) => a.id.localeCompare(b.id));
+    .sort((a, b) => {
+      // 折叠占位排在同关系真实卡片之后，避免和展开态错位感过大
+      const af = isFoldSummaryNode(a) ? 1 : 0;
+      const bf = isFoldSummaryNode(b) ? 1 : 0;
+      return af - bf || a.id.localeCompare(b.id);
+    });
   for (const child of children) {
-    const type = relationBetween(graph.edges, nodes, parentId, child.id);
+    const type = child.foldSummary?.relationType ?? relationBetween(graph.edges, nodes, parentId, child.id);
     const group = groups.get(type) ?? { type, memberIds: [] };
     group.memberIds.push(child.id);
     groups.set(type, group);
@@ -206,18 +225,93 @@ function withSide(placed: Placed, id: string, side: Side): Placed {
 }
 
 function itemsOf(graph: DependencyGraph, groups: RelationGroup[], side: Side, seen: Set<string>): StackItem[] {
+  const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
   const items: StackItem[] = [];
   groups.forEach((group, groupIndex) => {
     group.memberIds.forEach((memberId, index) => {
       const lastInGroup = index === group.memberIds.length - 1;
       const lastGroup = groupIndex === groups.length - 1;
+      const nextGroup = groups[groupIndex + 1];
+      const foldGap =
+        lastInGroup &&
+        !lastGroup &&
+        group.memberIds.every((id) => isFoldSummaryNode(nodeById.get(id))) &&
+        nextGroup?.memberIds.every((id) => isFoldSummaryNode(nodeById.get(id)));
       items.push({
         placed: withSide(arrangeNode(graph, memberId, side, seen), memberId, side),
-        gapAfter: lastInGroup && !lastGroup ? GROUP_GAP : SIBLING_GAP,
+        gapAfter: lastInGroup && !lastGroup ? (foldGap ? FOLD_GROUP_GAP : GROUP_GAP) : SIBLING_GAP,
       });
     });
   });
   return items;
+}
+
+/**
+ * 展开/收起落位：已拖拽/已 pin 的工作项卡片绝对保位；
+ * 仅给新出现的节点（含 +N）按「相对父卡」的思维导图偏移补位。
+ */
+export function resolvePinnedExpandCollapse<T extends { x: number; y: number; side?: Side }>(
+  graph: DependencyGraph,
+  arranged: ReadonlyMap<string, T>,
+  pins: ReadonlyMap<string, T>,
+): Map<string, T> {
+  const result = new Map<string, T>();
+
+  // 1) 真实卡片：有 pin 则必须停在拖拽后的位置（忽略旧的 fold pin）
+  for (const node of graph.nodes) {
+    if (node.relationHub || isFoldSummaryNode(node)) {
+      continue;
+    }
+    const pin = pins.get(node.id);
+    const arrangedPos = arranged.get(node.id);
+    if (pin) {
+      result.set(node.id, {
+        ...((arrangedPos ?? pin) as T),
+        x: pin.x,
+        y: pin.y,
+        side: pin.side ?? arrangedPos?.side,
+      });
+    }
+  }
+
+  // 2) 其余可见节点（新展开的子卡 / 折叠占位）：相对父卡当前坐标补位
+  const pending = graph.nodes.filter(
+    (node) => !node.relationHub && !result.has(node.id) && arranged.has(node.id),
+  );
+  let guard = pending.length + 1;
+  while (pending.length && guard > 0) {
+    guard -= 1;
+    let progressed = false;
+    for (let index = pending.length - 1; index >= 0; index -= 1) {
+      const node = pending[index]!;
+      const arrangedPos = arranged.get(node.id)!;
+      const parentId = node.revealedByAnchorId;
+      const parentPos = parentId ? (result.get(parentId) ?? pins.get(parentId)) : undefined;
+      const arrangedParent = parentId ? arranged.get(parentId) : undefined;
+      if (parentPos && arrangedParent) {
+        result.set(node.id, {
+          ...arrangedPos,
+          x: parentPos.x + (arrangedPos.x - arrangedParent.x),
+          y: parentPos.y + (arrangedPos.y - arrangedParent.y),
+          side: arrangedPos.side ?? parentPos.side,
+        });
+      } else if (!parentId || !arrangedParent) {
+        result.set(node.id, arrangedPos);
+      } else {
+        continue;
+      }
+      pending.splice(index, 1);
+      progressed = true;
+    }
+    if (!progressed) {
+      for (const node of pending) {
+        result.set(node.id, arranged.get(node.id)!);
+      }
+      break;
+    }
+  }
+
+  return result;
 }
 
 /** 上下分支让开左右两列，同时保持相对根节点水平居中。 */
@@ -234,10 +328,20 @@ function clearVertical(placed: Placed[], side: 'top' | 'bottom', limit: number):
 }
 
 function arrangeNode(graph: DependencyGraph, id: string, flow: Side | 'cross', seen: Set<string>): Placed {
+  const self = graph.nodes.find((node) => node.id === id);
+  const selfExtent = nodeExtent(self);
   if (seen.has(id)) {
-    return { positions: new Map(), extent: cardExtent() };
+    return { positions: new Map(), extent: selfExtent };
   }
   seen.add(id);
+
+  // 折叠占位是叶子，不再向下排
+  if (isFoldSummaryNode(self)) {
+    return {
+      positions: new Map([[id, { x: 0, y: 0 }]]),
+      extent: selfExtent,
+    };
+  }
 
   const positions = new Map<string, { x: number; y: number }>([[id, { x: 0, y: 0 }]]);
   const groups = groupsOf(graph, id);
@@ -254,7 +358,7 @@ function arrangeNode(graph: DependencyGraph, id: string, flow: Side | 'cross', s
 
   if (flow === 'cross') {
     const beside = [...(placedBySide.get('left') ?? []), ...(placedBySide.get('right') ?? [])];
-    const besideExtent = unionExtent([cardExtent(), ...beside.map((item) => item.extent)]);
+    const besideExtent = unionExtent([selfExtent, ...beside.map((item) => item.extent)]);
     placedBySide.set('top', clearVertical(placedBySide.get('top') ?? [], 'top', besideExtent.top));
     placedBySide.set('bottom', clearVertical(placedBySide.get('bottom') ?? [], 'bottom', besideExtent.bottom));
   }
@@ -267,7 +371,7 @@ function arrangeNode(graph: DependencyGraph, id: string, flow: Side | 'cross', s
   }
   return {
     positions,
-    extent: unionExtent([cardExtent(), ...placed.map((item) => item.extent)]),
+    extent: unionExtent([selfExtent, ...placed.map((item) => item.extent)]),
   };
 }
 
@@ -275,11 +379,14 @@ function arrangeNode(graph: DependencyGraph, id: string, flow: Side | 'cross', s
 export function arrangeGraph(graph: DependencyGraph): Map<string, { x: number; y: number }> {
   const root = arrangeNode(graph, graph.rootId, 'cross', new Set());
   const positions = new Map(root.positions);
-  const missing = graph.nodes.filter((node) => !positions.has(node.id) && !node.relationHub);
+  const missing = graph.nodes.filter(
+    (node) => !positions.has(node.id) && !node.relationHub,
+  );
   let cursor = root.extent.right + H_GAP + GRAPH_NODE_SIZE.width / 2;
   for (const node of missing) {
+    const half = isFoldSummaryNode(node) ? FOLD_SUMMARY_SIZE.width / 2 : GRAPH_NODE_SIZE.width / 2;
     positions.set(node.id, { x: cursor, y: 0 });
-    cursor += GRAPH_NODE_SIZE.width + SIBLING_GAP;
+    cursor += half * 2 + SIBLING_GAP;
   }
   return positions;
 }

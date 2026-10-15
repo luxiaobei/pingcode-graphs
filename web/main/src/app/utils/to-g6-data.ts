@@ -1,6 +1,6 @@
 import type { GraphData, NodeData } from '@antv/g6';
 import type { DependencyGraph, FoldMark, GraphEntity, RelationFold } from '../entities/graph.entity';
-import { GRAPH_NODE_SIZE } from '../constants/graph.constants';
+import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
 import { groupRank, sideOfType, type Side } from './arrange-graph';
 import { trunkEdges, type GraphNodePosition } from './route-graph-edges';
 
@@ -11,7 +11,7 @@ const HALF_H = GRAPH_NODE_SIZE.height / 2;
 /** 同一侧多种关系的展开收起沿边拉开，避免叠在同一个起点。 */
 const BADGE_GAP = 28;
 
-/** 领域图 → G6 节点/边。展开收起画在关系分叉处。 */
+/** 领域图 → G6 节点/边。展开收起画在关系分叉处；收起时每种关系一个「+ N」。 */
 export function toG6Data(
   graph: DependencyGraph,
   positions?: ReadonlyMap<string, GraphNodePosition>,
@@ -24,7 +24,7 @@ export function toG6Data(
   };
 }
 
-/** 业务卡片。关系按钮的坐标相对这张卡片。 */
+/** 业务卡片或折叠占位。关系按钮的坐标相对这张卡片。 */
 function toG6Node(
   item: GraphEntity,
   positions: ReadonlyMap<string, GraphNodePosition> | undefined,
@@ -32,15 +32,18 @@ function toG6Node(
   forks: ReadonlyMap<string, { x: number; y: number }>,
 ): NodeData {
   const position = positions?.get(item.id) ?? item.position;
+  const fold = item.foldSummary;
+  const width = fold ? FOLD_SUMMARY_SIZE.width : GRAPH_NODE_SIZE.width;
+  const height = fold ? FOLD_SUMMARY_SIZE.height : GRAPH_NODE_SIZE.height;
   const node: NodeData = {
     id: item.id,
     type: 'work-item-card',
     data: {
-      foldMarks: foldMarks(item, position, rootId, forks),
+      foldMarks: fold ? [] : foldMarks(item, position, rootId, forks),
       item,
       root: item.id === rootId,
-      width: item.relationHub ? 1 : GRAPH_NODE_SIZE.width,
-      height: item.relationHub ? 1 : GRAPH_NODE_SIZE.height,
+      width,
+      height,
     },
   };
   if (position) {
@@ -76,18 +79,32 @@ function foldMarks(
       }
     }
   }
+  // 收起：卡片边上只留展开箭头；数量在「+ N」占位与边标签上
   for (const [side, list] of collapsed) {
     list.forEach((fold, index) => {
       const point = badgeOnCard(side, index, list.length);
       marks.push({
         key: fold.key,
-        text: String(fold.count),
+        text: chevronOf(side),
         left: point.left,
         top: point.top,
       });
     });
   }
   return marks;
+}
+
+function chevronOf(side: Side): string {
+  if (side === 'top') {
+    return '▴';
+  }
+  if (side === 'bottom') {
+    return '▾';
+  }
+  if (side === 'left') {
+    return '◂';
+  }
+  return '▸';
 }
 
 function foldsOnSide(

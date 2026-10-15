@@ -12,34 +12,40 @@ export function graphHostSize(container: HTMLElement): { width: number; height: 
   };
 }
 
-/** 把当前可见节点坐标写入 pins（收起节点坐标不覆盖） */
+/** 把当前可见节点坐标写入 pins（收起节点坐标不覆盖；折叠占位不写入，避免下次盖住补位） */
 export function snapshotGraphPositions(
   g6: Graph,
   pins: Map<string, GraphNodePosition>,
 ): void {
   for (const node of g6.getNodeData()) {
     const id = String(node.id);
+    if (id.startsWith('fold:')) {
+      continue;
+    }
     const [x, y] = g6.getElementPosition(id);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      continue;
+    }
     pins.set(id, { x, y, side: pins.get(id)?.side });
   }
 }
 
-/** 根节点标为 root。分叉点没有画出来，放进去会让整次状态更新失败。 */
+/** 根节点标为 root。分叉点 / 折叠占位不进状态表。 */
 export function buildElementStates(data: DependencyGraph): Record<string, string[]> {
   const stateMap: Record<string, string[]> = {};
   for (const node of data.nodes) {
-    if (!node.relationHub) {
+    if (!node.relationHub && !node.foldSummary) {
       stateMap[node.id] = node.id === data.rootId ? ['root'] : [];
     }
   }
   return stateMap;
 }
 
-/** 点在某种关系的展开收起上时，返回「父节点::关系类型」。 */
+/** 点在某种关系的展开收起 / 「+ N」上时，返回「父节点::关系类型」。 */
 export function foldKeyFromEvent(event: IElementEvent): string | null {
   const target = (event as { nativeEvent?: { target?: EventTarget | null } }).nativeEvent?.target;
   const element = target instanceof Element ? target : target instanceof Node ? target.parentElement : null;
-  const key = element?.closest('.card-badge')?.getAttribute('data-fold');
+  const key = element?.closest('.card-badge, .fold-summary')?.getAttribute('data-fold');
   return key || null;
 }
 

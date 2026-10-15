@@ -20,6 +20,21 @@ export function relationFoldKey(parentId: string, relationType: string): string 
   return `${parentId}::${relationType}`;
 }
 
+/** 折叠占位节点 id */
+export function foldSummaryNodeId(foldKey: string): string {
+  return `fold:${foldKey}`;
+}
+
+/** 是否为折叠「+ N」占位 */
+export function isFoldSummaryNode(node: GraphEntity | null | undefined): boolean {
+  return Boolean(node?.foldSummary);
+}
+
+/** 边标签：折叠占位带数量，如「子工作项 · 3」 */
+export function foldEdgeLabel(relationType: string, count: number): string {
+  return `${relationLabel(relationType)} · ${count}`;
+}
+
 /**
  * 父 → 子关系类型。先找直连边，再经 relationHub 中转。
  * arrange / to-g6 共用，避免两套逻辑漂移。

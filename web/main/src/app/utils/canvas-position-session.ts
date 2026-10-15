@@ -1,6 +1,10 @@
 import type { Graph } from '@antv/g6';
 import type { DependencyGraph } from '../entities/graph.entity';
-import { arrangeGraph, mergeLayoutPositions } from './arrange-graph';
+import {
+  arrangeGraph,
+  mergeLayoutPositions,
+  resolvePinnedExpandCollapse,
+} from './arrange-graph';
 import { snapshotGraphPositions } from './g6-helpers';
 import { cardPositionsFromNodes } from './saved-graph-layout';
 import type { GraphNodePosition } from './to-g6-data';
@@ -26,9 +30,13 @@ export class CanvasPositionSession {
     snapshotGraphPositions(g6, this.pins);
   }
 
-  /** 导出可持久化的坐标表。 */
+  /** 导出可持久化的坐标表（折叠占位不落库）。 */
   toSaveRecord(): Record<string, { x: number; y: number }> {
-    return Object.fromEntries([...this.pins].map(([id, { x, y }]) => [id, { x, y }]));
+    return Object.fromEntries(
+      [...this.pins]
+        .filter(([id]) => !id.startsWith('fold:'))
+        .map(([id, { x, y }]) => [id, { x, y }]),
+    );
   }
 
   /**
@@ -58,10 +66,10 @@ export class CanvasPositionSession {
     return this.pins.size ? this.pins : null;
   }
 
-  /** 可见卡片集合与 pin 完全一致时，可只 redraw 不重排。 */
+  /** 可见卡片均已有 pin 时，可只 redraw 不重排（pins 可能仍含已收起节点）。 */
   sameVisibleNodes(data: DependencyGraph): boolean {
     const ids = data.nodes.filter((node) => !node.relationHub).map((node) => node.id);
-    return ids.length === this.pins.size && ids.every((id) => this.pins.has(id));
+    return ids.length > 0 && ids.every((id) => this.pins.has(id));
   }
 
   /** 基准布局：saved 优先，缺的用思维导图补齐。 */
@@ -70,9 +78,18 @@ export class CanvasPositionSession {
     return mergeLayoutPositions(arrangeGraph(data), this.saved);
   }
 
-  /** 展开/收起：保留 pin（含拖拽），只给新节点补思维导图坐标。 */
+  /**
+   * 展开/收起：工作项拖拽位置绝对保留；丢掉旧的 fold pin，
+   * 只给新节点（含 +N）相对父卡当前坐标补位。
+   */
   resolveExpandCollapse(data: DependencyGraph): Map<string, GraphNodePosition> {
-    return mergeLayoutPositions(arrangeGraph(data), this.pins);
+    for (const id of [...this.pins.keys()]) {
+      if (id.startsWith('fold:')) {
+        this.pins.delete(id);
+      }
+    }
+    const arranged = arrangeGraph(data);
+    return resolvePinnedExpandCollapse(data, arranged, this.pins);
   }
 
   /**

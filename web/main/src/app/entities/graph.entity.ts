@@ -43,6 +43,11 @@ export interface GraphEntity {
   navigationTarget?: string;
   /** 关系聚合节点。有值时这一节点代表一种关系，具体对象挂在它下面。 */
   relationHub?: string;
+  /**
+   * 折叠占位节点。收起某关系时展示「+ N」，点击展开。
+   * 每种关系各自一个，不合并。
+   */
+  foldSummary?: RelationFold;
   /** 相对根节点跳数（0 = 焦点），前端 BFS 计算 */
   depth?: number;
   /** 展开树上的父节点 */

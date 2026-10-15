@@ -8,13 +8,13 @@ export interface SavedGraphLayout {
   collapsedKeys: string[];
 }
 
-/** 从卡片节点收集有效坐标（跳过 relationHub）。 */
+/** 从卡片节点收集有效坐标（跳过 relationHub / 折叠占位）。 */
 export function cardPositionsFromNodes(
   nodes: readonly GraphEntity[],
 ): Map<string, { x: number; y: number }> {
   const positions = new Map<string, { x: number; y: number }>();
   for (const node of nodes) {
-    if (node.relationHub || !node.position) {
+    if (node.relationHub || node.foldSummary || !node.position) {
       continue;
     }
     const { x, y } = node.position;
@@ -36,7 +36,8 @@ export function applySavedGraphLayout(
   return {
     ...graph,
     nodes: graph.nodes.map((node) => {
-      const pos = !node.relationHub ? layout.positions[node.id] : undefined;
+      const pos =
+        !node.relationHub && !node.foldSummary ? layout.positions[node.id] : undefined;
       return pos ? { ...node, position: { ...pos } } : node;
     }),
   };

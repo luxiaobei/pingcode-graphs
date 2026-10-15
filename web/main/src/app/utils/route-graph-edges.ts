@@ -1,15 +1,28 @@
 import type { EdgeData } from '@antv/g6';
-import { GRAPH_NODE_SIZE } from '../constants/graph.constants';
-import type { DependencyGraph } from '../entities/graph.entity';
+import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
+import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import { type Side } from './arrange-graph';
-import { relationBetween, relationColor, relationFoldKey, relationLabel } from './graph.util';
+import {
+  foldEdgeLabel,
+  isFoldSummaryNode,
+  relationBetween,
+  relationColor,
+  relationFoldKey,
+  relationLabel,
+} from './graph.util';
 
 export type GraphNodePosition = { x: number; y: number; side?: Side };
 
 const HALF_W = GRAPH_NODE_SIZE.width / 2;
 const HALF_H = GRAPH_NODE_SIZE.height / 2;
+const FOLD_HALF_W = FOLD_SUMMARY_SIZE.width / 2;
+const FOLD_HALF_H = FOLD_SUMMARY_SIZE.height / 2;
 const SPINE_PAD = 28;
 const FORK_PAD = 36;
+
+function halfOf(node: GraphEntity | undefined): { w: number; h: number } {
+  return isFoldSummaryNode(node) ? { w: FOLD_HALF_W, h: FOLD_HALF_H } : { w: HALF_W, h: HALF_H };
+}
 
 interface TrunkMember {
   parentId: string;
@@ -51,12 +64,16 @@ export function trunkEdges(
     if (child.relationHub || !child.revealedByAnchorId) {
       continue;
     }
-    const relationType = relationBetween(graph.edges, nodes, child.revealedByAnchorId, child.id);
+    const relationType =
+      child.foldSummary?.relationType ??
+      relationBetween(graph.edges, nodes, child.revealedByAnchorId, child.id);
     const member: TrunkMember = {
       parentId: child.revealedByAnchorId,
       childId: child.id,
       relationType,
-      label: relationLabel(relationType),
+      label: child.foldSummary
+        ? foldEdgeLabel(relationType, child.foldSummary.count)
+        : relationLabel(relationType),
     };
     const key = relationFoldKey(member.parentId, relationType);
     const list = groups.get(key) ?? [];
@@ -98,19 +115,29 @@ export function trunkEdges(
     const skip = new Set(lane.flatMap((group) => group.members.map((member) => member.childId)));
     skip.add(lane[0]?.members[0]?.parentId ?? '');
     const spine = spineAt(parent, children, side, otherNodes(positions, skip));
-    for (const group of lane) {
+    // 同侧多组关系（含多个 +N）错开标签，避免叠字
+    const labelStagger = (index: number): number =>
+      lane.length <= 1 ? 0 : (index - (lane.length - 1) / 2) * 16;
+    lane.forEach((group, groupIndex) => {
       const kids = group.placed.map((item) => item.child);
       const center = axisCenter(kids, side);
-      const fork = forkAt(kids, side);
+      const fork = forkAt(
+        group.placed.map((item) => ({
+          pos: item.child,
+          half: halfOf(nodes.get(item.member.childId)),
+        })),
+        side,
+      );
       const labelOwner = closestMember(parent, group.placed, side);
       const relationType = group.members[0]?.relationType ?? '';
+      // 折叠占位不走 straight：否则同侧多条边共用父卡中线，线与文案叠在一起
       const straight = relationType === 'child';
-      const alone =
-        relationType === 'parent' && kids.length === 1 && onAxis(parent, kids[0], side);
+      const alone = relationType === 'parent' && kids.length === 1 && onAxis(parent, kids[0], side);
       const labelCenter =
         straight || alone ? (side === 'left' || side === 'right' ? parent.y : parent.x) : center;
       const parentId = group.members[0]?.parentId ?? '';
       forks.set(relationFoldKey(parentId, relationType), junction(parent, side, center, fork, straight));
+      const stagger = labelStagger(groupIndex);
       for (const item of group.placed) {
         const showLabel = item.member.childId === labelOwner;
         const controlPoints = straight
@@ -121,8 +148,16 @@ export function trunkEdges(
           labelPlacement: showLabel
             ? labelRatio(parent, item.child, side, controlPoints, labelCenter, straight)
             : 'center',
-          labelOffsetX: !straight && !alone && showLabel && (side === 'top' || side === 'bottom') ? 16 : 0,
-          labelOffsetY: !straight && !alone && showLabel && (side === 'left' || side === 'right') ? -12 : 0,
+          labelOffsetX: showLabel
+            ? (side === 'top' || side === 'bottom'
+                ? (!straight && !alone ? 16 : 0) + stagger
+                : 0)
+            : 0,
+          labelOffsetY: showLabel
+            ? (side === 'left' || side === 'right'
+                ? (!straight && !alone ? -12 : 0) + stagger
+                : 0)
+            : 0,
         };
         if ((straight || alone) && showLabel) {
           style.labelTextAlign = 'center';
@@ -130,7 +165,7 @@ export function trunkEdges(
         }
         edges.push(straightEdge(item.member, style, showLabel));
       }
-    }
+    });
   }
   return { edges, forks };
 }
@@ -203,17 +238,20 @@ function closestMember(
 }
 
 /** 这组卡片外侧的分叉线，只盖住本组，不连到旁边的关系。 */
-function forkAt(children: GraphNodePosition[], side: Side): number {
+function forkAt(
+  children: { pos: GraphNodePosition; half: { w: number; h: number } }[],
+  side: Side,
+): number {
   if (side === 'right') {
-    return Math.min(...children.map((child) => child.x - HALF_W)) - FORK_PAD;
+    return Math.min(...children.map((child) => child.pos.x - child.half.w)) - FORK_PAD;
   }
   if (side === 'left') {
-    return Math.max(...children.map((child) => child.x + HALF_W)) + FORK_PAD;
+    return Math.max(...children.map((child) => child.pos.x + child.half.w)) + FORK_PAD;
   }
   if (side === 'bottom') {
-    return Math.min(...children.map((child) => child.y - HALF_H)) - FORK_PAD;
+    return Math.min(...children.map((child) => child.pos.y - child.half.h)) - FORK_PAD;
   }
-  return Math.max(...children.map((child) => child.y + HALF_H)) + FORK_PAD;
+  return Math.max(...children.map((child) => child.pos.y + child.half.h)) + FORK_PAD;
 }
 
 /** 父卡片外侧的公共脊柱。让开左右（或上下）已经占住的卡片，避免横穿。 */
@@ -223,7 +261,10 @@ function spineAt(
   side: Side,
   others: GraphNodePosition[],
 ): number {
-  const fork = forkAt(children, side);
+  const fork = forkAt(
+    children.map((pos) => ({ pos, half: { w: HALF_W, h: HALF_H } })),
+    side,
+  );
   if (side === 'right') {
     let x = parent.x + HALF_W + SPINE_PAD;
     for (const node of others) {

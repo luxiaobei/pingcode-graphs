@@ -1,10 +1,10 @@
 import type { EdgeData, GraphData, NodeData } from '@antv/g6';
 import type { DependencyGraph, FoldMark, GraphEntity, RelationFold } from '../entities/graph.entity';
-import { GRAPH_NODE_SIZE, RELATION_STYLE } from '../constants/graph.constants';
-import { groupRank, sideOfType } from './arrange-graph';
-import { relationColor } from './graph.util';
+import { GRAPH_NODE_SIZE } from '../constants/graph.constants';
+import { groupRank, sideOfType, type Side } from './arrange-graph';
+import { relationBetween, relationColor, relationFoldKey, relationLabel } from './graph.util';
 
-export type GraphNodePosition = { x: number; y: number; side?: 'left' | 'right' | 'top' | 'bottom' };
+export type GraphNodePosition = { x: number; y: number; side?: Side };
 
 /** 领域图 → G6 节点/边。展开收起画在关系分叉处。 */
 export function toG6Data(
@@ -43,8 +43,6 @@ function toG6Node(
   }
   return node;
 }
-
-type Side = 'left' | 'right' | 'top' | 'bottom';
 
 interface TrunkMember {
   parentId: string;
@@ -140,10 +138,6 @@ function junction(
   return side === 'left' || side === 'right' ? { x: fork, y: center } : { x: center, y: fork };
 }
 
-function typeLabel(type: string): string {
-  return RELATION_STYLE[type]?.label ?? type;
-}
-
 interface LaneGroup {
   members: TrunkMember[];
   parent: GraphNodePosition;
@@ -163,14 +157,14 @@ function trunkEdges(
     if (child.relationHub || !child.revealedByAnchorId) {
       continue;
     }
-    const relationType = relationOf(graph, nodes, child.revealedByAnchorId, child.id);
+    const relationType = relationBetween(graph.edges, nodes, child.revealedByAnchorId, child.id);
     const member: TrunkMember = {
       parentId: child.revealedByAnchorId,
       childId: child.id,
       relationType,
-      label: typeLabel(relationType),
+      label: relationLabel(relationType),
     };
-    const key = `${member.parentId}::${relationType}`;
+    const key = relationFoldKey(member.parentId, relationType);
     const list = groups.get(key) ?? [];
     list.push(member);
     groups.set(key, list);
@@ -223,7 +217,7 @@ function trunkEdges(
         onAxis(parent, kids[0], side);
       const labelCenter = straight || alone ? (side === 'left' || side === 'right' ? parent.y : parent.x) : center;
       const parentId = group.members[0]?.parentId ?? '';
-      forks.set(`${parentId}::${relationType}`, junction(parent, side, center, fork, straight));
+      forks.set(relationFoldKey(parentId, relationType), junction(parent, side, center, fork, straight));
       for (const item of group.placed) {
         const showLabel = item.member.childId === labelOwner;
         const controlPoints = straight
@@ -279,38 +273,6 @@ function otherNodes(
     }
   }
   return list;
-}
-
-function relationOf(
-  graph: DependencyGraph,
-  nodes: ReadonlyMap<string, GraphEntity>,
-  parentId: string,
-  childId: string,
-): string {
-  const direct = graph.edges.find(
-    (edge) =>
-      (edge.source === parentId && edge.target === childId) ||
-      (edge.target === parentId && edge.source === childId),
-  );
-  if (direct) {
-    return direct.relationType;
-  }
-  for (const edge of graph.edges) {
-    const hubId = edge.source === parentId ? edge.target : edge.target === parentId ? edge.source : undefined;
-    const hub = hubId ? nodes.get(hubId) : undefined;
-    if (!hub?.relationHub) {
-      continue;
-    }
-    const linked = graph.edges.some(
-      (item) =>
-        (item.source === hubId && item.target === childId) ||
-        (item.target === hubId && item.source === childId),
-    );
-    if (linked) {
-      return hub.relationHub;
-    }
-  }
-  return 'relate';
 }
 
 function sideOf(parent: GraphNodePosition, children: GraphNodePosition[]): Side {

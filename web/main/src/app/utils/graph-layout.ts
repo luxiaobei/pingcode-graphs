@@ -1,11 +1,28 @@
 import { invoke } from '@pc-nexus/bridge';
-import type { DependencyGraph } from '../entities/graph.entity';
+import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 
 /** 个人关系图布局（saveViewPosition.position，服务端原样存取） */
 export interface SavedGraphLayout {
   rootId: string;
   positions: Record<string, { x: number; y: number }>;
   collapsedKeys: string[];
+}
+
+/** 从卡片节点收集有效坐标（跳过 relationHub）。 */
+export function cardPositionsFromNodes(
+  nodes: readonly GraphEntity[],
+): Map<string, { x: number; y: number }> {
+  const positions = new Map<string, { x: number; y: number }>();
+  for (const node of nodes) {
+    if (node.relationHub || !node.position) {
+      continue;
+    }
+    const { x, y } = node.position;
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      positions.set(node.id, { x, y });
+    }
+  }
+  return positions;
 }
 
 /** 把已保存坐标写回节点。 */

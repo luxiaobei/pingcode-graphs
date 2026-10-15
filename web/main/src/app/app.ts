@@ -72,12 +72,6 @@ export class App {
     return buildVisibleGraph(filtered, new Set(this.collapsedAnchors()));
   });
 
-  protected readonly focusTitle = computed(() => {
-    const data = this.graph();
-    const root = data?.nodes.find((node) => node.id === data.rootId);
-    return root ? `${root.identifier} · ${root.title}` : '关联关系图';
-  });
-
   constructor() {
     void this.reload();
   }

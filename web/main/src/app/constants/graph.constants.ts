@@ -15,7 +15,7 @@ export const GRAPH_ZOOM_STEP = 1.2;
 /** 画布缩放区间 [min, max] */
 export const GRAPH_ZOOM_RANGE: [number, number] = [0.2, 3];
 
-/** 力导向收束后再适应一次的延迟（ms） */
+/** 初次布局落位后再适应画布的延迟（ms） */
 export const GRAPH_FIT_SETTLE_MS = 300;
 
 export const DEFAULT_EDGE_COLOR = '#94a3b8';

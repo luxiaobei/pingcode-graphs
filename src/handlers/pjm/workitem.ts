@@ -4,6 +4,7 @@ import { ces } from "@pc-nexus/storage";
 import { KG_NODE_ENTITY_NAME, KG_NODE_KIND, kgNodeId, type KgNode } from "../../models/pc-kg-node.js";
 import { createKgEdge, deleteEdge, KG_EDGE_ENTITY_NAME, KG_EDGE_TYPE, type KgEdge, type KgEdgeType } from "../../models/pc-kg-edge.js";
 import { api } from "@pc-nexus/network";
+import { publishEntityChanged } from "../../realtime.js";
 
 const edgeTypeMap: Record<string, KgEdgeType> = {
     "assignee": KG_EDGE_TYPE.assignedTo,
@@ -40,6 +41,7 @@ export const onWorkItemCreatedHandler: EventHandler = async (context, event) => 
     });
     await ces.entity(KG_NODE_ENTITY_NAME).insert(workitemNode);
     createWorkItemEdges(workitemNode, workitemInfo);
+    await publishEntityChanged("created", KG_NODE_KIND.workItem, workitemInfo["id"]);
 };
 
 export const onWorkItemUpdatedHandler: EventHandler = async (context, event) => {
@@ -78,6 +80,7 @@ export const onWorkItemUpdatedHandler: EventHandler = async (context, event) => 
             await deleteEdge(workitemNode.id, edgeTypeMap[(event.payload as any).changelog.property.id] as KgEdgeType);
         }
     }
+    await publishEntityChanged("updated", KG_NODE_KIND.workItem, workitemInfo["id"]);
 };
 
 export const onWorkItemDeletedHandler: EventHandler = async (context, event) => {
@@ -86,6 +89,7 @@ export const onWorkItemDeletedHandler: EventHandler = async (context, event) => 
         cb.field("kind").eq(KG_NODE_KIND.workItem);
         cb.field("ref_id").eq(workitemInfo["id"]);
     }), { active: false });
+    await publishEntityChanged("deleted", KG_NODE_KIND.workItem, workitemInfo["id"]);
 };
 
 async function createWorkItemEdges(workitemNode: WorkItemKgNode, workitemInfo: any) {

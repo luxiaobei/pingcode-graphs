@@ -3,6 +3,7 @@ import { ces } from "@pc-nexus/storage";
 import { createIdeaNode, type IdeaKgNode } from "../../models/ship/idea-node.js";
 import { KG_NODE_ENTITY_NAME, KG_NODE_KIND, kgNodeId, type KgNode } from "../../models/pc-kg-node.js";
 import { createKgEdge, deleteEdge, KG_EDGE_ENTITY_NAME, KG_EDGE_TYPE, type KgEdge } from "../../models/pc-kg-edge.js";
+import { publishEntityChanged } from "../../realtime.js";
 
 export const onIdeaCreatedHandler: EventHandler = async (context, event) => {
     const ideaInfo = (event.payload as any)["data"];
@@ -28,6 +29,7 @@ export const onIdeaCreatedHandler: EventHandler = async (context, event) => {
     });
     await ces.entity(KG_NODE_ENTITY_NAME).insert(ideaNode);
     createIdeaEdges(ideaNode, ideaInfo);
+    await publishEntityChanged("created", KG_NODE_KIND.idea, ideaInfo["id"]);
 };
 
 export const onIdeaUpdatedHandler: EventHandler = async (context, event) => {
@@ -62,6 +64,7 @@ export const onIdeaUpdatedHandler: EventHandler = async (context, event) => {
             await deleteEdge(ideaNode.id, KG_EDGE_TYPE.assignedTo);
         }
     }
+    await publishEntityChanged("updated", KG_NODE_KIND.idea, ideaInfo["id"]);
 };
 
 export const onIdeaDeletedHandler: EventHandler = async (context, event) => {
@@ -70,6 +73,7 @@ export const onIdeaDeletedHandler: EventHandler = async (context, event) => {
         cb.field("kind").eq(KG_NODE_KIND.idea);
         cb.field("ref_id").eq(ideaInfo["id"]);
     }, { active: false });
+    await publishEntityChanged("deleted", KG_NODE_KIND.idea, ideaInfo["id"]);
 };
 
 async function createIdeaEdges(ideaNode: IdeaKgNode, ideaInfo: any) {

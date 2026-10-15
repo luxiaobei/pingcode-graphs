@@ -3,7 +3,6 @@ import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import { type Side } from './arrange-graph';
 import {
-  foldEdgeLabel,
   isFoldSummaryId,
   isFoldSummaryNode,
   relationBetween,
@@ -73,7 +72,8 @@ export function trunkEdges(
       parentId: child.revealedByAnchorId,
       childId: child.id,
       relationType,
-      label: fold ? foldEdgeLabel(relationType, fold.count) : relationLabel(relationType),
+      // 数量只在 +N 占位上展示，边标签只保留关系名
+      label: relationLabel(relationType),
     };
     const key = relationFoldKey(member.parentId, relationType);
     const list = groups.get(key) ?? [];

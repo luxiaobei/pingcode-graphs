@@ -1,10 +1,5 @@
 import type { DependencyGraph, GraphEdge, GraphEntity, RelationFold } from '../entities/graph.entity';
-import {
-  foldEdgeLabel,
-  foldSummaryNodeId,
-  isFoldSummaryNode,
-  relationFoldKey,
-} from './graph.util';
+import { foldSummaryNodeId, isFoldSummaryNode, relationFoldKey, relationLabel } from './graph.util';
 
 /** 无向邻接表：source/target 互为邻居 */
 function neighborMap(edges: GraphEdge[]): Map<string, Set<string>> {
@@ -184,7 +179,7 @@ function withFoldSummaries(graph: DependencyGraph): DependencyGraph {
         source: node.id,
         target: id,
         relationType: fold.relationType,
-        label: foldEdgeLabel(fold.relationType, fold.count),
+        label: relationLabel(fold.relationType),
       });
     }
   }

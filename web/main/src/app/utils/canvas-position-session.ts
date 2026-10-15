@@ -4,6 +4,9 @@ import {
   arrangeGraph,
   mergeLayoutPositions,
   resolvePinnedExpandCollapse,
+  settleReanchoredSubtree,
+  sideFromDelta,
+  type Side,
 } from './arrange-graph';
 import { snapshotGraphPositions } from './g6-helpers';
 import { isFoldSummaryId, isFoldSummaryNode, relationBetween } from './graph.util';
@@ -12,7 +15,7 @@ import type { GraphNodePosition } from './to-g6-data';
 
 /** 画布位置会话：会话 pin、已保存坐标、换根/展开收起时的坐标策略。 */
 export class CanvasPositionSession {
-  /** 当前会话拖拽 / 布局输出 */
+  /** 当前会话拖拽 / 布局输出（含折叠占位） */
   readonly pins = new Map<string, GraphNodePosition>();
   /** 服务端下发 / 已保存；一键整理优先还原 */
   private readonly saved = new Map<string, GraphNodePosition>();
@@ -20,26 +23,47 @@ export class CanvasPositionSession {
   private lastGraph: DependencyGraph | null = null;
   private lastDepth: number | null = null;
   private lastRootId: string | null = null;
+  /** 用户级关系方位偏好（跨工作项共用） */
+  private relationSides = new Map<string, Side>();
 
   clear(): void {
     this.pins.clear();
     this.saved.clear();
+    this.relationSides.clear();
     this.lastGraph = null;
     this.lastDepth = null;
     this.lastRootId = null;
   }
 
-  /** 把 G6 当前可见节点坐标写入 pin（已收起节点不覆盖）。 */
-  snapshot(g6: Graph): void {
-    snapshotGraphPositions(g6, this.pins);
+  /** 把 G6 当前可见节点坐标写入 pin，并按相对父卡位置重算 side。 */
+  snapshot(g6: Graph, graph?: DependencyGraph | null): void {
+    const live = snapshotGraphPositions(g6, this.pins, graph);
+    this.syncRelationSidesFromPins(graph, live);
   }
 
-  /** 导出可持久化的坐标表（折叠占位不落库）。 */
-  toSaveRecord(): Record<string, { x: number; y: number }> {
+  setRelationSides(sides: ReadonlyMap<string, Side> | Record<string, Side> | null | undefined): void {
+    this.relationSides.clear();
+    if (!sides) {
+      return;
+    }
+    const entries = sides instanceof Map ? sides.entries() : Object.entries(sides);
+    for (const [type, side] of entries) {
+      if (side === 'left' || side === 'right' || side === 'top' || side === 'bottom') {
+        this.relationSides.set(type, side);
+      }
+    }
+  }
+
+  getRelationSides(): Record<string, Side> {
+    return Object.fromEntries(this.relationSides);
+  }
+
+  /** 导出可持久化的坐标表（折叠占位不落库；带 side）。 */
+  toSaveRecord(): Record<string, { x: number; y: number; side?: Side }> {
     return Object.fromEntries(
       [...this.pins]
         .filter(([id]) => !isFoldSummaryId(id))
-        .map(([id, { x, y }]) => [id, { x, y }]),
+        .map(([id, { x, y, side }]) => [id, side ? { x, y, side } : { x, y }]),
     );
   }
 
@@ -57,6 +81,7 @@ export class CanvasPositionSession {
 
     if (!reusePins) {
       this.pins.clear();
+      // relationSides 跨工作项共用，换根不清空
       this.lastGraph = null;
       this.lastDepth = data.depth;
       this.lastRootId = data.rootId;
@@ -67,14 +92,30 @@ export class CanvasPositionSession {
     if (!g6) {
       return null;
     }
-    this.snapshot(g6);
+    this.snapshot(g6, data);
     return this.pins.size ? this.pins : null;
   }
 
-  /** 可见卡片均已有 pin 时，可只 redraw 不重排（pins 可能仍含已收起节点）。 */
+  /**
+   * 可见集合未变且均有 pin 时可只 redraw。
+   * 展开后子卡仍留着收起前的 pin，必须对比上一帧可见集合，否则会跳过重排。
+   */
   sameVisibleNodes(data: DependencyGraph): boolean {
     const ids = data.nodes.filter((node) => !node.relationHub).map((node) => node.id);
-    return ids.length > 0 && ids.every((id) => this.pins.has(id));
+    if (!ids.length || !ids.every((id) => this.pins.has(id))) {
+      return false;
+    }
+    if (!this.lastGraph) {
+      return false;
+    }
+    const prevIds = this.lastGraph.nodes
+      .filter((node) => !node.relationHub)
+      .map((node) => node.id);
+    if (prevIds.length !== ids.length) {
+      return false;
+    }
+    const prevSet = new Set(prevIds);
+    return ids.every((id) => prevSet.has(id));
   }
 
   /** 记录当前可见图，供下次收起时对齐 +N 占位。 */
@@ -82,26 +123,33 @@ export class CanvasPositionSession {
     this.lastGraph = data;
   }
 
-  /** 基准布局：saved 优先，缺的用思维导图补齐。 */
+  /** 基准布局：saved / 关系方位偏好优先，缺的用思维导图补齐。 */
   resolveBaseline(data: DependencyGraph): Map<string, GraphNodePosition> {
     this.syncSaved(data);
-    const layout = mergeLayoutPositions(arrangeGraph(data), this.saved);
+    const layout = mergeLayoutPositions(
+      arrangeGraph(data, this.relationSides),
+      this.saved,
+    );
     this.lastGraph = data;
     return layout;
   }
 
   /**
-   * 展开/收起：工作项拖拽位置绝对保留；丢掉旧的 fold pin，
-   * +N 落在展开时子卡坐标中心，与展开位对齐。
+   * 展开/收起：工作项与已拖动的 +N 保位；
+   * 折叠占位若拖到新方位，丢掉旧侧子卡 pin，按新侧 arrange 重锚整棵子树。
    */
   resolveExpandCollapse(data: DependencyGraph): Map<string, GraphNodePosition> {
-    for (const id of [...this.pins.keys()]) {
-      if (isFoldSummaryId(id)) {
-        this.pins.delete(id);
-      }
+    const foldPins = new Map(
+      [...this.pins].filter(([id]) => isFoldSummaryId(id)),
+    );
+    syncRelationSidesFromFolds(this.lastGraph, foldPins, this.relationSides);
+    const reanchored = clearStalePinsAfterFoldDrag(data, this.lastGraph, foldPins, this.pins);
+    const arranged = arrangeGraph(data, this.relationSides);
+    const layout = resolvePinnedExpandCollapse(data, arranged, this.pins);
+    for (const cluster of reanchored) {
+      settleReanchoredSubtree(data, layout, cluster.ids, cluster.side, cluster.anchor);
     }
-    const layout = resolvePinnedExpandCollapse(data, arrangeGraph(data), this.pins);
-    placeFoldsAtExpandedSlots(data, this.lastGraph, this.pins, layout);
+    placeFoldsAtExpandedSlots(data, this.lastGraph, this.pins, layout, foldPins);
     this.lastGraph = data;
     return layout;
   }
@@ -142,27 +190,85 @@ export class CanvasPositionSession {
       this.saved.set(id, pos);
     }
   }
+
+  /** 拖拽后把可见节点 side 汇总进关系方位偏好（同关系取众数）。 */
+  private syncRelationSidesFromPins(
+    graph?: DependencyGraph | null,
+    live?: ReadonlyMap<string, unknown>,
+  ): void {
+    if (!graph) {
+      return;
+    }
+    const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
+    const votes = new Map<string, Map<Side, number>>();
+    for (const node of graph.nodes) {
+      if (live && !live.has(node.id)) {
+        continue;
+      }
+      if (node.relationHub || !node.revealedByAnchorId) {
+        continue;
+      }
+      const pin = this.pins.get(node.id);
+      if (!pin?.side) {
+        continue;
+      }
+      const type = isFoldSummaryNode(node)
+        ? node.foldSummary!.relationType
+        : relationBetween(graph.edges, nodes, node.revealedByAnchorId, node.id);
+      const bucket = votes.get(type) ?? new Map<Side, number>();
+      bucket.set(pin.side, (bucket.get(pin.side) ?? 0) + 1);
+      votes.set(type, bucket);
+    }
+    for (const [type, bucket] of votes) {
+      let best: Side | undefined;
+      let bestCount = -1;
+      for (const [side, count] of bucket) {
+        if (count > bestCount) {
+          best = side;
+          bestCount = count;
+        }
+      }
+      if (best) {
+        this.relationSides.set(type, best);
+      }
+    }
+  }
 }
 
 /**
- * 收起时把 +N 放到该关系展开子卡的原坐标中心，避免占位被思维导图重新排开。
+ * 收起时把 +N 放到该关系展开子卡的原坐标中心；若用户已拖过该占位则保留。
  */
 function placeFoldsAtExpandedSlots(
   data: DependencyGraph,
   prev: DependencyGraph | null,
   pins: ReadonlyMap<string, GraphNodePosition>,
   layout: Map<string, GraphNodePosition>,
+  foldPins: ReadonlyMap<string, GraphNodePosition>,
 ): void {
-  if (!prev) {
-    return;
-  }
-  const prevNodes = new Map(prev.nodes.map((node) => [node.id, node]));
   for (const node of data.nodes) {
-    const fold = node.foldSummary;
-    const parentId = node.revealedByAnchorId;
-    if (!fold || !parentId || !isFoldSummaryNode(node)) {
+    if (!isFoldSummaryNode(node)) {
       continue;
     }
+    const kept = foldPins.get(node.id);
+    if (kept && Number.isFinite(kept.x) && Number.isFinite(kept.y)) {
+      const base = layout.get(node.id);
+      layout.set(node.id, {
+        ...(base ?? kept),
+        x: kept.x,
+        y: kept.y,
+        side: kept.side ?? base?.side,
+      });
+      continue;
+    }
+    if (!prev) {
+      continue;
+    }
+    const fold = node.foldSummary;
+    const parentId = node.revealedByAnchorId;
+    if (!fold || !parentId) {
+      continue;
+    }
+    const prevNodes = new Map(prev.nodes.map((item) => [item.id, item]));
     const kids = prev.nodes.filter((child) => {
       if (child.relationHub || isFoldSummaryNode(child) || child.revealedByAnchorId !== parentId) {
         return false;
@@ -181,4 +287,106 @@ function placeFoldsAtExpandedSlots(
     const side = points.find((pos) => pos.side)?.side ?? base?.side;
     layout.set(node.id, { ...(base ?? { x, y }), x, y, side });
   }
+}
+
+/** 收起占位上的 side 写入关系偏好，供 arrange 排到对应侧。 */
+function syncRelationSidesFromFolds(
+  prev: DependencyGraph | null,
+  foldPins: ReadonlyMap<string, GraphNodePosition>,
+  relationSides: Map<string, Side>,
+): void {
+  if (!prev) {
+    return;
+  }
+  for (const node of prev.nodes) {
+    if (!isFoldSummaryNode(node) || !node.foldSummary) {
+      continue;
+    }
+    const pin = foldPins.get(node.id);
+    if (pin?.side) {
+      relationSides.set(node.foldSummary.relationType, pin.side);
+    }
+  }
+}
+
+interface ReanchorCluster {
+  ids: Set<string>;
+  side: Side;
+  anchor: { x: number; y: number };
+}
+
+/**
+ * 折叠占位拖到新方位后展开：清掉仍停在旧侧的子树 pin。
+ */
+function clearStalePinsAfterFoldDrag(
+  data: DependencyGraph,
+  prev: DependencyGraph | null,
+  foldPins: ReadonlyMap<string, GraphNodePosition>,
+  pins: Map<string, GraphNodePosition>,
+): ReanchorCluster[] {
+  if (!prev) {
+    return [];
+  }
+  const dataNodes = new Map(data.nodes.map((node) => [node.id, node]));
+  const childrenOf = new Map<string, string[]>();
+  for (const node of data.nodes) {
+    if (node.relationHub || !node.revealedByAnchorId) {
+      continue;
+    }
+    const list = childrenOf.get(node.revealedByAnchorId) ?? [];
+    list.push(node.id);
+    childrenOf.set(node.revealedByAnchorId, list);
+  }
+
+  const clusters: ReanchorCluster[] = [];
+  for (const node of prev.nodes) {
+    if (!isFoldSummaryNode(node) || !node.foldSummary || !node.revealedByAnchorId) {
+      continue;
+    }
+    if (dataNodes.has(node.id)) {
+      continue;
+    }
+    const foldPin = foldPins.get(node.id);
+    if (!foldPin?.side) {
+      continue;
+    }
+    const parentId = node.revealedByAnchorId;
+    const parentPin = pins.get(parentId);
+    if (!parentPin) {
+      continue;
+    }
+    const relationType = node.foldSummary.relationType;
+    const clusterIds = new Set<string>();
+    for (const child of data.nodes) {
+      if (child.relationHub || isFoldSummaryNode(child) || child.revealedByAnchorId !== parentId) {
+        continue;
+      }
+      if (relationBetween(data.edges, dataNodes, parentId, child.id) !== relationType) {
+        continue;
+      }
+      const childPin = pins.get(child.id);
+      if (childPin) {
+        const geoSide = sideFromDelta(childPin.x - parentPin.x, childPin.y - parentPin.y);
+        if (geoSide === foldPin.side) {
+          pins.set(child.id, { ...childPin, side: foldPin.side });
+          continue;
+        }
+      }
+      const queue = [child.id];
+      while (queue.length) {
+        const id = queue.shift()!;
+        pins.delete(id);
+        clusterIds.add(id);
+        queue.push(...(childrenOf.get(id) ?? []));
+      }
+    }
+    if (clusterIds.size) {
+      clusters.push({
+        ids: clusterIds,
+        side: foldPin.side,
+        anchor: { x: foldPin.x, y: foldPin.y },
+      });
+    }
+  }
+  return clusters;
 }

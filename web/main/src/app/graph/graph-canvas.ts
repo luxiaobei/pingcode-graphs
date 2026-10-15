@@ -29,6 +29,7 @@ import {
   GRAPH_ZOOM_STEP,
 } from '../constants/graph.constants';
 import type { DependencyGraph } from '../entities/graph.entity';
+import type { Side } from '../utils/arrange-graph';
 import { CanvasPositionSession } from '../utils/canvas-position-session';
 import {
   buildElementStates,
@@ -57,12 +58,18 @@ import { bindWorkItemCardRuntime } from './work-item-card';
 export class GraphCanvas {
   readonly graph = input<DependencyGraph | null>(null);
 
+  /** 用户级关系方位偏好（跨工作项） */
+  readonly relationSides = input<Record<string, Side> | null>(null);
+
   readonly toggleExpand = output<string>();
 
   readonly retrace = output<string>();
 
-  /** 保存个人布局：当前可见卡片坐标 */
-  readonly saveLayout = output<Record<string, { x: number; y: number }>>();
+  /** 保存个人布局：卡片坐标 + 用户级关系方位 */
+  readonly saveLayout = output<{
+    positions: Record<string, { x: number; y: number; side?: Side }>;
+    relationSides: Record<string, Side>;
+  }>();
 
   protected readonly zoomPercent = signal(100);
 
@@ -89,6 +96,10 @@ export class GraphCanvas {
     bindWorkItemCardRuntime(inject(EnvironmentInjector), inject(ApplicationRef));
     afterNextRender(() => this.initGraph());
     this.destroyRef.onDestroy(() => this.destroyGraph());
+
+    effect(() => {
+      this.positions.setRelationSides(this.relationSides());
+    });
 
     effect(() => {
       if (this.ready()) {
@@ -131,14 +142,18 @@ export class GraphCanvas {
       .catch(() => undefined);
   }
 
-  /** 快照当前卡片坐标，交给上层写入服务端。 */
+  /** 快照当前卡片坐标与关系方位，交给上层写入服务端。 */
   protected save(): void {
-    const graph = this.liveGraph();
-    if (!graph) {
+    const g6 = this.liveGraph();
+    if (!g6) {
       return;
     }
-    this.positions.snapshot(graph);
-    this.saveLayout.emit(this.positions.toSaveRecord());
+    const data = untracked(() => this.graph());
+    this.positions.snapshot(g6, data);
+    this.saveLayout.emit({
+      positions: this.positions.toSaveRecord(),
+      relationSides: this.positions.getRelationSides(),
+    });
   }
 
   /**
@@ -235,8 +250,8 @@ export class GraphCanvas {
       if (!this.g6) {
         return;
       }
-      this.positions.snapshot(this.g6);
       const data = untracked(() => this.graph());
+      this.positions.snapshot(this.g6, data);
       if (data) {
         this.applyGraphData(data);
         void this.g6.draw();

@@ -31,7 +31,7 @@ resolver.define<GetDeepRelationPayload, KgDeepRelation>(
 );
 
 resolver.define<SaveViewPositionPayload, void>("saveViewPosition", async (context, payload) => {
-    await kgService.saveViewPosition(context, payload.nodeId, payload.position);
+    await kgService.saveViewPosition(context, payload.nodeId, payload.position, payload.relationSides);
 });
 
 resolver.define<GetViewPositionPayload, Record<string, unknown> | null>("getViewPosition", async (context, payload) => {

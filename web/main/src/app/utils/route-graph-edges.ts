@@ -111,10 +111,18 @@ export function trunkEdges(
     if (!parent || !side) {
       continue;
     }
-    const children = lane.flatMap((group) => group.placed.map((item) => item.child));
     const skip = new Set(lane.flatMap((group) => group.members.map((member) => member.childId)));
     skip.add(lane[0]?.members[0]?.parentId ?? '');
-    const spine = spineAt(parent, children, side, otherNodes(positions, skip));
+    const others = otherNodes(positions, skip);
+    // 关联/重复/阻塞等共用一条脊柱（图二）；父单独脊柱，不与其它关系同干
+    const bundleKids = lane
+      .filter((group) => group.members[0]?.relationType !== 'parent')
+      .flatMap((group) => group.placed.map((item) => item.child));
+    const parentKids = lane
+      .filter((group) => group.members[0]?.relationType === 'parent')
+      .flatMap((group) => group.placed.map((item) => item.child));
+    const bundleSpine = bundleKids.length ? spineAt(parent, bundleKids, side, others) : undefined;
+    const parentSpine = parentKids.length ? spineAt(parent, parentKids, side, others) : undefined;
     // 同侧多组关系（含多个 +N）错开标签，避免叠字
     const labelStagger = (index: number): number =>
       lane.length <= 1 ? 0 : (index - (lane.length - 1) / 2) * 16;
@@ -133,7 +141,8 @@ export function trunkEdges(
       const relationType = group.members[0]?.relationType ?? '';
       // 折叠占位不走 straight：否则同侧多条边共用父卡中线，线与文案叠在一起
       const straight = relationType === 'child' && !foldOnly;
-      const alone = relationType === 'parent' && kids.length === 1 && onAxis(parent, kids[0], side);
+      const parentOwn = relationType === 'parent';
+      const alone = parentOwn && kids.length === 1 && onAxis(parent, kids[0], side);
       const labelCenter =
         straight || alone ? (side === 'left' || side === 'right' ? parent.y : parent.x) : center;
       const parentId = group.members[0]?.parentId ?? '';
@@ -142,8 +151,12 @@ export function trunkEdges(
       const stagger = foldOnly ? 0 : labelStagger(groupIndex);
       const offsetX = foldOnly || straight || alone ? 0 : 16;
       const offsetY = foldOnly || straight || alone ? 0 : -12;
+      const spine = parentOwn
+        ? (parentSpine ?? fork)
+        : (bundleSpine ?? parentSpine ?? fork);
       for (const item of group.placed) {
         const showLabel = item.member.childId === labelOwner;
+        // 父与其它关系均走正交 routeOf，父用独立脊柱，不斜切
         const controlPoints = straight
           ? layerRoute(parent, item.child, side, fork)
           : routeOf(parent, item.child, side, spine, fork, center);

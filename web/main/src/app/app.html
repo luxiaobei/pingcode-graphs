@@ -46,6 +46,7 @@
       } @else if (showCanvas()) {
         <app-graph-canvas
           [graph]="data"
+          [relationSides]="relationSides()"
           (toggleExpand)="onToggleExpand($event)"
           (retrace)="onRetrace($event)"
           (saveLayout)="onSaveLayout($event)"

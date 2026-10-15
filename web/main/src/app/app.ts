@@ -21,6 +21,7 @@ import {
   type DisplaySetting,
 } from './settings/display-settings';
 import { DisplaySettingsDialog } from './settings/display-settings-dialog';
+import type { Side } from './utils/arrange-graph';
 import { buildVisibleGraph } from './utils/expand-graph';
 import {
   applySavedGraphLayout,
@@ -58,6 +59,9 @@ export class App {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly collapsedAnchors = signal<readonly string[]>([]);
+
+  /** 用户级关系方位偏好，跨工作项共用 */
+  protected readonly relationSides = signal<Record<string, Side>>({});
 
   /** 换根追溯后的工作项。空表示用打开页面时的当前工作项。 */
   private readonly traceWorkItemId = signal<string | null>(null);
@@ -182,6 +186,9 @@ export class App {
         this.error.set(null);
       }
       this.collapsedAnchors.set(layout?.collapsedKeys ?? []);
+      if (layout?.relationSides) {
+        this.relationSides.set(layout.relationSides);
+      }
       this.source.set(applySavedGraphLayout(data, layout));
     } catch (err) {
       if (seq !== this.requestSeq) {
@@ -198,19 +205,24 @@ export class App {
     }
   }
 
-  /** 保存当前根工作项下的坐标与收起状态。 */
-  protected async onSaveLayout(positions: Record<string, { x: number; y: number }>): Promise<void> {
+  /** 保存当前根工作项下的坐标、收起状态；关系方位由画布一并带出。 */
+  protected async onSaveLayout(payload: {
+    positions: Record<string, { x: number; y: number; side?: Side }>;
+    relationSides: Record<string, Side>;
+  }): Promise<void> {
     const rootId = this.source()?.rootId;
     if (!rootId) {
       return;
     }
     const layout: SavedGraphLayout = {
       rootId,
-      positions,
+      positions: payload.positions,
       collapsedKeys: [...this.collapsedAnchors()],
+      relationSides: payload.relationSides,
     };
     try {
       await saveGraphLayout(layout);
+      this.relationSides.set(payload.relationSides);
       this.source.update((source) => (source ? applySavedGraphLayout(source, layout) : source));
       void notify.success({ title: '保存成功' });
     } catch {

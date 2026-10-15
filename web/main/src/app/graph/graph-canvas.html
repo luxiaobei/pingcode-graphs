@@ -16,7 +16,14 @@
         [thyDisabled]="!canZoomOut()"
         (click)="zoomOut()"
       ></thy-action>
-      <span class="canvas-toolbar__zoom" title="当前缩放">{{ zoomPercent() }}%</span>
+      <thy-action
+        class="canvas-toolbar__zoom"
+        [class.canvas-toolbar__zoom--current]="zoomPercent() === 100"
+        thyTooltip="恢复 100%"
+        thyTooltipPlacement="top"
+        [thyTooltipDisabled]="zoomPercent() === 100"
+        (click)="resetZoom()"
+      >{{ zoomPercent() }}%</thy-action>
       <thy-action
         thyIcon="zoom-in"
         thyTooltip="放大"

@@ -117,18 +117,21 @@ export class GraphCanvas {
     }
   }
 
-  /** 定位到当前工作项（图根节点）并居中显示。 */
-  protected locate(): void {
-    const data = this.graph();
+  /** 点击百分比：缩放到 100%，不移动视口中心。 */
+  protected resetZoom(): void {
     const graph = this.liveGraph();
-    const rootId = data?.rootId;
-    if (!graph || !rootId || !data?.nodes.some((node) => node.id === rootId)) {
+    if (!graph || this.zoomPercent() === 100) {
       return;
     }
     void graph
-      .focusElement(rootId, { duration: 300 })
+      .zoomTo(1)
       .then(() => this.syncZoomPercent())
       .catch(() => undefined);
+  }
+
+  /** 定位到当前工作项（图根节点）：缩放到 100% 并居中。 */
+  protected locate(): void {
+    void this.locateRoot({ duration: 300 });
   }
 
   /** 快照当前卡片坐标，交给上层写入服务端。 */
@@ -149,7 +152,7 @@ export class GraphCanvas {
     if (!data?.nodes.length || !this.liveGraph()) {
       return;
     }
-    void this.layoutBaseline(data, { fitView: true }).catch(() => undefined);
+    void this.layoutBaseline(data, { viewport: 'fit' }).catch(() => undefined);
   }
 
   protected fit(): void {
@@ -161,6 +164,25 @@ export class GraphCanvas {
       .fitView({ when: 'always', direction: 'both' })
       .then(() => this.syncZoomPercent())
       .catch(() => undefined);
+  }
+
+  /** 缩放到 100%，并把当前工作项（根节点）放到视口中心。 */
+  private async locateRoot(options?: { duration?: number }): Promise<void> {
+    const data = untracked(() => this.graph());
+    const graph = this.liveGraph();
+    const rootId = data?.rootId;
+    if (!graph || !rootId || !data?.nodes.some((node) => node.id === rootId)) {
+      return;
+    }
+    const duration = options?.duration ?? 0;
+    const animation = duration > 0 ? { duration } : false;
+    try {
+      await graph.zoomTo(1, animation);
+      await graph.focusElement(rootId, animation);
+      this.syncZoomPercent();
+    } catch {
+      // 视口未就绪时忽略
+    }
   }
 
   private initGraph(): void {
@@ -382,18 +404,18 @@ export class GraphCanvas {
     } else if (reused) {
       // 展开/收起：保留已拖拽坐标（含已收起节点的 pin），+N 对齐展开位
       await this.applyLayoutPositions(data, this.positions.resolveExpandCollapse(data), {
-        fitView: false,
+        viewport: 'none',
         keepHiddenPins: true,
       });
     } else {
-      // 初次进入 / 换根：服务端位置优先，否则思维导图初始化
-      await this.layoutBaseline(data, { fitView: true });
+      // 初次进入 / 换根：默认 100% 并定位当前工作项
+      await this.layoutBaseline(data, { viewport: 'root' });
       if (seq !== this.renderSeq) {
         return;
       }
       this.fitTimer = window.setTimeout(() => {
         if (seq === this.renderSeq) {
-          this.fit();
+          void this.locateRoot();
         }
       }, GRAPH_FIT_SETTLE_MS);
     }
@@ -409,7 +431,7 @@ export class GraphCanvas {
   /** 一键整理 / 首次进入：服务端位置优先，否则思维导图初始化。 */
   private async layoutBaseline(
     data: DependencyGraph,
-    options: { fitView: boolean },
+    options: { viewport: 'fit' | 'root' | 'none' },
   ): Promise<void> {
     await this.applyLayoutPositions(data, this.positions.resolveBaseline(data), options);
   }
@@ -421,7 +443,7 @@ export class GraphCanvas {
   private async applyLayoutPositions(
     data: DependencyGraph,
     layoutPositions: ReadonlyMap<string, GraphNodePosition>,
-    options: { fitView: boolean; keepHiddenPins?: boolean },
+    options: { viewport: 'fit' | 'root' | 'none'; keepHiddenPins?: boolean },
   ): Promise<void> {
     const graph = this.liveGraph();
     if (!graph) {
@@ -431,10 +453,10 @@ export class GraphCanvas {
     // setData 前判断：之后 getNodeData 已是新数据，分不清是否首次渲染
     const firstPaint = !(graph.getNodeData() ?? []).length;
     const [width, height] = graph.getSize();
-    const layout =
-      options.fitView && width > 0 && height > 0
-        ? this.positions.centerForViewport(layoutPositions, width, height)
-        : layoutPositions;
+    const centerLayout = options.viewport !== 'none' && width > 0 && height > 0;
+    const layout = centerLayout
+      ? this.positions.centerForViewport(layoutPositions, width, height)
+      : layoutPositions;
     this.positions.seed(layout, options.keepHiddenPins);
     this.applyGraphData(data, layout);
 
@@ -453,8 +475,10 @@ export class GraphCanvas {
       await graph.draw();
     }
 
-    if (options.fitView) {
+    if (options.viewport === 'fit') {
       this.fit();
+    } else if (options.viewport === 'root') {
+      await this.locateRoot();
     }
   }
 

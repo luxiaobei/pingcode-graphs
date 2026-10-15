@@ -62,12 +62,14 @@
 
 .canvas-toolbar__zoom {
   min-width: 44px;
-  padding: 0 4px;
-  text-align: center;
+  justify-content: center;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: #64748b;
   user-select: none;
+
+  &--current {
+    pointer-events: none;
+  }
 }
 
 .canvas-save {

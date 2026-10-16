@@ -1,7 +1,7 @@
 import type { EdgeData } from '@antv/g6';
 import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
-import { type Side } from './arrange-graph';
+import { PARENT_DUAL_EXIT_GAP, type Side } from './arrange-graph';
 import {
   isBundleRelationType,
   isFoldSummaryId,
@@ -193,7 +193,14 @@ export function trunkEdges(
       // A 直出(child) / B 私有干(parent) / C 公共脊(其它，含整体收起占位)
       const straight = relationType === 'child' && !foldOnly;
       const parentOwn = relationType === 'parent';
-      const alone = parentOwn && kids.length === 1 && onAxis(parent, kids[0], side);
+      // 单父贴父干：双出线时父干已错开，勿再走中线 layerRoute（会与其它关系共干）
+      const stemAligned =
+        parentOwn &&
+        kids.length === 1 &&
+        (horizontal
+          ? Math.abs(kids[0].y - parentStem) < 1
+          : Math.abs(kids[0].x - parentStem) < 1);
+      const alone = stemAligned && Math.abs(parentStem - parentAxis) < 1;
       const stemCenter = parentOwn ? parentStem : center;
       // 文案落在本组类型线（子卡轴向），勿用共干 leave，否则多关系叠在同一段
       const labelCenter = straight || alone ? parentAxis : stemCenter;
@@ -226,7 +233,7 @@ export function trunkEdges(
       const spine = parentOwn
         ? (spines.parent ?? fork)
         : (spines.bundle ?? spines.parent ?? fork);
-      // 单父在轴上走 layer 直线，fold 也钉中线
+      // 中线直出用 layer；双出线父干错开时 fold 钉在父干上
       const foldMode = straight || alone ? 'layer' : parentOwn ? 'parent' : 'bundle';
       const foldAxis = straight || alone
         ? parentAxis
@@ -238,7 +245,7 @@ export function trunkEdges(
       const foldAnchor = foldJunction(parent, side, fork, spine, foldAxis, foldMode);
       for (const item of group.placed) {
         const showLabel = item.member.childId === labelOwner;
-        // 初始化单父对齐中线：与子工作项一样中线直出（图一直线，非图二折线）
+        // 双出线：父从错开干直出（stemAligned 时竖直直线）；不与其它关系共中线
         const controlPoints = straight || alone
           ? layerRoute(parent, item.child, side, fork)
           : parentOwn
@@ -253,7 +260,7 @@ export function trunkEdges(
                 side,
                 controlPoints,
                 labelCenter,
-                straight || foldOnly,
+                straight || foldOnly || stemAligned,
                 foldOnly ? 1 : 8,
                 preferAfterFork,
               )
@@ -261,7 +268,7 @@ export function trunkEdges(
           labelOffsetX: showLabel && (side === 'top' || side === 'bottom') ? offsetX + stagger : 0,
           labelOffsetY: showLabel && (side === 'left' || side === 'right') ? offsetY + stagger : 0,
         };
-        if ((straight || alone || foldOnly) && showLabel) {
+        if ((straight || alone || stemAligned || foldOnly) && showLabel) {
           style.labelTextAlign = 'center';
           style.labelTextBaseline = 'middle';
         }
@@ -550,7 +557,7 @@ function parentStemCenter(
   const horizontal = side === 'left' || side === 'right';
   const axis = horizontal ? parent.y : parent.x;
   // 卡半高 34，左右最多错开约 24，才能仍落在左右边上
-  const gap = horizontal ? 24 : 56;
+  const gap = horizontal ? 24 : PARENT_DUAL_EXIT_GAP;
   if (
     preferCenter != null &&
     Math.abs(preferCenter - axis) >= gap * 0.5 &&

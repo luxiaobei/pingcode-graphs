@@ -10,6 +10,8 @@ const V_GAP = 112;
 const SIBLING_GAP = 28;
 /** 两种关系之间再隔开，主干不会粘在一起。 */
 const GROUP_GAP = 56;
+/** 上/下与其它关系共存时，父卡相对中线错开，供父干单独直出（与 route parentStem 一致） */
+export const PARENT_DUAL_EXIT_GAP = 56;
 
 const LEFT_TYPES = ['relate:idea', 'relate:ticket'] as const;
 const RIGHT_TYPES = ['relate:test_case'] as const;
@@ -281,12 +283,16 @@ function stackSideSeparatingParent(
       ? centerMemberCardsOnAxis(stacked, side, parentMemberIds)
       : stacked;
   }
-  // 父卡本身贴中线对齐（勿按整棵子树 extent 居中，否则单父会偏轴、出线变折）
-  const parentPlaced = centerMemberCardsOnAxis(
+  // 父卡先贴中线；上/下再错开 PARENT_DUAL_EXIT_GAP，与路由父干一致，避免和其它关系共中线
+  let parentPlaced = centerMemberCardsOnAxis(
     stackOnAxis(itemsOf(graph, parentGroups, side, seen, preferred), side),
     side,
     parentMemberIds,
   );
+  if (side === 'top' || side === 'bottom') {
+    // 与 parentStemCenter 默认方向一致：中线被占用时父干取 axis - gap
+    parentPlaced = parentPlaced.map((item) => shiftPlaced(item, -PARENT_DUAL_EXIT_GAP, 0));
+  }
   let otherPlaced = stackOnAxis(itemsOf(graph, otherGroups, side, seen, preferred), side);
   const parentExt = unionExtent(parentPlaced.map((item) => item.extent));
   const otherExt = unionExtent(otherPlaced.map((item) => item.extent));

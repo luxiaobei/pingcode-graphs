@@ -176,6 +176,9 @@ function toEdge(
   }
   const mapped = RELATION_BY_EDGE[edge.type] ?? edge.type;
   const relationType = mapped === 'relate' ? relateType(edge.to_id, kindById) : mapped;
+  if (!relationType) {
+    return null;
+  }
   return {
     id: edge.id,
     source: edge.from_id,
@@ -185,10 +188,10 @@ function toEdge(
   };
 }
 
-/** 对端 kind 决定关联关系；kind 缺失时从节点 id 前缀读取。 */
-function relateType(nodeId: string, kindById: ReadonlyMap<string, string>): string {
+/** 只保留已定义的关联。页面等未列入的 kind 不展示。 */
+function relateType(nodeId: string, kindById: ReadonlyMap<string, string>): string | null {
   const kind = kindById.get(nodeId) ?? nodeId.slice(0, nodeId.indexOf(':'));
-  return RELATE_TYPE_BY_KIND[kind] ?? 'relate';
+  return RELATE_TYPE_BY_KIND[kind] ?? null;
 }
 
 function ensureNode(nodes: Map<string, GraphEntity>, id: string): void {

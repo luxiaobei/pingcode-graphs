@@ -1,14 +1,9 @@
 import { idea, page, testcase, ticket, workitem } from '@pc-nexus/capabilities';
 import { NavigationTarget } from '@pc-nexus/bridge';
-import { DEFAULT_EDGE_COLOR, RELATION_STYLE } from '../constants/graph.constants';
+import { RELATION_STYLE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEdge, GraphEntity } from '../entities/graph.entity';
 import type { RelationType } from '../enums/graph.enum';
 import { isRelationShown, type DisplaySetting } from '../settings/display-settings';
-
-/** 关系线颜色 */
-export function relationColor(type: RelationType): string {
-  return RELATION_STYLE[type]?.color ?? DEFAULT_EDGE_COLOR;
-}
 
 /** 关系展示名（阻塞、关联等） */
 export function relationLabel(type: RelationType, fallback?: string): string {

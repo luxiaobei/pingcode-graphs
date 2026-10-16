@@ -18,7 +18,7 @@ export const GRAPH_ZOOM_RANGE: [number, number] = [0.2, 3];
 /** 初次布局落位后再适应画布的延迟（ms） */
 export const GRAPH_FIT_SETTLE_MS = 300;
 
-export const DEFAULT_EDGE_COLOR = '#94a3b8';
+export const DEFAULT_EDGE_COLOR = '#b1b1b1';
 
 /** 非工作项节点的默认图标（thy-icon）。 */
 export const KIND_ICON_STYLE: Record<string, { icon: string; color: string }> = {
@@ -27,25 +27,25 @@ export const KIND_ICON_STYLE: Record<string, { icon: string; color: string }> = 
   test_case: { icon: 'test-case-square-fill', color: '#3ddc91' },
 };
 
-/** 关系展示名与颜色。正反向各自独立。 */
+/** 关系展示名。正反向各自独立。 */
 export const RELATION_STYLE: Record<string, RelationStyle> = {
-  block: { label: '阻塞', color: '#d64545' },
-  blockedBy: { label: '被阻塞', color: '#d64545' },
-  cause: { label: '原因', color: '#c47a1a' },
-  causedBy: { label: '结果', color: '#c47a1a' },
-  clone: { label: '拷贝', color: '#475569' },
-  clonedBy: { label: '副本', color: '#475569' },
-  relate: { label: '关联', color: '#3b6fd9' },
-  'relate:work_item': { label: '关联工作项', color: '#3b6fd9' },
-  'relate:idea': { label: '关联产品需求', color: '#7c3aed' },
-  'relate:ticket': { label: '关联工单', color: '#db2777' },
-  'relate:test_case': { label: '关联测试', color: '#0891b2' },
-  duplicate: { label: '重复', color: '#6b7280' },
-  mention: { label: '提及', color: '#7c3aed' },
-  parent: { label: '父工作项', color: '#0369a1' },
-  child: { label: '子工作项', color: '#0369a1' },
+  block: { label: '阻塞' },
+  blockedBy: { label: '被阻塞' },
+  cause: { label: '原因' },
+  causedBy: { label: '结果' },
+  clone: { label: '拷贝' },
+  clonedBy: { label: '副本' },
+  relate: { label: '关联' },
+  'relate:work_item': { label: '关联工作项' },
+  'relate:idea': { label: '关联产品需求' },
+  'relate:ticket': { label: '关联工单' },
+  'relate:test_case': { label: '关联测试' },
+  duplicate: { label: '重复' },
+  mention: { label: '提及' },
+  parent: { label: '父工作项' },
+  child: { label: '子工作项' },
   /** 上方位等其它关系整体收起时的边文案 */
-  bundle: { label: '关系', color: '#94a3b8' },
+  bundle: { label: '关系' },
 };
 
 /** 与 PJM 工作项卡片一致：宽 262，高 80。 */
@@ -111,19 +111,18 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
   edge: {
     type: 'polyline',
     style: {
-      stroke: (d: EdgeData) => (d.data?.['color'] as string) ?? '#94a3b8',
-      lineWidth: 1.5,
+      stroke: DEFAULT_EDGE_COLOR,
+      lineWidth: 1,
       radius: 10,
       endArrow: (d: EdgeData) => d.data?.['endArrow'] !== false,
+      endArrowType: 'simple',
+      endArrowLineJoin: 'miter',
       labelAutoRotate: false,
       labelText: (d: EdgeData) => (d.data?.['label'] as string) ?? '',
-      labelFill: (d: EdgeData) => (d.data?.['color'] as string) ?? '#64748b',
-      labelFontSize: 11,
+      labelFill: DEFAULT_EDGE_COLOR,
+      labelFontSize: 12,
       labelFontWeight: 600,
-      labelBackground: (d: EdgeData) => Boolean(d.data?.['label']),
-      labelBackgroundFill: '#f8fafc',
-      labelBackgroundOpacity: 0.95,
-      labelPadding: [1, 4],
+      labelBackground: false,
     },
   },
   behaviors: [

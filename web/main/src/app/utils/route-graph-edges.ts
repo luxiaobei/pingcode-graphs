@@ -8,7 +8,6 @@ import {
   isFoldSummaryNode,
   relationBetween,
   relationBundleFoldKey,
-  relationColor,
   relationFoldKey,
   relationLabel,
 } from './graph.util';
@@ -296,7 +295,6 @@ function straightEdge(
     data: {
       relationType: member.relationType,
       label: showLabel ? member.label : '',
-      color: relationColor(member.relationType),
       endArrow: true,
     },
     ...(style ? { style } : {}),

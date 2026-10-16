@@ -125,7 +125,7 @@ export function sideOfType(type: string, preferred?: ReadonlyMap<string, Side> |
   if (type === 'child') {
     return 'bottom';
   }
-  if (type === 'parent') {
+  if (type === 'parent' || type === 'bundle') {
     return 'top';
   }
   if ((LEFT_TYPES as readonly string[]).includes(type)) {
@@ -192,6 +192,7 @@ export function groupRank(type: string, side: Side): number {
     return index === -1 ? RIGHT_TYPES.length : index;
   }
   if (side === 'top') {
+    // 父靠内；其它关系 / 整体收起占位靠外
     return type === 'parent' ? 0 : 1;
   }
   return type === 'child' ? 0 : 1;

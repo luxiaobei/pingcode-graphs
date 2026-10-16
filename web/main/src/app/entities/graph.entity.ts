@@ -45,7 +45,7 @@ export interface GraphEntity {
   relationHub?: string;
   /**
    * 折叠占位节点。收起某关系时展示「+ N」，点击展开。
-   * 每种关系各自一个，不合并。
+   * 上方位其它关系整体收起时合并为一个「+ N」（key 为 `::bundle`）。
    */
   foldSummary?: RelationFold;
   /** 相对根节点跳数（0 = 焦点），前端 BFS 计算 */
@@ -53,11 +53,11 @@ export interface GraphEntity {
   /** 展开树上的父节点 */
   revealedByAnchorId?: string;
   position?: { x: number; y: number; side?: 'left' | 'right' | 'top' | 'bottom' };
-  /** 从这张卡片出发的关系，每种一个展开收起 */
+  /** 从这张卡片出发的关系展开收起（上方位其它关系合并为 bundle） */
   folds?: RelationFold[];
 }
 
-/** 一种关系的展开收起。key 是「父节点::关系类型」。 */
+/** 一种关系的展开收起。key 是「父节点::关系类型」（整体收起为 `::bundle`）。 */
 export interface RelationFold {
   key: string;
   relationType: string;

@@ -44,6 +44,8 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
   mention: { label: '提及', color: '#7c3aed' },
   parent: { label: '父工作项', color: '#0369a1' },
   child: { label: '子工作项', color: '#0369a1' },
+  /** 上方位等其它关系整体收起时的边文案 */
+  bundle: { label: '关系', color: '#94a3b8' },
 };
 
 export const GRAPH_NODE_SIZE = { width: 240, height: 68 } as const;

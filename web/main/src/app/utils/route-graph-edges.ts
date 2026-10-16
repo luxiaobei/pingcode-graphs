@@ -3,9 +3,11 @@ import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import { type Side } from './arrange-graph';
 import {
+  isBundleRelationType,
   isFoldSummaryId,
   isFoldSummaryNode,
   relationBetween,
+  relationBundleFoldKey,
   relationColor,
   relationFoldKey,
   relationLabel,
@@ -135,16 +137,18 @@ export function trunkEdges(
     const others = otherNodes(positions, skip);
     // B 私有干(parent) + C 公共脊(其它)；同侧双出线互不并脊
     const bundleKids = lane
-      .filter((group) => group.members[0]?.relationType !== 'parent')
+      .filter((group) => {
+        const type = group.members[0]?.relationType ?? '';
+        return type !== 'parent' && (isBundleRelationType(type) || type === 'bundle');
+      })
       .flatMap((group) => group.placed.map((item) => item.child));
     const parentKids = lane
       .filter((group) => group.members[0]?.relationType === 'parent')
       .flatMap((group) => group.placed.map((item) => item.child));
     const spines = splitParentBundleSpines(parent, side, parentKids, bundleKids, others);
-    const dualExit = Boolean(parentKids.length && bundleKids.length);
-    const bundleAxis = bundleKids.length ? axisCenter(bundleKids, side) : undefined;
     const labelStagger = (index: number): number =>
       lane.length <= 1 ? 0 : (index - (lane.length - 1) / 2) * 16;
+    const parentId = lane[0]?.members[0]?.parentId ?? '';
     lane.forEach((group, groupIndex) => {
       const kids = group.placed.map((item) => item.child);
       const foldOnly = group.members.every((member) => isFoldSummaryId(member.childId));
@@ -158,19 +162,15 @@ export function trunkEdges(
       );
       const labelOwner = closestMember(parent, group.placed, side);
       const relationType = group.members[0]?.relationType ?? '';
-      // A 直出(child) / B 私有干(parent) / C 公共脊(其它)
+      // A 直出(child) / B 私有干(parent) / C 公共脊(其它，含整体收起占位)
       const straight = relationType === 'child' && !foldOnly;
       const parentOwn = relationType === 'parent';
       const alone = parentOwn && kids.length === 1 && onAxis(parent, kids[0], side);
+      // 父干始终贴父卡中线竖直出（图一红框）；偏移会从卡心斜切到干
       const parentAxis = side === 'left' || side === 'right' ? parent.y : parent.x;
-      const stemCenter = parentOwn
-        ? dualExit
-          ? parentStemCenter(parent, bundleAxis ?? center, side)
-          : parentAxis
-        : center;
+      const stemCenter = parentOwn ? parentAxis : center;
       const labelCenter =
         straight || alone ? (side === 'left' || side === 'right' ? parent.y : parent.x) : stemCenter;
-      const parentId = group.members[0]?.parentId ?? '';
       const stagger = foldOnly ? 0 : labelStagger(groupIndex);
       const offsetX = foldOnly || straight || alone ? 0 : 16;
       const offsetY = foldOnly || straight || alone ? 0 : -12;
@@ -211,6 +211,10 @@ export function trunkEdges(
       }
       forks.set(relationFoldKey(parentId, relationType), foldAnchor);
     });
+    // 上方位其它关系整体收起 −：钉在公共脊与出线竖干的 T 口（图一蓝框）
+    if (side === 'top' && bundleKids.length && spines.bundle != null && parentId) {
+      forks.set(relationBundleFoldKey(parentId), { x: parent.x, y: spines.bundle });
+    }
   }
   return { edges, forks };
 }
@@ -462,22 +466,8 @@ function routeOf(
 }
 
 /**
- * 双出线时父干贴父卡中线，但必须与公共干错开，卡边能看出两条出线。
- * 勿回落到子组 center，否则拖父后出线会横拉去追子卡。
- */
-function parentStemCenter(parent: GraphNodePosition, bundleCenter: number, side: Side): number {
-  const axis = side === 'left' || side === 'right' ? parent.y : parent.x;
-  const gap = 48;
-  if (Math.abs(bundleCenter - axis) >= gap) {
-    return axis;
-  }
-  // 公共干靠近中线时，父干往反方向偏，避免和「其它关系」收起钮叠在同一点
-  return bundleCenter >= axis ? axis - gap : axis + gap;
-}
-
-/**
- * 父独立出线：贴父卡沿父干出到父脊，再横移到子卡落下。
- * 竖干钉在 stem（父卡），不跟子组中心跑。
+ * 父独立出线：贴父卡中线竖直/水平出到父脊，再横移到子卡落下（图一红框）。
+ * 拖拽后子卡离轴时靠正交折点弯曲（图二），不从卡心斜切。
  */
 function parentSeparateRoute(
   parent: GraphNodePosition,

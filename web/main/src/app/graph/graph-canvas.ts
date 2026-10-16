@@ -90,6 +90,8 @@ export class GraphCanvas {
   private traceMenuTimer = 0;
   /** 当前拖拽的节点；仅折叠占位松手时改方位 */
   private draggingNodeId: string | null = null;
+  /** 拖拽中重算折线，避免边被拉成斜线 */
+  private dragEdgeRaf = 0;
 
   private readonly zoomMinPercent = Math.round(GRAPH_ZOOM_RANGE[0] * 100);
   private readonly zoomMaxPercent = Math.round(GRAPH_ZOOM_RANGE[1] * 100);
@@ -221,6 +223,10 @@ export class GraphCanvas {
 
   private destroyGraph(): void {
     this.clearFitTimer();
+    if (this.dragEdgeRaf) {
+      cancelAnimationFrame(this.dragEdgeRaf);
+      this.dragEdgeRaf = 0;
+    }
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.htmlCameraObserver?.disconnect();
@@ -273,7 +279,20 @@ export class GraphCanvas {
       this.g6?.stopLayout();
       this.draggingNodeId = String(event.target.id);
     });
+    this.g6.on(NodeEvent.DRAG, () => {
+      if (this.dragEdgeRaf) {
+        return;
+      }
+      this.dragEdgeRaf = requestAnimationFrame(() => {
+        this.dragEdgeRaf = 0;
+        this.syncEdgesWhileDragging();
+      });
+    });
     this.g6.on(NodeEvent.DRAG_END, () => {
+      if (this.dragEdgeRaf) {
+        cancelAnimationFrame(this.dragEdgeRaf);
+        this.dragEdgeRaf = 0;
+      }
       if (!this.g6) {
         return;
       }
@@ -287,6 +306,35 @@ export class GraphCanvas {
         void this.g6.draw();
       }
     });
+  }
+
+  /** 拖拽过程中只更新边折点与收起钮位置，不 setData，以免打断拖拽。 */
+  private syncEdgesWhileDragging(): void {
+    const g6 = this.g6;
+    const data = untracked(() => this.graph());
+    const draggedId = this.draggingNodeId;
+    if (!g6 || !data || !draggedId) {
+      return;
+    }
+    this.positions.snapshot(g6, data, draggedId);
+    const next = toG6Data(data, this.positions.pins);
+    g6.updateEdgeData(
+      (next.edges ?? []).map((edge) => ({
+        id: edge.id,
+        style: edge.style,
+        data: edge.data,
+      })),
+    );
+    g6.updateNodeData(
+      (next.nodes ?? []).map((node) => ({
+        id: node.id,
+        data: {
+          ...g6.getNodeData(String(node.id))?.data,
+          foldMarks: node.data?.['foldMarks'],
+        },
+      })),
+    );
+    void g6.draw();
   }
 
   /** 右键卡片不拖动；非当前工作项弹出「以此工作项追溯」。 */

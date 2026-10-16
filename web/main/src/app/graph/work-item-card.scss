@@ -29,7 +29,8 @@
   background: #eff6ff;
 }
 
-.card:hover {
+.card:hover,
+.card--active {
   border-color: #6698ff;
   box-shadow: 0 6px 16px rgb(102 152 255 / 32%);
 }

@@ -46,7 +46,8 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
   child: { label: '子工作项', color: '#0369a1' },
 };
 
-export const GRAPH_NODE_SIZE = { width: 240, height: 68 } as const;
+/** 与 PJM 工作项卡片一致：宽 262，高 80。 */
+export const GRAPH_NODE_SIZE = { width: 262, height: 80 } as const;
 
 /** 收起关系时的「+ N」占位节点尺寸 */
 export const FOLD_SUMMARY_SIZE = { width: 52, height: 28 } as const;

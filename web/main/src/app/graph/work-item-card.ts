@@ -45,6 +45,7 @@ export class WorkItemCard {
 
   protected readonly assignee = computed(() => entityAssigneeName(this.item()));
   protected readonly fold = computed(() => this.item().foldSummary);
+  protected readonly completed = computed(() => this.item().state?.type === 'completed');
 }
 
 /** 把 app-work-item-card 挂到 G6 的 HTML 节点上。 */

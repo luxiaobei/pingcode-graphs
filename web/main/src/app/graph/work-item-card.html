@@ -8,7 +8,12 @@
     + {{ summary.count }}
   </button>
 } @else {
-  <article class="card" [class.card--root]="root()" [attr.data-node-id]="item().id">
+  <article
+    class="card"
+    [class.card--root]="root()"
+    [class.card--completed]="completed()"
+    [attr.data-node-id]="item().id"
+  >
     <div class="card__main">
       <div class="card__head">
         <div class="card__head-left">

@@ -310,6 +310,8 @@ export class GraphCanvas {
     event.preventDefault();
     const id = this.traceCandidate(card.dataset['nodeId']);
     if (id) {
+      this.host().nativeElement.querySelector('.card--active')?.classList.remove('card--active');
+      card.classList.add('card--active');
       this.openTraceMenu(id, event.clientX, event.clientY);
     }
   };
@@ -340,6 +342,12 @@ export class GraphCanvas {
     this.traceDropdown().hide(0);
     window.clearTimeout(this.traceMenuTimer);
     this.traceMenuTimer = window.setTimeout(() => this.traceDropdown().show(0));
+  }
+
+  protected onTraceMenuActive(active: boolean): void {
+    if (!active) {
+      this.host().nativeElement.querySelector('.card--active')?.classList.remove('card--active');
+    }
   }
 
   /** 菜单跟着画面缩放，最小停在还能点中的尺寸。 */

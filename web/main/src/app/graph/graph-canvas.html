@@ -62,6 +62,7 @@
     thyPlacement="rightTop"
     thyPanelClass="trace-menu-panel"
     [thyPopoverOptions]="{ minWidth: '0' }"
+    (thyActiveChange)="onTraceMenuActive($event)"
   ></span>
   <thy-dropdown-menu #traceMenu>
     <a thyDropdownMenuItem (click)="confirmTrace()">

@@ -52,7 +52,6 @@ const TRACKED_KINDS = new Set(['work_item', 'idea', 'ticket', 'test_case', 'page
 })
 export class App {
   protected readonly usingMockData = signal(true);
-  protected readonly showCanvas = signal(true);
   protected readonly displaySettings = signal<DisplaySetting[]>(applySavedDisplaySettings(null));
 
   private readonly dialog = inject(ThyDialog);
@@ -138,12 +137,6 @@ export class App {
 
   private resetFoldState(): void {
     this.collapsedAnchors.set([]);
-  }
-
-  /** 卸掉再挂上画布，让展示配置变更走同一套初次布局。 */
-  private remountCanvas(): void {
-    this.showCanvas.set(false);
-    setTimeout(() => this.showCanvas.set(true));
   }
 
   protected setUsingMockData(useMock: boolean): void {
@@ -256,8 +249,6 @@ export class App {
         return;
       }
       this.displaySettings.set(result);
-      this.resetFoldState();
-      this.remountCanvas();
       void saveDisplaySettings(result).catch(() => undefined);
     });
   }

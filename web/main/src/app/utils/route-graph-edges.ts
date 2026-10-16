@@ -195,11 +195,34 @@ export function trunkEdges(
       const parentOwn = relationType === 'parent';
       const alone = parentOwn && kids.length === 1 && onAxis(parent, kids[0], side);
       const stemCenter = parentOwn ? parentStem : center;
-      const labelCenter =
-        straight || alone ? parentAxis : parentOwn ? stemCenter : horizontal ? bundleLeave : stemCenter;
-      const stagger = foldOnly ? 0 : labelStagger(groupIndex);
-      const offsetX = foldOnly || straight || alone ? 0 : 16;
-      const offsetY = foldOnly || straight || alone ? 0 : -12;
+      // 文案落在本组类型线（子卡轴向），勿用共干 leave，否则多关系叠在同一段
+      const labelCenter = straight || alone ? parentAxis : stemCenter;
+      const leaveAxisForLabel = horizontal ? bundleLeave : parentAxis;
+      const onSharedStem = Math.abs(labelCenter - leaveAxisForLabel) < 1;
+      // 同侧多关系：共干或类型线过近时，文案改到分岔后独占段，避免叠字
+      const peerCrowded =
+        !straight &&
+        !alone &&
+        !foldOnly &&
+        lane.length > 1 &&
+        lane.some((peer, peerIndex) => {
+          if (peerIndex === groupIndex) {
+            return false;
+          }
+          const peerType = peer.members[0]?.relationType ?? '';
+          if (peerType === 'child') {
+            return false;
+          }
+          const peerCenter = axisCenter(
+            peer.placed.map((item) => item.child),
+            side,
+          );
+          return Math.abs(peerCenter - labelCenter) < 28;
+        });
+      const preferAfterFork = (onSharedStem || peerCrowded) && lane.length > 1 && !straight && !alone;
+      const stagger = foldOnly || preferAfterFork || !onSharedStem ? 0 : labelStagger(groupIndex);
+      const offsetX = foldOnly || straight || alone || preferAfterFork ? 0 : 16;
+      const offsetY = foldOnly || straight || alone || preferAfterFork ? 0 : -12;
       const spine = parentOwn
         ? (spines.parent ?? fork)
         : (spines.bundle ?? spines.parent ?? fork);
@@ -232,6 +255,7 @@ export function trunkEdges(
                 labelCenter,
                 straight || foldOnly,
                 foldOnly ? 1 : 8,
+                preferAfterFork,
               )
             : 'center',
           labelOffsetX: showLabel && (side === 'top' || side === 'bottom') ? offsetX + stagger : 0,
@@ -647,7 +671,7 @@ function rootEnterPoint(child: GraphNodePosition, side: Side): [number, number] 
 /**
  * 名字落在类型线上。
  * 子工作项用从父卡片直下来的那一段。
- * 其他关系在中线和类型线重合时，避开贴着卡片的短段。
+ * 其他关系优先本组独占类型线；共干叠字时改落到分岔后通向子卡的那段。
  */
 function labelRatio(
   parent: GraphNodePosition,
@@ -657,6 +681,7 @@ function labelRatio(
   center: number,
   stem: boolean,
   minSpan = 8,
+  preferAfterFork = false,
 ): number {
   const leave = leavePoint(parent, side);
   const knots = [leave, ...points, rootEnterPoint(child, side)];
@@ -672,7 +697,10 @@ function labelRatio(
   }
   const ratioAt = (cursor: number, span: number) =>
     Math.min(0.92, Math.max(0.08, (cursor + span / 2) / total));
-  let onCard: number | undefined;
+  const leaveAxis = side === 'left' || side === 'right' ? leave[1] : leave[0];
+  let exclusiveType: number | undefined;
+  let sharedType: number | undefined;
+  let afterFork: number | undefined;
   let cursor = 0;
   for (let index = 0; index < lengths.length; index += 1) {
     const from = knots[index];
@@ -688,12 +716,21 @@ function labelRatio(
         return ratio;
       }
       const fromCard = Math.abs(from[0] - leave[0]) < 1 && Math.abs(from[1] - leave[1]) < 1;
-      if (!fromCard) {
-        return ratio;
+      const onLeaveAxis = Math.abs(center - leaveAxis) < 1;
+      if (!fromCard && !onLeaveAxis) {
+        exclusiveType ??= ratio;
+      } else {
+        sharedType ??= ratio;
       }
-      onCard ??= ratio;
+    }
+    // 分岔后通向子卡的末段（叉线 → 入卡）
+    if (!stem && span > minSpan && index >= lengths.length - 2) {
+      afterFork = ratioAt(cursor, span);
     }
     cursor += span;
   }
-  return onCard ?? 0.45;
+  if (preferAfterFork) {
+    return afterFork ?? exclusiveType ?? sharedType ?? 0.45;
+  }
+  return exclusiveType ?? afterFork ?? sharedType ?? 0.45;
 }

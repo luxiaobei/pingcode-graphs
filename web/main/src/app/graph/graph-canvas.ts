@@ -299,16 +299,28 @@ export class GraphCanvas {
       const data = untracked(() => this.graph());
       const draggedId = this.draggingNodeId;
       this.draggingNodeId = null;
-      // 折叠：写 relationSides；普通卡：只更新该卡出线 side（不写偏好）
-      this.positions.snapshot(this.g6, data, draggedId);
-      if (data) {
-        this.applyGraphData(data);
-        void this.g6.draw();
+      // 写 side / 父关系偏好；父卡换方位时整组重锚到新侧
+      this.positions.snapshot(this.g6, data, draggedId, true);
+      if (!data) {
+        return;
       }
+      const parentLayout =
+        draggedId != null ? this.positions.reanchorParentAfterDrag(data, draggedId) : null;
+      if (parentLayout) {
+        void this.applyLayoutPositions(data, parentLayout, {
+          viewport: 'none',
+          keepHiddenPins: true,
+        }).catch(() => undefined);
+        return;
+      }
+      this.applyGraphData(data);
+      void this.g6.draw();
     });
   }
 
-  /** 拖拽过程中只更新边折点与收起钮位置，不 setData，以免打断拖拽。 */
+  /**
+   * 拖拽中按当前位置更新 side 并重算正交折点（不写父关系偏好，松手再整组重锚）。
+   */
   private syncEdgesWhileDragging(): void {
     const g6 = this.g6;
     const data = untracked(() => this.graph());
@@ -316,7 +328,7 @@ export class GraphCanvas {
     if (!g6 || !data || !draggedId) {
       return;
     }
-    this.positions.snapshot(g6, data, draggedId);
+    this.positions.snapshot(g6, data, draggedId, false);
     const next = toG6Data(data, this.positions.pins);
     g6.updateEdgeData(
       (next.edges ?? []).map((edge) => ({

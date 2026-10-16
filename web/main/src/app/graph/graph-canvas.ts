@@ -29,6 +29,7 @@ import {
   GRAPH_ZOOM_STEP,
 } from '../constants/graph.constants';
 import type { DependencyGraph } from '../entities/graph.entity';
+import type { Side } from '../utils/arrange-graph';
 import { CanvasPositionSession } from '../utils/canvas-position-session';
 import {
   buildElementStates,
@@ -57,12 +58,18 @@ import { bindWorkItemCardRuntime } from './work-item-card';
 export class GraphCanvas {
   readonly graph = input<DependencyGraph | null>(null);
 
+  /** 用户级关系方位偏好（跨工作项） */
+  readonly relationSides = input<Record<string, Side> | null>(null);
+
   readonly toggleExpand = output<string>();
 
   readonly retrace = output<string>();
 
-  /** 保存个人布局：当前可见卡片坐标 */
-  readonly saveLayout = output<Record<string, { x: number; y: number }>>();
+  /** 保存个人布局：卡片坐标 + 用户级关系方位 */
+  readonly saveLayout = output<{
+    positions: Record<string, { x: number; y: number; side?: Side }>;
+    relationSides: Record<string, Side>;
+  }>();
 
   protected readonly zoomPercent = signal(100);
 
@@ -81,6 +88,8 @@ export class GraphCanvas {
   private readonly traceStop = new AbortController();
   private traceTargetId: string | null = null;
   private traceMenuTimer = 0;
+  /** 当前拖拽的节点；仅折叠占位松手时改方位 */
+  private draggingNodeId: string | null = null;
 
   private readonly zoomMinPercent = Math.round(GRAPH_ZOOM_RANGE[0] * 100);
   private readonly zoomMaxPercent = Math.round(GRAPH_ZOOM_RANGE[1] * 100);
@@ -89,6 +98,10 @@ export class GraphCanvas {
     bindWorkItemCardRuntime(inject(EnvironmentInjector), inject(ApplicationRef));
     afterNextRender(() => this.initGraph());
     this.destroyRef.onDestroy(() => this.destroyGraph());
+
+    effect(() => {
+      this.positions.setRelationSides(this.relationSides());
+    });
 
     effect(() => {
       if (this.ready()) {
@@ -136,12 +149,16 @@ export class GraphCanvas {
 
   /** 快照当前卡片坐标，交给上层写入服务端。 */
   protected save(): void {
-    const graph = this.liveGraph();
-    if (!graph) {
+    const g6 = this.liveGraph();
+    if (!g6) {
       return;
     }
-    this.positions.snapshot(graph);
-    this.saveLayout.emit(this.positions.toSaveRecord());
+    const data = untracked(() => this.graph());
+    this.positions.snapshot(g6, data);
+    this.saveLayout.emit({
+      positions: this.positions.toSaveRecord(),
+      relationSides: this.positions.getRelationSides(),
+    });
   }
 
   /**
@@ -252,13 +269,19 @@ export class GraphCanvas {
       this.syncZoomPercent();
       this.syncTraceMenuScale();
     });
-    this.g6.on(NodeEvent.DRAG_START, () => this.g6?.stopLayout());
+    this.g6.on(NodeEvent.DRAG_START, (event: IElementEvent) => {
+      this.g6?.stopLayout();
+      this.draggingNodeId = String(event.target.id);
+    });
     this.g6.on(NodeEvent.DRAG_END, () => {
       if (!this.g6) {
         return;
       }
-      this.positions.snapshot(this.g6);
       const data = untracked(() => this.graph());
+      const draggedId = this.draggingNodeId;
+      this.draggingNodeId = null;
+      // 折叠：写 relationSides；普通卡：只更新该卡出线 side（不写偏好）
+      this.positions.snapshot(this.g6, data, draggedId);
       if (data) {
         this.applyGraphData(data);
         void this.g6.draw();

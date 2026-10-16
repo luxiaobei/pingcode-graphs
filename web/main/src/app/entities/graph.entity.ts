@@ -52,7 +52,7 @@ export interface GraphEntity {
   depth?: number;
   /** 展开树上的父节点 */
   revealedByAnchorId?: string;
-  position?: { x: number; y: number };
+  position?: { x: number; y: number; side?: 'left' | 'right' | 'top' | 'bottom' };
   /** 从这张卡片出发的关系，每种一个展开收起 */
   folds?: RelationFold[];
 }

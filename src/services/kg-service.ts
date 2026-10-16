@@ -32,11 +32,18 @@ export interface GetDeepRelationPayload {
 export interface SaveViewPositionPayload {
     nodeId: string;
     position: unknown;
+    /** 用户级关系方位偏好（跨工作项共用），不写入 position.positions */
+    relationSides?: Record<string, string>;
 }
 
 export interface GetViewPositionPayload {
     nodeId: string;
 }
+
+/** 用户级关系方位偏好的占位 node_id（与具体工作项无关）。 */
+export const RELATION_SIDES_NODE_ID = "__relation_sides__";
+
+const VIEW_SIDES = new Set(["left", "right", "top", "bottom"]);
 
 function neighborId(edge: KgEdge, frontier: ReadonlySet<string>, direction: KgRelationDirection): string | undefined {
     if (direction !== "incoming" && frontier.has(edge.from_id)) {
@@ -171,7 +178,12 @@ export class KgService {
         };
     }
 
-    async saveViewPosition(context: NexusAppContext, nodeId: string, position: unknown): Promise<void> {
+    async saveViewPosition(
+        context: NexusAppContext,
+        nodeId: string,
+        position: unknown,
+        relationSides?: Record<string, string>,
+    ): Promise<void> {
         const userId = requireUserId(context);
         if (!nodeId) {
             throw new Error("Node id is required");
@@ -180,20 +192,13 @@ export class KgService {
             throw new Error("Position must be an object");
         }
 
-        const existing = await findUserView(userId, nodeId);
-        if (existing) {
-            await ces.entity<KgView>(KG_VIEW_ENTITY_NAME).update((cb) => {
-                cb.field("user_id").eq(userId);
-                cb.field("node_id").eq(nodeId);
-            }, { position });
-            return;
+        await upsertUserView(userId, nodeId, position);
+
+        if (relationSides !== undefined) {
+            await upsertUserView(userId, RELATION_SIDES_NODE_ID, {
+                relationSides: normalizeRelationSides(relationSides),
+            });
         }
-        await ces.entity(KG_VIEW_ENTITY_NAME).insert({
-            id: kgViewId(userId, nodeId),
-            user_id: userId,
-            node_id: nodeId,
-            position,
-        });
     }
 
     async getViewPosition(context: NexusAppContext, nodeId: string): Promise<Record<string, unknown> | null> {
@@ -202,7 +207,16 @@ export class KgService {
             throw new Error("Node id is required");
         }
         const view = await findUserView(userId, nodeId);
-        return view && isPlainObject(view.position) ? view.position : null;
+        const position = view && isPlainObject(view.position) ? { ...view.position } : null;
+        const sidesView = await findUserView(userId, RELATION_SIDES_NODE_ID);
+        const relationSides = readRelationSides(sidesView?.position);
+        if (!position && !relationSides) {
+            return null;
+        }
+        return {
+            ...(position ?? {}),
+            ...(relationSides ? { relationSides } : {}),
+        };
     }
 }
 
@@ -220,6 +234,41 @@ async function findUserView(userId: string, nodeId: string): Promise<KgView | un
         cb.field("node_id").eq(nodeId);
     });
     return views[0];
+}
+
+async function upsertUserView(userId: string, nodeId: string, position: Record<string, unknown>): Promise<void> {
+    const existing = await findUserView(userId, nodeId);
+    if (existing) {
+        await ces.entity<KgView>(KG_VIEW_ENTITY_NAME).update((cb) => {
+            cb.field("user_id").eq(userId);
+            cb.field("node_id").eq(nodeId);
+        }, { position });
+        return;
+    }
+    await ces.entity(KG_VIEW_ENTITY_NAME).insert({
+        id: kgViewId(userId, nodeId),
+        user_id: userId,
+        node_id: nodeId,
+        position,
+    });
+}
+
+function normalizeRelationSides(raw: Record<string, string>): Record<string, string> {
+    const next: Record<string, string> = {};
+    for (const [type, side] of Object.entries(raw)) {
+        if (typeof type === "string" && type && VIEW_SIDES.has(side)) {
+            next[type] = side;
+        }
+    }
+    return next;
+}
+
+function readRelationSides(position: unknown): Record<string, string> | null {
+    if (!isPlainObject(position) || !isPlainObject(position.relationSides)) {
+        return null;
+    }
+    const sides = normalizeRelationSides(position.relationSides as Record<string, string>);
+    return Object.keys(sides).length ? sides : null;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

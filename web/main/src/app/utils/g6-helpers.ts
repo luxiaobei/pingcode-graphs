@@ -1,7 +1,7 @@
 import type { Graph, IElementEvent } from '@antv/g6';
 import { GRAPH_MIN_SIZE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
-import { isFoldSummaryId, isFoldSummaryNode } from './graph.util';
+import { isFoldSummaryNode } from './graph.util';
 import type { GraphNodePosition } from './to-g6-data';
 
 /** 按容器尺寸取画布宽高，不低于最小值 */
@@ -13,22 +13,26 @@ export function graphHostSize(container: HTMLElement): { width: number; height: 
   };
 }
 
-/** 把当前可见节点坐标写入 pins（折叠占位不写入） */
+/**
+ * 把当前可见节点坐标写入 pins（含折叠占位）。
+ * 只更新 x/y，保留已有 side —— 普通卡拖拽不改方位；方位仅由折叠占位拖拽写入。
+ */
 export function snapshotGraphPositions(
   g6: Graph,
   pins: Map<string, GraphNodePosition>,
-): void {
+): ReadonlyMap<string, { x: number; y: number }> {
+  const live = new Map<string, { x: number; y: number }>();
   for (const node of g6.getNodeData()) {
     const id = String(node.id);
-    if (isFoldSummaryId(id)) {
-      continue;
-    }
     const [x, y] = g6.getElementPosition(id);
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       continue;
     }
-    pins.set(id, { x, y, side: pins.get(id)?.side });
+    live.set(id, { x, y });
+    const prev = pins.get(id);
+    pins.set(id, { x, y, side: prev?.side });
   }
+  return live;
 }
 
 /** 根节点标为 root。分叉点 / 折叠占位不进状态表。 */

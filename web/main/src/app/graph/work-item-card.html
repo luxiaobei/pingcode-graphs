@@ -1,12 +1,13 @@
 @if (fold(); as summary) {
-  <button
-    type="button"
+  <thy-tag
     class="fold-summary"
+    thyAppearance="fill"
+    thyShape="ellipse"
+    thyColor="primary"
     [attr.data-fold]="summary.key"
     [attr.data-node-id]="item().id"
+    >+ {{ summary.count }}</thy-tag
   >
-    + {{ summary.count }}
-  </button>
 } @else {
   <article
     class="card"
@@ -40,13 +41,13 @@
     </div>
 
     @for (mark of marks(); track mark.key) {
-      <span
+      <thy-icon
         class="card-badge"
+        thyName="minus-circle"
         [style.left.px]="mark.left"
         [style.top.px]="mark.top"
         [attr.data-fold]="mark.key"
-        >{{ mark.text }}</span
-      >
+      ></thy-icon>
     }
   </article>
 }

@@ -16,6 +16,7 @@ import {
 } from '@antv/g6';
 import { ThyAvatar, ThyAvatarService, ThyDefaultAvatarService } from 'ngx-tethys/avatar';
 import { ThyIcon } from 'ngx-tethys/icon';
+import { ThyTag } from 'ngx-tethys/tag';
 import type { FoldMark, GraphEntity } from '../entities/graph.entity';
 import { entityAssigneeName } from '../utils/graph.util';
 
@@ -33,7 +34,7 @@ export function bindWorkItemCardRuntime(
 
 @Component({
   selector: 'app-work-item-card',
-  imports: [ThyIcon, ThyAvatar],
+  imports: [ThyIcon, ThyAvatar, ThyTag],
   providers: [{ provide: ThyAvatarService, useClass: ThyDefaultAvatarService }],
   templateUrl: './work-item-card.html',
   styleUrl: './work-item-card.scss',

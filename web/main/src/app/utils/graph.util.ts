@@ -136,7 +136,7 @@ function testCaseId(item: GraphEntity): string {
   return item.id.slice(index + marker.length).trim();
 }
 
-/** 按展示配置裁剪。开关关掉的关系隐藏，未列入配置的关系保留。 */
+/** 按展示配置裁掉关系线，以及只靠这些线连上的卡片。未列入配置的关系保留。 */
 export function filterGraphByDisplaySettings(
   source: DependencyGraph,
   settings: readonly DisplaySetting[],

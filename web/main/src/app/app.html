@@ -43,7 +43,7 @@
     } @else if (graph(); as data) {
       @if (!data.nodes.length) {
         <div class="state">暂无关联对象数据</div>
-      } @else if (showCanvas()) {
+      } @else {
         <app-graph-canvas
           [graph]="data"
           [relationSides]="relationSides()"

@@ -90,6 +90,8 @@ export class GraphCanvas {
   private traceMenuTimer = 0;
   /** 当前拖拽的节点；仅折叠占位松手时改方位 */
   private draggingNodeId: string | null = null;
+  /** 拖拽中重算折线，避免边被拉成斜线 */
+  private dragEdgeRaf = 0;
 
   private readonly zoomMinPercent = Math.round(GRAPH_ZOOM_RANGE[0] * 100);
   private readonly zoomMaxPercent = Math.round(GRAPH_ZOOM_RANGE[1] * 100);
@@ -221,6 +223,10 @@ export class GraphCanvas {
 
   private destroyGraph(): void {
     this.clearFitTimer();
+    if (this.dragEdgeRaf) {
+      cancelAnimationFrame(this.dragEdgeRaf);
+      this.dragEdgeRaf = 0;
+    }
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.htmlCameraObserver?.disconnect();
@@ -273,20 +279,74 @@ export class GraphCanvas {
       this.g6?.stopLayout();
       this.draggingNodeId = String(event.target.id);
     });
+    this.g6.on(NodeEvent.DRAG, () => {
+      if (this.dragEdgeRaf) {
+        return;
+      }
+      this.dragEdgeRaf = requestAnimationFrame(() => {
+        this.dragEdgeRaf = 0;
+        this.syncEdgesWhileDragging();
+      });
+    });
     this.g6.on(NodeEvent.DRAG_END, () => {
+      if (this.dragEdgeRaf) {
+        cancelAnimationFrame(this.dragEdgeRaf);
+        this.dragEdgeRaf = 0;
+      }
       if (!this.g6) {
         return;
       }
       const data = untracked(() => this.graph());
       const draggedId = this.draggingNodeId;
       this.draggingNodeId = null;
-      // 折叠：写 relationSides；普通卡：只更新该卡出线 side（不写偏好）
-      this.positions.snapshot(this.g6, data, draggedId);
-      if (data) {
-        this.applyGraphData(data);
-        void this.g6.draw();
+      // 写 side / 父关系偏好；父卡换方位时整组重锚到新侧
+      this.positions.snapshot(this.g6, data, draggedId, true);
+      if (!data) {
+        return;
       }
+      const parentLayout =
+        draggedId != null ? this.positions.reanchorParentAfterDrag(data, draggedId) : null;
+      if (parentLayout) {
+        void this.applyLayoutPositions(data, parentLayout, {
+          viewport: 'none',
+          keepHiddenPins: true,
+        }).catch(() => undefined);
+        return;
+      }
+      this.applyGraphData(data);
+      void this.g6.draw();
     });
+  }
+
+  /**
+   * 拖拽中按当前位置更新 side 并重算正交折点（不写父关系偏好，松手再整组重锚）。
+   */
+  private syncEdgesWhileDragging(): void {
+    const g6 = this.g6;
+    const data = untracked(() => this.graph());
+    const draggedId = this.draggingNodeId;
+    if (!g6 || !data || !draggedId) {
+      return;
+    }
+    this.positions.snapshot(g6, data, draggedId, false);
+    const next = toG6Data(data, this.positions.pins);
+    g6.updateEdgeData(
+      (next.edges ?? []).map((edge) => ({
+        id: edge.id,
+        style: edge.style,
+        data: edge.data,
+      })),
+    );
+    g6.updateNodeData(
+      (next.nodes ?? []).map((node) => ({
+        id: node.id,
+        data: {
+          ...g6.getNodeData(String(node.id))?.data,
+          foldMarks: node.data?.['foldMarks'],
+        },
+      })),
+    );
+    void g6.draw();
   }
 
   /** 右键卡片不拖动；非当前工作项弹出「以此工作项追溯」。 */

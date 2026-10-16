@@ -10,6 +10,8 @@ const V_GAP = 112;
 const SIBLING_GAP = 28;
 /** 两种关系之间再隔开，主干不会粘在一起。 */
 const GROUP_GAP = 56;
+/** 上/下与其它关系共存时，父卡相对中线错开，供父干单独直出（与 route parentStem 一致） */
+export const PARENT_DUAL_EXIT_GAP = 56;
 
 const LEFT_TYPES = ['relate:idea', 'relate:ticket'] as const;
 const RIGHT_TYPES = ['relate:test_case'] as const;
@@ -115,7 +117,7 @@ export function mergeLayoutPositions<T extends { x: number; y: number }>(
 /**
  * 根节点默认四向分边（保持原逻辑）：
  * 父在上、子在下，产品需求/工单偏左，测试偏右，关联/重复/阻塞等在上。
- * preferred 仅来自折叠占位拖拽（普通工作项拖拽不改方位）。
+ * preferred 来自折叠占位拖拽；父工作项卡拖拽也会写入 parent 偏好。
  */
 export function sideOfType(type: string, preferred?: ReadonlyMap<string, Side> | null): Side {
   const override = preferred?.get(type);
@@ -125,7 +127,7 @@ export function sideOfType(type: string, preferred?: ReadonlyMap<string, Side> |
   if (type === 'child') {
     return 'bottom';
   }
-  if (type === 'parent') {
+  if (type === 'parent' || type === 'bundle') {
     return 'top';
   }
   if ((LEFT_TYPES as readonly string[]).includes(type)) {
@@ -192,6 +194,7 @@ export function groupRank(type: string, side: Side): number {
     return index === -1 ? RIGHT_TYPES.length : index;
   }
   if (side === 'top') {
+    // 父靠内；其它关系 / 整体收起占位靠外
     return type === 'parent' ? 0 : 1;
   }
   return type === 'child' ? 0 : 1;
@@ -272,10 +275,24 @@ function stackSideSeparatingParent(
 ): Placed[] {
   const parentGroups = groups.filter((group) => group.type === 'parent');
   const otherGroups = groups.filter((group) => group.type !== 'parent');
+  const parentMemberIds = parentGroups.flatMap((group) => group.memberIds);
   if (!parentGroups.length || !otherGroups.length) {
-    return stackOnAxis(itemsOf(graph, groups, side, seen, preferred), side);
+    const stacked = stackOnAxis(itemsOf(graph, groups, side, seen, preferred), side);
+    // 仅父或仅其它：父成员仍贴中线，保证初始化父线竖直
+    return parentMemberIds.length
+      ? centerMemberCardsOnAxis(stacked, side, parentMemberIds)
+      : stacked;
   }
-  const parentPlaced = stackOnAxis(itemsOf(graph, parentGroups, side, seen, preferred), side);
+  // 父卡先贴中线；上/下再错开 PARENT_DUAL_EXIT_GAP，与路由父干一致，避免和其它关系共中线
+  let parentPlaced = centerMemberCardsOnAxis(
+    stackOnAxis(itemsOf(graph, parentGroups, side, seen, preferred), side),
+    side,
+    parentMemberIds,
+  );
+  if (side === 'top' || side === 'bottom') {
+    // 与 parentStemCenter 默认方向一致：中线被占用时父干取 axis - gap
+    parentPlaced = parentPlaced.map((item) => shiftPlaced(item, -PARENT_DUAL_EXIT_GAP, 0));
+  }
   let otherPlaced = stackOnAxis(itemsOf(graph, otherGroups, side, seen, preferred), side);
   const parentExt = unionExtent(parentPlaced.map((item) => item.extent));
   const otherExt = unionExtent(otherPlaced.map((item) => item.extent));
@@ -302,6 +319,34 @@ function stackSideSeparatingParent(
     }
   }
   return [...parentPlaced, ...otherPlaced];
+}
+
+/** 指定成员卡片中心落到侧向轴上（arrange 相对父卡原点），父线可竖直/水平直出 */
+function centerMemberCardsOnAxis(placedList: Placed[], side: Side, memberIds: string[]): Placed[] {
+  if (!placedList.length || !memberIds.length) {
+    return placedList;
+  }
+  const coords: number[] = [];
+  for (const id of memberIds) {
+    for (const placed of placedList) {
+      const pos = placed.positions.get(id);
+      if (!pos) {
+        continue;
+      }
+      coords.push(side === 'left' || side === 'right' ? pos.y : pos.x);
+      break;
+    }
+  }
+  if (!coords.length) {
+    return placedList;
+  }
+  const avg = coords.reduce((sum, value) => sum + value, 0) / coords.length;
+  if (Math.abs(avg) < 1) {
+    return placedList;
+  }
+  return side === 'left' || side === 'right'
+    ? placedList.map((item) => shiftPlaced(item, 0, -avg))
+    : placedList.map((item) => shiftPlaced(item, -avg, 0));
 }
 
 function withSide(placed: Placed, id: string, side: Side): Placed {

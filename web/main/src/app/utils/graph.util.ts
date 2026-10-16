@@ -20,6 +20,18 @@ export function relationFoldKey(parentId: string, relationType: string): string 
   return `${parentId}::${relationType}`;
 }
 
+/** 同侧「关联/阻塞/重复等」整体收起（不含父/子） */
+export const BUNDLE_FOLD_TYPE = 'bundle';
+
+export function relationBundleFoldKey(parentId: string): string {
+  return relationFoldKey(parentId, BUNDLE_FOLD_TYPE);
+}
+
+/** 走公共脊的其它关系（非父、非子、非整体收起占位） */
+export function isBundleRelationType(type: string): boolean {
+  return type !== 'parent' && type !== 'child' && type !== BUNDLE_FOLD_TYPE;
+}
+
 /** 折叠占位节点 id */
 export function foldSummaryNodeId(foldKey: string): string {
   return `fold:${foldKey}`;

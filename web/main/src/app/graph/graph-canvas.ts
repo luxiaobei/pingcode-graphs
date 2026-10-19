@@ -42,6 +42,7 @@ import { isFoldSummaryNode, isWorkItemEntity, openPivot } from '../utils/graph.u
 import type { SavedNodePosition, SaveLayoutPayload } from '../utils/saved-graph-layout';
 import { toG6Data, type GraphNodePosition } from '../utils/to-g6-data';
 import { bindWorkItemCardRuntime } from './work-item-card';
+import './flat-polyline';
 
 @Component({
   selector: 'app-graph-canvas',

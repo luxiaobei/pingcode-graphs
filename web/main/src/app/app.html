@@ -33,7 +33,9 @@
 
   <thy-content>
     @if (loading()) {
-      <div class="state">正在加载关系图…</div>
+      <div class="state">
+        <thy-loading></thy-loading>
+      </div>
     } @else if (error()) {
       <div class="state state--error">
         <p>加载失败</p>

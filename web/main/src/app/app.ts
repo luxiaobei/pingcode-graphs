@@ -1,5 +1,4 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { realtime, view } from '@pc-nexus/bridge';
 import { notify } from '@pc-nexus/capabilities';
 import { ThyAction } from 'ngx-tethys/action';
@@ -7,11 +6,9 @@ import { ThyDialog, ThyDialogSizes } from 'ngx-tethys/dialog';
 import { ThyDivider } from 'ngx-tethys/divider';
 import { ThyContent, ThyHeader, ThyLayout } from 'ngx-tethys/layout';
 import { ThyLoading } from 'ngx-tethys/loading';
-import { ThySwitchModule } from 'ngx-tethys/switch';
 import { ThyTooltipDirective } from 'ngx-tethys/tooltip';
 import type { DependencyGraph } from './entities/graph.entity';
 import { GraphCanvas } from './graph/graph-canvas';
-import { mockGraphFrom } from './graph/mock-graph';
 import { ENTITY_CHANGED_CHANNEL, type EntityChangedPayload } from './realtime/entity-changed';
 import { getDependencyGraph } from './services/graph.service';
 import {
@@ -39,14 +36,12 @@ const TRACKED_KINDS = new Set(['work_item', 'idea', 'ticket', 'test_case', 'page
 @Component({
   selector: 'app-root',
   imports: [
-    FormsModule,
     ThyLayout,
     ThyHeader,
     ThyContent,
     ThyAction,
     ThyDivider,
     ThyLoading,
-    ThySwitchModule,
     ThyTooltipDirective,
     GraphCanvas,
   ],
@@ -54,7 +49,6 @@ const TRACKED_KINDS = new Set(['work_item', 'idea', 'ticket', 'test_case', 'page
   styleUrl: './app.scss',
 })
 export class App {
-  protected readonly usingMockData = signal(true);
   protected readonly displaySettings = signal<DisplaySetting[]>(applySavedDisplaySettings(null));
 
   private readonly dialog = inject(ThyDialog);
@@ -109,7 +103,7 @@ export class App {
   }
 
   private onEntityChanged(payload?: EntityChangedPayload): void {
-    if (!payload || this.usingMockData()) {
+    if (!payload) {
       return;
     }
     if (!TRACKED_KINDS.has(payload.kind)) {
@@ -142,15 +136,6 @@ export class App {
     this.collapsedAnchors.set([]);
   }
 
-  protected setUsingMockData(useMock: boolean): void {
-    if (useMock === this.usingMockData()) {
-      return;
-    }
-    this.usingMockData.set(useMock);
-    this.traceWorkItemId.set(null);
-    void this.reload();
-  }
-
   protected closeDialog(): void {
     view.close().catch(() => undefined);
   }
@@ -165,9 +150,7 @@ export class App {
     }
     try {
       const traceId = this.traceWorkItemId();
-      const dataPromise = this.usingMockData()
-        ? Promise.resolve(mockGraphFrom(traceId))
-        : getDependencyGraph(traceId ? { workitemId: traceId } : {});
+      const dataPromise = getDependencyGraph(traceId ? { workitemId: traceId } : {});
       const [data, settings] = await Promise.all([dataPromise, loadDisplaySettings()]);
       if (seq !== this.requestSeq) {
         return;

@@ -39,6 +39,7 @@ import {
   sharpenHtmlCamera,
 } from '../utils/g6-helpers';
 import { isFoldSummaryNode, isWorkItemEntity, openPivot } from '../utils/graph.util';
+import type { SaveLayoutPayload } from '../utils/saved-graph-layout';
 import { toG6Data, type GraphNodePosition } from '../utils/to-g6-data';
 import { bindWorkItemCardRuntime } from './work-item-card';
 
@@ -66,10 +67,7 @@ export class GraphCanvas {
   readonly retrace = output<string>();
 
   /** 保存个人布局：卡片坐标 + 用户级关系方位 */
-  readonly saveLayout = output<{
-    positions: Record<string, { x: number; y: number; side?: Side }>;
-    relationSides: Record<string, Side>;
-  }>();
+  readonly saveLayout = output<SaveLayoutPayload>();
 
   protected readonly zoomPercent = signal(100);
 
@@ -319,7 +317,7 @@ export class GraphCanvas {
   }
 
   /**
-   * 拖拽中按当前位置更新 side 并重算正交折点（不写父关系偏好，松手再整组重锚）。
+   * 拖拽中按当前位置更新 side 并重算正交折点（不写关系偏好，松手再整组重锚）。
    */
   private syncEdgesWhileDragging(): void {
     const g6 = this.g6;

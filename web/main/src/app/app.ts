@@ -28,6 +28,7 @@ import {
   loadSavedGraphLayout,
   saveGraphLayout,
   type SavedGraphLayout,
+  type SaveLayoutPayload,
 } from './utils/saved-graph-layout';
 import { filterGraphByDisplaySettings } from './utils/graph.util';
 
@@ -174,7 +175,6 @@ export class App {
         return;
       }
       this.displaySettings.set(settings);
-      this.source.set(data);
       if (silent) {
         this.error.set(null);
       }
@@ -199,10 +199,7 @@ export class App {
   }
 
   /** 保存当前根工作项下的坐标、收起状态；关系方位由画布一并带出。 */
-  protected async onSaveLayout(payload: {
-    positions: Record<string, { x: number; y: number; side?: Side }>;
-    relationSides: Record<string, Side>;
-  }): Promise<void> {
+  protected async onSaveLayout(payload: SaveLayoutPayload): Promise<void> {
     const rootId = this.source()?.rootId;
     if (!rootId) {
       return;

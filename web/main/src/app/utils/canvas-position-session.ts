@@ -9,9 +9,15 @@ import {
   sideFromParent,
   type Side,
 } from './arrange-graph';
+import {
+  clearStalePinsAfterFoldDrag,
+  placeFoldsAtExpandedSlots,
+  syncRelationSidesFromFolds,
+} from './fold-layout';
 import { snapshotGraphPositions } from './g6-helpers';
-import { isFoldSummaryId, isFoldSummaryNode, relationBetween } from './graph.util';
+import { isFoldSummaryId, isFoldSummaryNode, siblingsOfRelation } from './graph.util';
 import { cardPositionsFromNodes } from './saved-graph-layout';
+import { assignRelationSides } from './side';
 import type { GraphNodePosition } from './to-g6-data';
 
 /** 画布位置会话：会话 pin、已保存坐标、换根/展开收起时的坐标策略。 */
@@ -39,19 +45,19 @@ export class CanvasPositionSession {
   /**
    * 写入当前可见节点坐标。
    * - 折叠占位：改该关系 pin.side，并写入 relationSides
-   * - 父工作项：persistParentPreference 时写 parent 偏好（松手后整组重锚）
+   * - 父工作项：persistRelationPreference 时写 parent 偏好（松手后整组重锚）
    * - 其它普通卡：只更新该卡 pin.side
-   * @param persistParentPreference 拖拽中传 false，避免边拖边写偏好；松手传 true
+   * @param persistRelationPreference 拖拽中传 false，避免边拖边写偏好；松手传 true
    */
   snapshot(
     g6: Graph,
     graph?: DependencyGraph | null,
     draggedId?: string | null,
-    persistParentPreference = true,
+    persistRelationPreference = true,
   ): void {
     snapshotGraphPositions(g6, this.pins);
     if (draggedId && graph) {
-      this.applyDragSide(graph, draggedId, persistParentPreference);
+      this.applyDragSide(graph, draggedId, persistRelationPreference);
     }
   }
 
@@ -68,12 +74,11 @@ export class CanvasPositionSession {
       return null;
     }
     const anchorId = node.revealedByAnchorId;
-    const nodes = new Map(graph.nodes.map((item) => [item.id, item]));
-    const relationType =
-      node.foldSummary?.relationType ?? relationBetween(graph.edges, nodes, anchorId, node.id);
-    if (relationType !== 'parent') {
+    const parentNodes = siblingsOfRelation(graph, anchorId, 'parent');
+    if (!parentNodes.some((item) => item.id === draggedId)) {
       return null;
     }
+
     const dragPin = this.pins.get(draggedId);
     if (!dragPin?.side) {
       return null;
@@ -82,16 +87,7 @@ export class CanvasPositionSession {
     const prevPreferred = this.relationSides.get('parent');
     this.relationSides.set('parent', side);
 
-    const parentIds = graph.nodes
-      .filter((item) => {
-        if (item.relationHub || item.revealedByAnchorId !== anchorId) {
-          return false;
-        }
-        const type =
-          item.foldSummary?.relationType ?? relationBetween(graph.edges, nodes, anchorId, item.id);
-        return type === 'parent';
-      })
-      .map((item) => item.id);
+    const parentIds = parentNodes.map((item) => item.id);
 
     // 偏好与兄弟 side 已是新方位 → 不必整组重排
     if (
@@ -137,28 +133,17 @@ export class CanvasPositionSession {
   }
 
   setRelationSides(sides: ReadonlyMap<string, Side> | Record<string, Side> | null | undefined): void {
-    this.relationSides.clear();
-    if (!sides) {
-      return;
-    }
-    const entries = sides instanceof Map ? sides.entries() : Object.entries(sides);
-    for (const [type, side] of entries) {
-      if (side === 'left' || side === 'right' || side === 'top' || side === 'bottom') {
-        this.relationSides.set(type, side);
-      }
-    }
+    assignRelationSides(this.relationSides, sides);
   }
 
   getRelationSides(): Record<string, Side> {
     return Object.fromEntries(this.relationSides);
   }
 
-  /** 导出可持久化的坐标表（折叠占位不落库；带 side）。 */
+  /** 导出可持久化的坐标表（含折叠占位，与普通卡同一套 pin）。 */
   toSaveRecord(): Record<string, { x: number; y: number; side?: Side }> {
     return Object.fromEntries(
-      [...this.pins]
-        .filter(([id]) => !isFoldSummaryId(id))
-        .map(([id, { x, y, side }]) => [id, side ? { x, y, side } : { x, y }]),
+      [...this.pins].map(([id, { x, y, side }]) => [id, side ? { x, y, side } : { x, y }]),
     );
   }
 
@@ -231,11 +216,11 @@ export class CanvasPositionSession {
   }
 
   /**
-   * 展开/收起：工作项与已拖动的 +N 保位；
+   * 展开/收起：工作项与 +N 均靠 pin 保位（展开时 fold 从可见图消失也不删 pin）；
    * 折叠占位若拖到新方位，丢掉旧侧子卡 pin，按新侧 arrange 重锚整棵子树。
    */
   resolveExpandCollapse(data: DependencyGraph): Map<string, GraphNodePosition> {
-    // 先取出 fold pin（含即将展开消失的），供写偏好 + 清旧侧子树；勿先删掉
+    // 先取出 fold pin（含即将展开消失的），供写偏好 + 清旧侧子树；勿删 pin
     const foldPins = new Map(
       [...this.pins].filter(([id]) => isFoldSummaryId(id)),
     );
@@ -254,8 +239,6 @@ export class CanvasPositionSession {
       foldPins,
       this.relationSides,
     );
-    // 展开完成后再清已消失的 +N pin，避免下次收起复用旧坐标
-    clearFoldPinsNoLongerVisible(data, this.lastGraph, this.pins);
     this.lastGraph = data;
     return layout;
   }
@@ -299,12 +282,13 @@ export class CanvasPositionSession {
 
   /**
    * 按相对锚点位置更新被拖卡 side。
-   * persistParentPreference：松手时写折叠/父关系偏好；拖拽中只改当前卡 side 供预览出线。
+   * persistRelationPreference：松手时写折叠偏好；拖拽中只改当前卡 side 供预览出线。
+   * 父卡偏好由 reanchorParentAfterDrag 写入，避免此处先写导致跳过整组重锚。
    */
   private applyDragSide(
     graph: DependencyGraph,
     draggedId: string,
-    persistParentPreference: boolean,
+    persistRelationPreference: boolean,
   ): void {
     const node = graph.nodes.find((item) => item.id === draggedId);
     if (!node || node.relationHub || !node.revealedByAnchorId) {
@@ -327,197 +311,12 @@ export class CanvasPositionSession {
     const side = sideFromParent(anchor, pin, half);
     this.pins.set(draggedId, { ...pin, side });
 
-    if (!persistParentPreference) {
+    if (!persistRelationPreference) {
       return;
     }
 
-    // 父卡偏好由 reanchorParentAfterDrag 写入，避免此处先写导致跳过整组重锚
     if (fold && node.foldSummary) {
       this.relationSides.set(node.foldSummary.relationType, side);
     }
   }
-}
-
-/** 展开后删掉已不在图上的 +N pin，避免下次收起仍用旧方位。 */
-function clearFoldPinsNoLongerVisible(
-  data: DependencyGraph,
-  prev: DependencyGraph | null,
-  pins: Map<string, GraphNodePosition>,
-): void {
-  if (!prev) {
-    return;
-  }
-  const visible = new Set(data.nodes.map((node) => node.id));
-  for (const node of prev.nodes) {
-    if (!isFoldSummaryNode(node)) {
-      continue;
-    }
-    if (!visible.has(node.id)) {
-      pins.delete(node.id);
-    }
-  }
-}
-
-/**
- * 收起时把 +N 放到该关系展开子卡的原坐标中心；
- * 仅当上一帧占位仍在（用户刚拖过）才保 fold pin，并写回 relationSides。
- * 从子卡对齐时只带 pin.side，不写全局偏好（偏好只由拖 +N 写入）。
- */
-function placeFoldsAtExpandedSlots(
-  data: DependencyGraph,
-  prev: DependencyGraph | null,
-  pins: ReadonlyMap<string, GraphNodePosition>,
-  layout: Map<string, GraphNodePosition>,
-  foldPins: ReadonlyMap<string, GraphNodePosition>,
-  relationSides: Map<string, Side>,
-): void {
-  const prevIds = new Set(prev?.nodes.map((node) => node.id) ?? []);
-  for (const node of data.nodes) {
-    if (!isFoldSummaryNode(node)) {
-      continue;
-    }
-    const kept = foldPins.get(node.id);
-    if (kept && prevIds.has(node.id) && Number.isFinite(kept.x) && Number.isFinite(kept.y)) {
-      const base = layout.get(node.id);
-      layout.set(node.id, {
-        ...(base ?? kept),
-        x: kept.x,
-        y: kept.y,
-        side: kept.side ?? base?.side,
-      });
-      if (kept.side && node.foldSummary) {
-        relationSides.set(node.foldSummary.relationType, kept.side);
-      }
-      continue;
-    }
-    if (!prev) {
-      continue;
-    }
-    const fold = node.foldSummary;
-    const parentId = node.revealedByAnchorId;
-    if (!fold || !parentId) {
-      continue;
-    }
-    const prevNodes = new Map(prev.nodes.map((item) => [item.id, item]));
-    const kids = prev.nodes.filter((child) => {
-      if (child.relationHub || isFoldSummaryNode(child) || child.revealedByAnchorId !== parentId) {
-        return false;
-      }
-      return relationBetween(prev.edges, prevNodes, parentId, child.id) === fold.relationType;
-    });
-    const points = kids
-      .map((child) => pins.get(child.id))
-      .filter((pos): pos is GraphNodePosition => Boolean(pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)));
-    if (!points.length) {
-      continue;
-    }
-    const x = points.reduce((sum, pos) => sum + pos.x, 0) / points.length;
-    const y = points.reduce((sum, pos) => sum + pos.y, 0) / points.length;
-    const base = layout.get(node.id);
-    // 优先子卡已声明 side / 已有偏好；勿用几何重判写回全局
-    const side =
-      points.find((pos) => pos.side)?.side ??
-      relationSides.get(fold.relationType) ??
-      base?.side;
-    layout.set(node.id, { ...(base ?? { x, y }), x, y, side });
-  }
-}
-
-/** 收起占位上的 side 写入关系偏好，供 arrange 排到对应侧、展开后跟最新方位。 */
-function syncRelationSidesFromFolds(
-  prev: DependencyGraph | null,
-  foldPins: ReadonlyMap<string, GraphNodePosition>,
-  relationSides: Map<string, Side>,
-): void {
-  if (!prev) {
-    return;
-  }
-  for (const node of prev.nodes) {
-    if (!isFoldSummaryNode(node) || !node.foldSummary) {
-      continue;
-    }
-    const pin = foldPins.get(node.id);
-    if (pin?.side) {
-      relationSides.set(node.foldSummary.relationType, pin.side);
-    }
-  }
-}
-
-interface ReanchorCluster {
-  ids: Set<string>;
-  side: Side;
-  anchor: { x: number; y: number };
-}
-
-/**
- * 折叠占位拖到新方位后展开：清掉仍停在旧侧的子树 pin，强制按新侧重排。
- */
-function clearStalePinsAfterFoldDrag(
-  data: DependencyGraph,
-  prev: DependencyGraph | null,
-  foldPins: ReadonlyMap<string, GraphNodePosition>,
-  pins: Map<string, GraphNodePosition>,
-): ReanchorCluster[] {
-  if (!prev) {
-    return [];
-  }
-  const dataNodes = new Map(data.nodes.map((node) => [node.id, node]));
-  const childrenOf = new Map<string, string[]>();
-  for (const node of data.nodes) {
-    if (node.relationHub || !node.revealedByAnchorId) {
-      continue;
-    }
-    const list = childrenOf.get(node.revealedByAnchorId) ?? [];
-    list.push(node.id);
-    childrenOf.set(node.revealedByAnchorId, list);
-  }
-
-  const clusters: ReanchorCluster[] = [];
-  for (const node of prev.nodes) {
-    if (!isFoldSummaryNode(node) || !node.foldSummary || !node.revealedByAnchorId) {
-      continue;
-    }
-    if (dataNodes.has(node.id)) {
-      continue;
-    }
-    const foldPin = foldPins.get(node.id);
-    if (!foldPin?.side) {
-      continue;
-    }
-    const parentId = node.revealedByAnchorId;
-    const parentPin = pins.get(parentId);
-    if (!parentPin) {
-      continue;
-    }
-    const relationType = node.foldSummary.relationType;
-    const clusterIds = new Set<string>();
-    for (const child of data.nodes) {
-      if (child.relationHub || isFoldSummaryNode(child) || child.revealedByAnchorId !== parentId) {
-        continue;
-      }
-      if (relationBetween(data.edges, dataNodes, parentId, child.id) !== relationType) {
-        continue;
-      }
-      const childPin = pins.get(child.id);
-      // 只比声明 side，不用几何投票（宽排会误判）
-      if (childPin?.side === foldPin.side) {
-        continue;
-      }
-      const queue = [child.id];
-      while (queue.length) {
-        const id = queue.shift()!;
-        pins.delete(id);
-        clusterIds.add(id);
-        queue.push(...(childrenOf.get(id) ?? []));
-      }
-    }
-    if (clusterIds.size) {
-      clusters.push({
-        ids: clusterIds,
-        side: foldPin.side,
-        anchor: { x: foldPin.x, y: foldPin.y },
-      });
-    }
-  }
-  return clusters;
 }

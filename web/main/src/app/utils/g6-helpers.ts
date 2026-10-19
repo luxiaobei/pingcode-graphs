@@ -15,7 +15,8 @@ export function graphHostSize(container: HTMLElement): { width: number; height: 
 
 /**
  * 把当前可见节点坐标写入 pins（含折叠占位）。
- * 只更新 x/y，保留已有 side —— 普通卡拖拽不改方位；方位仅由折叠占位拖拽写入。
+ * 只更新 x/y，保留已有 side；side 的改写由 session.applyDragSide 在拖拽时处理
+ *（折叠占位 / 父工作项松手写关系偏好，普通卡只更新当卡 side）。
  */
 export function snapshotGraphPositions(
   g6: Graph,

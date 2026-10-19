@@ -59,6 +59,9 @@ export class App {
   /** 用户级关系方位偏好，跨工作项共用 */
   protected readonly relationSides = signal<Record<string, Side>>({});
 
+  /** 当前根的个人布局（含 fold 坐标）；在可见图生成后再 apply，才能套到 +N 占位上 */
+  protected readonly savedLayout = signal<SavedGraphLayout | null>(null);
+
   /** 换根追溯后的工作项。空表示用打开页面时的当前工作项。 */
   private readonly traceWorkItemId = signal<string | null>(null);
 
@@ -75,7 +78,9 @@ export class App {
       return null;
     }
     const filtered = filterGraphByDisplaySettings(source, this.displaySettings());
-    return buildVisibleGraph(filtered, new Set(this.collapsedAnchors()));
+    const visible = buildVisibleGraph(filtered, new Set(this.collapsedAnchors()));
+    // fold 节点在 buildVisibleGraph 之后才有，必须在此再套一层 saved
+    return applySavedGraphLayout(visible, this.savedLayout());
   });
 
   constructor() {
@@ -164,10 +169,11 @@ export class App {
         this.error.set(null);
       }
       this.collapsedAnchors.set(layout?.collapsedKeys ?? []);
+      this.savedLayout.set(layout);
       if (layout?.relationSides) {
         this.relationSides.set(layout.relationSides);
       }
-      this.source.set(applySavedGraphLayout(data, layout));
+      this.source.set(data);
     } catch (err) {
       if (seq !== this.requestSeq) {
         return;
@@ -198,7 +204,7 @@ export class App {
     try {
       await saveGraphLayout(layout);
       this.relationSides.set(payload.relationSides);
-      this.source.update((source) => (source ? applySavedGraphLayout(source, layout) : source));
+      this.savedLayout.set(layout);
       void notify.success({ title: '保存成功' });
     } catch {
       void notify.error({ title: '保存失败' });

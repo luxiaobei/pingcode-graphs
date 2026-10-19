@@ -39,7 +39,7 @@ import {
   sharpenHtmlCamera,
 } from '../utils/g6-helpers';
 import { isFoldSummaryNode, isWorkItemEntity, openPivot } from '../utils/graph.util';
-import type { SaveLayoutPayload } from '../utils/saved-graph-layout';
+import type { SavedNodePosition, SaveLayoutPayload } from '../utils/saved-graph-layout';
 import { toG6Data, type GraphNodePosition } from '../utils/to-g6-data';
 import { bindWorkItemCardRuntime } from './work-item-card';
 
@@ -61,6 +61,9 @@ export class GraphCanvas {
 
   /** 用户级关系方位偏好（跨工作项） */
   readonly relationSides = input<Record<string, Side> | null>(null);
+
+  /** 个人视图完整坐标（含 fold / 收起子卡），供 baseline 合并 */
+  readonly savedPositions = input<Record<string, SavedNodePosition> | null>(null);
 
   readonly toggleExpand = output<string>();
 
@@ -101,6 +104,10 @@ export class GraphCanvas {
 
     effect(() => {
       this.positions.setRelationSides(this.relationSides());
+    });
+
+    effect(() => {
+      this.positions.replaceSaved(this.savedPositions());
     });
 
     effect(() => {
@@ -522,7 +529,12 @@ export class GraphCanvas {
     data: DependencyGraph,
     options: { viewport: 'fit' | 'root' | 'none' },
   ): Promise<void> {
-    await this.applyLayoutPositions(data, this.positions.resolveBaseline(data), options);
+    // 个人视图坐标已是画布绝对坐标，再 centerForViewport 会整体平移且与 arrange 相对位混用错位
+    const viewport = this.positions.hasSavedPositions() ? 'none' : options.viewport;
+    await this.applyLayoutPositions(data, this.positions.resolveBaseline(data), { viewport });
+    if (viewport === 'none' && options.viewport === 'root') {
+      await this.locateRoot();
+    }
   }
 
   /**

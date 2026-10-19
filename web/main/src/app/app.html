@@ -41,6 +41,7 @@
         <app-graph-canvas
           [graph]="data"
           [relationSides]="relationSides()"
+          [savedPositions]="savedLayout()?.positions ?? null"
           (toggleExpand)="onToggleExpand($event)"
           (retrace)="onRetrace($event)"
           (saveLayout)="onSaveLayout($event)"

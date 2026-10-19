@@ -264,10 +264,10 @@ function normalizeRelationSides(raw: Record<string, string>): Record<string, str
 }
 
 function readRelationSides(position: unknown): Record<string, string> | null {
-    if (!isPlainObject(position) || !isPlainObject(position.relationSides)) {
+    if (!isPlainObject(position) || !isPlainObject(position["relationSides"])) {
         return null;
     }
-    const sides = normalizeRelationSides(position.relationSides as Record<string, string>);
+    const sides = normalizeRelationSides(position["relationSides"] as Record<string, string>);
     return Object.keys(sides).length ? sides : null;
 }
 

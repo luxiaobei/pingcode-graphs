@@ -109,7 +109,7 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
     },
   },
   edge: {
-    type: 'polyline',
+    type: 'flat-polyline',
     style: {
       stroke: DEFAULT_EDGE_COLOR,
       lineWidth: 1,

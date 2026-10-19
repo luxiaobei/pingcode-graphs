@@ -2,6 +2,7 @@ import type { EdgeData } from '@antv/g6';
 import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import { PARENT_DUAL_EXIT_GAP, type Side } from './arrange-graph';
+import { unstackSharedStrokes } from './unstack-strokes';
 import {
   isBundleRelationType,
   isFoldSummaryId,
@@ -280,6 +281,7 @@ export function trunkEdges(
       forks.set(relationBundleFoldKey(parentId), { x: parent.x, y: spines.bundle });
     }
   }
+  unstackSharedStrokes(edges, positions, nodes);
   return { edges, forks };
 }
 

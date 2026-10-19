@@ -6,6 +6,7 @@ import { ThyAction } from 'ngx-tethys/action';
 import { ThyDialog, ThyDialogSizes } from 'ngx-tethys/dialog';
 import { ThyDivider } from 'ngx-tethys/divider';
 import { ThyContent, ThyHeader, ThyLayout } from 'ngx-tethys/layout';
+import { ThyLoading } from 'ngx-tethys/loading';
 import { ThySwitchModule } from 'ngx-tethys/switch';
 import { ThyTooltipDirective } from 'ngx-tethys/tooltip';
 import type { DependencyGraph } from './entities/graph.entity';
@@ -43,6 +44,7 @@ const TRACKED_KINDS = new Set(['work_item', 'idea', 'ticket', 'test_case', 'page
     ThyContent,
     ThyAction,
     ThyDivider,
+    ThyLoading,
     ThySwitchModule,
     ThyTooltipDirective,
     GraphCanvas,

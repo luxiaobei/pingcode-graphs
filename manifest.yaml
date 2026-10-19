@@ -439,6 +439,9 @@ permissions:
     - pcp:read:testhub:testcase
     - pcp:read:testhub:configuration
     - pcp:read:global:team
+  external:
+    images:
+      - https://app-pc-avatar-release-1251945081.cos.ap-shanghai.myqcloud.com
   content:
     styles:
       - unsafe-inline

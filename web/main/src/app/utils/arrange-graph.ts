@@ -141,7 +141,7 @@ export function sideOfType(type: string, preferred?: ReadonlyMap<string, Side> |
 
 /**
  * 根按 sideOfType；嵌套默认沿父侧继续向外。
- * 有个人偏好时该关系类型跟偏好走（仅折叠占位拖拽写入）。
+ * 有个人偏好时该关系类型跟偏好走（折叠占位 / 父工作项拖拽写入）。
  */
 function effectiveSide(
   type: string,

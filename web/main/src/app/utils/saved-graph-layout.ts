@@ -1,9 +1,15 @@
 import { invoke } from '@pc-nexus/bridge';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import type { Side } from './arrange-graph';
-import { isFoldSummaryNode } from './graph.util';
+import { isSide, normalizeRelationSides } from './side';
 
 export type SavedNodePosition = { x: number; y: number; side?: Side };
+
+/** 画布「保存」抛出的载荷：坐标 + 用户级关系方位（尚未拼 rootId / collapsedKeys） */
+export interface SaveLayoutPayload {
+  positions: Record<string, SavedNodePosition>;
+  relationSides: Record<string, Side>;
+}
 
 /** 个人关系图布局（saveViewPosition.position，服务端原样存取） */
 export interface SavedGraphLayout {
@@ -14,19 +20,13 @@ export interface SavedGraphLayout {
   relationSides?: Record<string, Side>;
 }
 
-const SIDES = new Set<Side>(['left', 'right', 'top', 'bottom']);
-
-function asSide(value: unknown): Side | undefined {
-  return typeof value === 'string' && SIDES.has(value as Side) ? (value as Side) : undefined;
-}
-
-/** 从卡片节点收集有效坐标（跳过 relationHub / 折叠占位）。 */
+/** 从可见节点收集有效坐标（跳过 relationHub；含折叠占位）。 */
 export function cardPositionsFromNodes(
   nodes: readonly GraphEntity[],
 ): Map<string, SavedNodePosition> {
   const positions = new Map<string, SavedNodePosition>();
   for (const node of nodes) {
-    if (node.relationHub || isFoldSummaryNode(node) || !node.position) {
+    if (node.relationHub || !node.position) {
       continue;
     }
     const { x, y, side } = node.position;
@@ -37,7 +37,7 @@ export function cardPositionsFromNodes(
   return positions;
 }
 
-/** 把已保存坐标写回节点。 */
+/** 把已保存坐标写回节点（含折叠占位）。 */
 export function applySavedGraphLayout(
   graph: DependencyGraph,
   layout: SavedGraphLayout | null,
@@ -48,8 +48,7 @@ export function applySavedGraphLayout(
   return {
     ...graph,
     nodes: graph.nodes.map((node) => {
-      const pos =
-        !node.relationHub && !isFoldSummaryNode(node) ? layout.positions[node.id] : undefined;
+      const pos = !node.relationHub ? layout.positions[node.id] : undefined;
       return pos ? { ...node, position: { ...pos } } : node;
     }),
   };
@@ -78,20 +77,6 @@ export function saveGraphLayout(layout: SavedGraphLayout): Promise<void> {
   });
 }
 
-function normalizeRelationSides(raw: unknown): Record<string, Side> | undefined {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return undefined;
-  }
-  const next: Record<string, Side> = {};
-  for (const [type, side] of Object.entries(raw as Record<string, unknown>)) {
-    const value = asSide(side);
-    if (type && value) {
-      next[type] = value;
-    }
-  }
-  return Object.keys(next).length ? next : undefined;
-}
-
 function normalizeLayout(raw: unknown, rootId: string): SavedGraphLayout | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return null;
@@ -104,7 +89,7 @@ function normalizeLayout(raw: unknown, rootId: string): SavedGraphLayout | null 
   if (sameRoot && data.positions && typeof data.positions === 'object') {
     for (const [id, pos] of Object.entries(data.positions)) {
       if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) {
-        const side = asSide(pos.side);
+        const side = isSide(pos.side) ? pos.side : undefined;
         positions[id] = side ? { x: pos.x, y: pos.y, side } : { x: pos.x, y: pos.y };
       }
     }

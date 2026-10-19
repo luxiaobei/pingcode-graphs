@@ -78,6 +78,31 @@ export function relationBetween(
   return 'relate';
 }
 
+/**
+ * 同一锚点下、指定关系类型的节点（含折叠占位，除非 excludeFoldSummary）。
+ * 布局重锚 / 收起对齐共用，避免多处手写 filter 漂移。
+ */
+export function siblingsOfRelation(
+  graph: DependencyGraph,
+  parentId: string,
+  relationType: string,
+  options?: { excludeFoldSummary?: boolean },
+): GraphEntity[] {
+  const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
+  const excludeFold = options?.excludeFoldSummary === true;
+  return graph.nodes.filter((item) => {
+    if (item.relationHub || item.revealedByAnchorId !== parentId) {
+      return false;
+    }
+    if (excludeFold && isFoldSummaryNode(item)) {
+      return false;
+    }
+    const type =
+      item.foldSummary?.relationType ?? relationBetween(graph.edges, nodes, parentId, item.id);
+    return type === relationType;
+  });
+}
+
 /** 负责人显示名 */
 export function entityAssigneeName(item: GraphEntity | null | undefined): string {
   return item?.assignee?.display_name || item?.assignee?.name || '';

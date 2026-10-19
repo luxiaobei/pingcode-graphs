@@ -140,6 +140,31 @@ export class CanvasPositionSession {
     return Object.fromEntries(this.relationSides);
   }
 
+  /**
+   * 用个人视图完整 positions 覆盖 saved（含当前不可见的 fold / 收起子卡）。
+   * 仅 sync 可见节点会丢掉 fold 坐标，导致根用绝对坐标、fold 用相对 arrange 而跑到左侧。
+   */
+  replaceSaved(
+    positions: ReadonlyMap<string, GraphNodePosition> | Record<string, GraphNodePosition> | null | undefined,
+  ): void {
+    this.saved.clear();
+    if (!positions) {
+      return;
+    }
+    const entries = positions instanceof Map ? positions.entries() : Object.entries(positions);
+    for (const [id, pos] of entries) {
+      if (!id || !pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
+        continue;
+      }
+      this.saved.set(id, pos.side ? { x: pos.x, y: pos.y, side: pos.side } : { x: pos.x, y: pos.y });
+    }
+  }
+
+  /** 是否已有个人视图坐标（应用时勿再 centerForViewport，避免绝对坐标被二次平移）。 */
+  hasSavedPositions(): boolean {
+    return this.saved.size > 0;
+  }
+
   /** 导出可持久化的坐标表（含折叠占位，与普通卡同一套 pin）。 */
   toSaveRecord(): Record<string, { x: number; y: number; side?: Side }> {
     return Object.fromEntries(
@@ -227,7 +252,7 @@ export class CanvasPositionSession {
     syncRelationSidesFromFolds(this.lastGraph, foldPins, this.relationSides);
     const reanchored = clearStalePinsAfterFoldDrag(data, this.lastGraph, foldPins, this.pins);
     const arranged = arrangeGraph(data, this.relationSides);
-    const layout = resolvePinnedExpandCollapse(data, arranged, this.pins);
+    let layout = resolvePinnedExpandCollapse(data, arranged, this.pins);
     for (const cluster of reanchored) {
       settleReanchoredSubtree(data, layout, cluster.ids, cluster.side, cluster.anchor);
     }
@@ -239,6 +264,8 @@ export class CanvasPositionSession {
       foldPins,
       this.relationSides,
     );
+    // 展开后新出现的卡：用个人视图坐标覆盖 arrange 相对位
+    layout = mergeLayoutPositions(layout, this.saved);
     this.lastGraph = data;
     return layout;
   }
@@ -273,8 +300,8 @@ export class CanvasPositionSession {
     );
   }
 
+  /** 把当前可见节点坐标合并进 saved，不清空（保留不可见 fold / 子卡的个人视图坐标）。 */
   private syncSaved(data: DependencyGraph): void {
-    this.saved.clear();
     for (const [id, pos] of cardPositionsFromNodes(data.nodes)) {
       this.saved.set(id, pos);
     }

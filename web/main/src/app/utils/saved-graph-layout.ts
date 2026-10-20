@@ -61,7 +61,7 @@ export async function loadSavedGraphLayout(rootId: string): Promise<SavedGraphLa
   }
   try {
     const raw = await invoke<{ nodeId: string }, unknown>('getViewPosition', { nodeId: rootId });
-    return normalizeLayout(raw, rootId);
+    return normalizeSavedGraphLayout(raw, rootId);
   } catch {
     return null;
   }
@@ -77,7 +77,8 @@ export function saveGraphLayout(layout: SavedGraphLayout): Promise<void> {
   });
 }
 
-function normalizeLayout(raw: unknown, rootId: string): SavedGraphLayout | null {
+/** 规范化 getViewPosition 返回值（供加载与单测校验）。 */
+export function normalizeSavedGraphLayout(raw: unknown, rootId: string): SavedGraphLayout | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return null;
   }

@@ -23,6 +23,12 @@ extensions:
     behavior: modal
     viewport:
       size: fullscreen
+  - key: pingcode-graphs-area
+    target: "pcm:pjm:workitem:area"
+    title: 关系图
+    resource: main
+    resolver:
+      function: resolver
 event:
   triggers:
     - key: pjm-workitem-created

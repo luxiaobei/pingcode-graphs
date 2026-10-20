@@ -1,9 +1,8 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
-import { realtime, view } from '@pc-nexus/bridge';
+import { dialog, realtime, view } from '@pc-nexus/bridge';
 import { notify } from '@pc-nexus/capabilities';
 import { ThyAction } from 'ngx-tethys/action';
 import { ThyDialog, ThyDialogSizes } from 'ngx-tethys/dialog';
-import { ThyDivider } from 'ngx-tethys/divider';
 import { ThyContent, ThyHeader, ThyLayout } from 'ngx-tethys/layout';
 import { ThyLoading } from 'ngx-tethys/loading';
 import { ThyTooltipDirective } from 'ngx-tethys/tooltip';
@@ -21,6 +20,7 @@ import {
 import { DisplaySettingsDialog } from './settings/display-settings-dialog';
 import type { Side } from './utils/arrange-graph';
 import { buildVisibleGraph } from './utils/expand-graph';
+import { filterGraphByDisplaySettings } from './utils/graph.util';
 import {
   applySavedGraphLayout,
   loadSavedGraphLayout,
@@ -28,10 +28,33 @@ import {
   type SavedGraphLayout,
   type SaveLayoutPayload,
 } from './utils/saved-graph-layout';
-import { filterGraphByDisplaySettings } from './utils/graph.util';
 
 /** 关系图关心的实体 kind，与后端 publish 对齐。 */
 const TRACKED_KINDS = new Set(['work_item', 'idea', 'ticket', 'test_case', 'page']);
+
+/** 工作项菜单弹窗。只有这个入口保留标题和关闭。 */
+const ACTION_EXTENSION_TARGET = 'pcm:pjm:workitem:action';
+
+/** 三种展示：详情 tab、菜单弹窗、从 tab 打开的全屏。 */
+type GraphSurface = 'pending' | 'tab' | 'dialog' | 'fullscreen';
+
+function graphSurface(
+  dialogMode: boolean,
+  extension?: {
+    key?: string;
+    target?: string;
+    data?: { hostChrome?: boolean };
+    modal?: { hostChrome?: boolean };
+  },
+): Exclude<GraphSurface, 'pending'> {
+  if (!dialogMode) {
+    return 'tab';
+  }
+  const openedFromTab = extension?.modal?.hostChrome === true || extension?.data?.hostChrome === true;
+  const actionDialog =
+    extension?.target === ACTION_EXTENSION_TARGET || extension?.key === 'pingcode-graphs';
+  return actionDialog && !openedFromTab ? 'dialog' : 'fullscreen';
+}
 
 @Component({
   selector: 'app-root',
@@ -40,7 +63,6 @@ const TRACKED_KINDS = new Set(['work_item', 'idea', 'ticket', 'test_case', 'page
     ThyHeader,
     ThyContent,
     ThyAction,
-    ThyDivider,
     ThyLoading,
     ThyTooltipDirective,
     GraphCanvas,
@@ -49,6 +71,8 @@ const TRACKED_KINDS = new Set(['work_item', 'idea', 'ticket', 'test_case', 'page
   styleUrl: './app.scss',
 })
 export class App {
+  /** 上下文回来之前保持 pending，避免页头和工具栏闪一下。 */
+  protected readonly surface = signal<GraphSurface>('pending');
   protected readonly displaySettings = signal<DisplaySetting[]>(applySavedDisplaySettings(null));
 
   private readonly dialog = inject(ThyDialog);
@@ -84,6 +108,7 @@ export class App {
   });
 
   constructor() {
+    void this.bindViewMode();
     void this.reload();
     void this.subscribeEntityChanged();
     this.destroyRef.onDestroy(() => {
@@ -92,6 +117,12 @@ export class App {
         this.silentRefreshTimer = null;
       }
     });
+  }
+
+  private async bindViewMode(): Promise<void> {
+    const dialogMode = await view.isDialog().catch(() => false);
+    const context = await view.getContext().catch(() => null);
+    this.surface.set(graphSurface(dialogMode, context?.extension));
   }
 
   private async subscribeEntityChanged(): Promise<void> {
@@ -143,6 +174,22 @@ export class App {
 
   protected closeDialog(): void {
     view.close().catch(() => undefined);
+  }
+
+  /** 详情 tab 的全屏是再开一层全屏弹窗。 */
+  protected toggleFullscreen(): void {
+    const workitemId = this.traceWorkItemId();
+    void dialog
+      .open({
+        resource: 'main',
+        size: 'fullscreen',
+        title: '关系可视化',
+        context: {
+          hostChrome: true,
+          ...(workitemId ? { workitem: { id: workitemId } } : {}),
+        },
+      })
+      .catch(() => undefined);
   }
 
   protected async reload(options?: { silent?: boolean }): Promise<void> {

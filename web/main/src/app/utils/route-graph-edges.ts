@@ -20,7 +20,7 @@ const HALF_H = GRAPH_NODE_SIZE.height / 2;
 const FOLD_HALF_W = FOLD_SUMMARY_SIZE.width / 2;
 const FOLD_HALF_H = FOLD_SUMMARY_SIZE.height / 2;
 const SPINE_PAD = 28;
-const FORK_PAD = 36;
+const FORK_PAD = 44;
 
 function halfOf(node: GraphEntity | undefined): { w: number; h: number } {
   return isFoldSummaryNode(node) ? { w: FOLD_HALF_W, h: FOLD_HALF_H } : { w: HALF_W, h: HALF_H };
@@ -708,6 +708,7 @@ function labelRatio(
   let exclusiveType: number | undefined;
   let sharedType: number | undefined;
   let afterFork: number | undefined;
+  let afterForkSpan = 0;
   let cursor = 0;
   for (let index = 0; index < lengths.length; index += 1) {
     const from = knots[index];
@@ -730,9 +731,10 @@ function labelRatio(
         sharedType ??= ratio;
       }
     }
-    // 分岔后通向子卡的末段（叉线 → 入卡）
-    if (!stem && span > minSpan && index >= lengths.length - 2) {
-      afterFork = ratioAt(cursor, span);
+    // 分岔后末几段：取较长独占臂放文案，避免落在入卡短 stub 上贴卡/贴岔口
+    if (!stem && span > minSpan && index >= lengths.length - 2 && span >= afterForkSpan) {
+      afterForkSpan = span;
+      afterFork = Math.min(0.86, Math.max(0.2, (cursor + span * 0.55) / total));
     }
     cursor += span;
   }

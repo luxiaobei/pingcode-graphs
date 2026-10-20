@@ -4,9 +4,12 @@ import type { DependencyGraph } from '../entities/graph.entity';
 import {
   arrangeGraph,
   mergeLayoutPositions,
+  preferredSideByNode,
   resolvePinnedExpandCollapse,
+  retainPositionsForPreferredSide,
   settleReanchoredSubtree,
   sideFromParent,
+  sideMatchesPreference,
   type Side,
 } from './arrange-graph';
 import {
@@ -15,7 +18,7 @@ import {
   syncRelationSidesFromFolds,
 } from './fold-layout';
 import { snapshotGraphPositions } from './g6-helpers';
-import { isFoldSummaryId, isFoldSummaryNode, siblingsOfRelation } from './graph.util';
+import { isFoldSummaryId, isFoldSummaryNode } from './graph.util';
 import { cardPositionsFromNodes } from './saved-graph-layout';
 import { assignRelationSides } from './side';
 import type { GraphNodePosition } from './to-g6-data';
@@ -30,7 +33,7 @@ export class CanvasPositionSession {
   private lastGraph: DependencyGraph | null = null;
   private lastDepth: number | null = null;
   private lastRootId: string | null = null;
-  /** 用户级关系方位偏好（跨工作项共用）；折叠占位或拖父工作项写入 */
+  /** 用户级关系方位偏好（跨工作项共用）；仅折叠占位松手写入 */
   private relationSides = new Map<string, Side>();
 
   clear(): void {
@@ -44,9 +47,8 @@ export class CanvasPositionSession {
 
   /**
    * 写入当前可见节点坐标。
-   * - 折叠占位：改该关系 pin.side，并写入 relationSides
-   * - 父工作项：persistRelationPreference 时写 parent 偏好（松手后整组重锚）
-   * - 其它普通卡：只更新该卡 pin.side
+   * - 折叠占位：改该关系 pin.side；松手时写入 relationSides
+   * - 普通卡（含父/子工作项）：只更新该卡 pin.side，不写关系偏好、不整组重锚
    * @param persistRelationPreference 拖拽中传 false，避免边拖边写偏好；松手传 true
    */
   snapshot(
@@ -59,77 +61,6 @@ export class CanvasPositionSession {
     if (draggedId && graph) {
       this.applyDragSide(graph, draggedId, persistRelationPreference);
     }
-  }
-
-  /**
-   * 拖父工作项换方位后：清旧侧兄弟 pin，按新侧 arrange，整组贴到拖放位置。
-   * 只改 side、不挪卡时出线仍像「从上出发」。
-   */
-  reanchorParentAfterDrag(
-    graph: DependencyGraph,
-    draggedId: string,
-  ): Map<string, GraphNodePosition> | null {
-    const node = graph.nodes.find((item) => item.id === draggedId);
-    if (!node || node.relationHub || !node.revealedByAnchorId) {
-      return null;
-    }
-    const anchorId = node.revealedByAnchorId;
-    const parentNodes = siblingsOfRelation(graph, anchorId, 'parent');
-    if (!parentNodes.some((item) => item.id === draggedId)) {
-      return null;
-    }
-
-    const dragPin = this.pins.get(draggedId);
-    if (!dragPin?.side) {
-      return null;
-    }
-    const side = dragPin.side;
-    const prevPreferred = this.relationSides.get('parent');
-    this.relationSides.set('parent', side);
-
-    const parentIds = parentNodes.map((item) => item.id);
-
-    // 偏好与兄弟 side 已是新方位 → 不必整组重排
-    if (
-      prevPreferred === side &&
-      parentIds.every((id) => id === draggedId || this.pins.get(id)?.side === side)
-    ) {
-      return null;
-    }
-
-    for (const id of parentIds) {
-      if (id === draggedId) {
-        this.pins.set(id, { ...dragPin, side });
-      } else {
-        this.pins.delete(id);
-      }
-    }
-
-    const arranged = arrangeGraph(graph, this.relationSides);
-    const layout = resolvePinnedExpandCollapse(graph, arranged, this.pins);
-    const placed = layout.get(draggedId);
-    if (placed) {
-      const dx = dragPin.x - placed.x;
-      const dy = dragPin.y - placed.y;
-      if (dx || dy) {
-        for (const id of parentIds) {
-          const pos = layout.get(id);
-          if (pos) {
-            layout.set(id, { ...pos, x: pos.x + dx, y: pos.y + dy, side });
-          }
-        }
-      }
-    }
-    for (const id of parentIds) {
-      const pos = layout.get(id);
-      if (pos) {
-        layout.set(id, { ...pos, side });
-      }
-    }
-    settleReanchoredSubtree(graph, layout, new Set(parentIds), side);
-    this.seed(layout, true);
-    this.lastGraph = graph;
-    return layout;
   }
 
   setRelationSides(sides: ReadonlyMap<string, Side> | Record<string, Side> | null | undefined): void {
@@ -229,20 +160,25 @@ export class CanvasPositionSession {
     this.lastGraph = data;
   }
 
-  /** 基准布局：saved / 关系方位偏好优先，缺的用思维导图补齐。 */
+  /** 基准布局：先按方位；与个人保存方位相同才套坐标，否则用 arrange 初始落位。 */
   resolveBaseline(data: DependencyGraph): Map<string, GraphNodePosition> {
     this.syncSaved(data);
+    const arranged = arrangeGraph(data, this.relationSides);
+    const preferred = preferredSideByNode(data, this.relationSides);
     const layout = mergeLayoutPositions(
-      arrangeGraph(data, this.relationSides),
-      this.saved,
+      arranged,
+      retainPositionsForPreferredSide(this.saved, preferred),
     );
     this.lastGraph = data;
     return layout;
   }
 
   /**
-   * 展开/收起：工作项与 +N 均靠 pin 保位（展开时 fold 从可见图消失也不删 pin）；
-   * 折叠占位若拖到新方位，丢掉旧侧子卡 pin，按新侧 arrange 重锚整棵子树。
+   * 展开/收起通用规则：
+   * 1) 先按关系方位偏好 arrange；
+   * 2) pin/saved 与明确方位相同 → 用存储坐标；
+   * 3) 方位与留存不同 → 按最新方位初始展示，并清掉旧侧 pin / 更新 saved。
+   * 折叠占位拖到新侧时，额外把子树贴到占位锚点。
    */
   resolveExpandCollapse(data: DependencyGraph): Map<string, GraphNodePosition> {
     // 先取出 fold pin（含即将展开消失的），供写偏好 + 清旧侧子树；勿删 pin
@@ -253,7 +189,14 @@ export class CanvasPositionSession {
     const reanchored = clearStalePinsAfterFoldDrag(data, this.lastGraph, foldPins, this.pins);
     const reanchoredIds = new Set(reanchored.flatMap((cluster) => [...cluster.ids]));
     const arranged = arrangeGraph(data, this.relationSides);
-    let layout = resolvePinnedExpandCollapse(data, arranged, this.pins);
+    const preferred = preferredSideByNode(data, this.relationSides);
+    // 明确方位与留存不同的 pin 丢掉，避免再次盖回旧侧
+    for (const [id, pin] of [...this.pins]) {
+      if (!sideMatchesPreference(pin.side, preferred.get(id))) {
+        this.pins.delete(id);
+      }
+    }
+    let layout = resolvePinnedExpandCollapse(data, arranged, this.pins, preferred);
     for (const cluster of reanchored) {
       settleReanchoredSubtree(data, layout, cluster.ids, cluster.side, cluster.anchor);
       for (const id of cluster.ids) {
@@ -271,15 +214,27 @@ export class CanvasPositionSession {
       foldPins,
       this.relationSides,
     );
-    // pin > saved：会话拖过的卡跳过 merge；无 pin 的首次展开仍用 saved；换侧重锚写回 saved
+    // pin > saved：会话拖过的卡跳过 merge；方位不一致的 saved 已过滤
     const skipIds = new Set<string>([...this.pins.keys(), ...reanchoredIds]);
-    layout = mergeLayoutPositions(layout, this.saved, skipIds);
+    layout = mergeLayoutPositions(
+      layout,
+      retainPositionsForPreferredSide(this.saved, preferred),
+      skipIds,
+    );
     for (const id of reanchoredIds) {
       const pos = layout.get(id);
       if (!pos) {
         continue;
       }
       this.saved.set(id, pos.side ? { x: pos.x, y: pos.y, side: pos.side } : { x: pos.x, y: pos.y });
+    }
+    // 方位已切换：用新落位覆盖 saved，避免下次再被旧侧坐标拉回
+    for (const [id, pos] of layout) {
+      const saved = this.saved.get(id);
+      const want = preferred.get(id) ?? pos.side;
+      if (saved?.side && want && saved.side !== want) {
+        this.saved.set(id, { x: pos.x, y: pos.y, side: want });
+      }
     }
     this.lastGraph = data;
     return layout;
@@ -325,7 +280,6 @@ export class CanvasPositionSession {
   /**
    * 按相对锚点位置更新被拖卡 side。
    * persistRelationPreference：松手时写折叠偏好；拖拽中只改当前卡 side 供预览出线。
-   * 父卡偏好由 reanchorParentAfterDrag 写入，避免此处先写导致跳过整组重锚。
    */
   private applyDragSide(
     graph: DependencyGraph,

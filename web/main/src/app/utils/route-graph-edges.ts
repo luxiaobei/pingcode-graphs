@@ -1,10 +1,10 @@
 import type { EdgeData } from '@antv/g6';
 import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
-import { PARENT_DUAL_EXIT_GAP, type Side } from './arrange-graph';
+import { isAssocBundleRelation, type Side } from './arrange-graph';
 import { unstackSharedStrokes } from './unstack-strokes';
 import {
-  isBundleRelationType,
+  BUNDLE_FOLD_TYPE,
   isFoldSummaryId,
   isFoldSummaryNode,
   relationBetween,
@@ -48,19 +48,13 @@ function foldJunction(
   parent: GraphNodePosition,
   side: Side,
   fork: number,
-  spine: number,
   axis: number,
-  mode: 'layer' | 'parent' | 'bundle',
+  mode: 'layer' | 'bundle',
 ): { x: number; y: number } {
   if (mode === 'layer') {
     return side === 'left' || side === 'right'
       ? { x: fork, y: parent.y }
       : { x: parent.x, y: fork };
-  }
-  if (mode === 'parent') {
-    return side === 'left' || side === 'right'
-      ? { x: spine, y: axis }
-      : { x: axis, y: spine };
   }
   return side === 'left' || side === 'right'
     ? { x: fork, y: axis }
@@ -135,122 +129,99 @@ export function trunkEdges(
     const skip = new Set(lane.flatMap((group) => group.members.map((member) => member.childId)));
     skip.add(lane[0]?.members[0]?.parentId ?? '');
     const others = otherNodes(positions, skip);
-    // B 私有干(parent) + C 公共脊(其它) / 子中线；同侧凡有「非父」即双出线
-    const bundleKids = lane
-      .filter((group) => {
-        const type = group.members[0]?.relationType ?? '';
-        return type !== 'parent' && (isBundleRelationType(type) || type === 'bundle');
-      })
-      .flatMap((group) => group.placed.map((item) => item.child));
-    const childKids = lane
-      .filter((group) => group.members[0]?.relationType === 'child')
-      .flatMap((group) => group.placed.map((item) => item.child));
-    const parentKids = lane
-      .filter((group) => group.members[0]?.relationType === 'parent')
-      .flatMap((group) => group.placed.map((item) => item.child));
-    // 中线占用者：其它关系公共脊 或 子工作项直出（下/左/右与父共存时也要错开）
-    const midlineKids = bundleKids.length ? bundleKids : childKids;
-    const spines = splitParentBundleSpines(parent, side, parentKids, bundleKids, others);
-    const dualExit = Boolean(parentKids.length && midlineKids.length);
-    const midlineAxis = midlineKids.length ? axisCenter(midlineKids, side) : undefined;
-    const parentKidsAxis = parentKids.length ? axisCenter(parentKids, side) : undefined;
+    // 同侧一条骨干，再按「类型组」分叉（非 T 形）。
+    // 「关联」是独立类型组：所有可并入关联的子卡共用一根类型线，与关联工单/父/子并列分叉。
+    const allKids = lane.flatMap((group) => group.placed.map((item) => item.child));
+    const assocGroups = lane.filter((group) =>
+      isAssocBundleRelation(group.members[0]?.relationType ?? ''),
+    );
+    const assocKids = assocGroups.flatMap((group) => group.placed.map((item) => item.child));
+    const assocCenter = assocKids.length ? axisCenter(assocKids, side) : undefined;
+    const assocFork =
+      assocKids.length > 0
+        ? forkAt(
+            assocGroups.flatMap((group) =>
+              group.placed.map((item) => ({
+                pos: item.child,
+                half: halfOf(nodes.get(item.member.childId)),
+              })),
+            ),
+            side,
+          )
+        : undefined;
+    const spine = allKids.length ? spineAt(parent, allKids, side, others) : undefined;
     const labelStagger = (index: number): number =>
       lane.length <= 1 ? 0 : (index - (lane.length - 1) / 2) * 16;
     const parentId = lane[0]?.members[0]?.parentId ?? '';
-    // 双出线：上下父干错开；左右父走中线直出、关系出线错开（避免卡心斜切到错开点）
     const horizontal = side === 'left' || side === 'right';
     const parentAxis = horizontal ? parent.y : parent.x;
-    const parentStem = dualExit
-      ? horizontal
-        ? parentAxis
-        : clampStemOnCardEdge(
-            parent,
-            side,
-            parentStemCenter(parent, midlineAxis ?? parentAxis, side, parentKidsAxis),
-          )
-      : parentAxis;
-    // 左右错开必须落在卡边内，否则出线点跑到卡外会把关系线挤成折角
-    const bundleLeave = dualExit && horizontal
-      ? clampStemOnCardEdge(
-          parent,
-          side,
-          parentStemCenter(parent, parentAxis, side, midlineAxis),
-        )
-      : parentAxis;
+    const childAlone =
+      lane.length === 1 && lane[0]?.members[0]?.relationType === 'child';
+    const hasBundleFold = assocGroups.some(
+      (group) => group.members[0]?.relationType === BUNDLE_FOLD_TYPE,
+    );
     lane.forEach((group, groupIndex) => {
       const kids = group.placed.map((item) => item.child);
       const foldOnly = group.members.every((member) => isFoldSummaryId(member.childId));
-      const center = axisCenter(kids, side);
-      const fork = forkAt(
-        group.placed.map((item) => ({
-          pos: item.child,
-          half: halfOf(nodes.get(item.member.childId)),
-        })),
-        side,
-      );
-      const labelOwner = closestMember(parent, group.placed, side);
       const relationType = group.members[0]?.relationType ?? '';
-      // A 直出(child) / B 私有干(parent) / C 公共脊(其它，含整体收起占位)
-      const straight = relationType === 'child' && !foldOnly;
-      const parentOwn = relationType === 'parent';
-      // 单父贴父干：双出线时父干已错开，勿再走中线 layerRoute（会与其它关系共干）
-      const stemAligned =
-        parentOwn &&
-        kids.length === 1 &&
-        (horizontal
-          ? Math.abs(kids[0].y - parentStem) < 1
-          : Math.abs(kids[0].x - parentStem) < 1);
-      const alone = stemAligned && Math.abs(parentStem - parentAxis) < 1;
-      const stemCenter = parentOwn ? parentStem : center;
-      // 文案落在本组类型线（子卡轴向），勿用共干 leave，否则多关系叠在同一段
-      const labelCenter = straight || alone ? parentAxis : stemCenter;
-      const leaveAxisForLabel = horizontal ? bundleLeave : parentAxis;
-      const onSharedStem = Math.abs(labelCenter - leaveAxisForLabel) < 1;
-      // 同侧多关系：共干或类型线过近时，文案改到分岔后独占段，避免叠字
+      const assocOwn = isAssocBundleRelation(relationType);
+      // 关联组：强制走同一类型线，保证从骨干分出独立的「关联」支
+      const center =
+        assocOwn && assocCenter != null ? assocCenter : axisCenter(kids, side);
+      const fork =
+        assocOwn && assocFork != null && !foldOnly
+          ? assocFork
+          : forkAt(
+              group.placed.map((item) => ({
+                pos: item.child,
+                half: halfOf(nodes.get(item.member.childId)),
+              })),
+              side,
+            );
+      const labelOwner = closestMember(parent, group.placed, side);
+      const straight = relationType === 'child' && !foldOnly && childAlone;
+      const labelCenter = straight ? parentAxis : center;
+      const onSharedStem = !straight && Math.abs(labelCenter - parentAxis) < 1;
       const peerCrowded =
         !straight &&
-        !alone &&
         !foldOnly &&
+        !assocOwn &&
         lane.length > 1 &&
         lane.some((peer, peerIndex) => {
           if (peerIndex === groupIndex) {
             return false;
           }
           const peerType = peer.members[0]?.relationType ?? '';
-          if (peerType === 'child') {
+          if (peerType === 'child' || peerType === 'parent') {
             return false;
           }
-          const peerCenter = axisCenter(
+          if (isAssocBundleRelation(peerType)) {
+            return false;
+          }
+          const peerAxis = axisCenter(
             peer.placed.map((item) => item.child),
             side,
           );
-          return Math.abs(peerCenter - labelCenter) < 28;
+          return Math.abs(peerAxis - labelCenter) < 28;
         });
-      const preferAfterFork = (onSharedStem || peerCrowded) && lane.length > 1 && !straight && !alone;
+      // 关联组文案用「关联」钉在类型线；子类型名（若展示）落到分岔后
+      const preferAfterFork =
+        !straight &&
+        (assocOwn || ((onSharedStem || peerCrowded) && lane.length > 1));
       const stagger = foldOnly || preferAfterFork || !onSharedStem ? 0 : labelStagger(groupIndex);
-      const offsetX = foldOnly || straight || alone || preferAfterFork ? 0 : 16;
-      const offsetY = foldOnly || straight || alone || preferAfterFork ? 0 : -12;
-      const spine = parentOwn
-        ? (spines.parent ?? fork)
-        : (spines.bundle ?? spines.parent ?? fork);
-      // 中线直出用 layer；双出线父干错开时 fold 钉在父干上
-      const foldMode = straight || alone ? 'layer' : parentOwn ? 'parent' : 'bundle';
-      const foldAxis = straight || alone
-        ? parentAxis
-        : parentOwn
-          ? stemCenter
-          : horizontal && dualExit
-            ? bundleLeave
-            : stemCenter;
-      const foldAnchor = foldJunction(parent, side, fork, spine, foldAxis, foldMode);
+      const offsetX = foldOnly || straight || preferAfterFork ? 0 : 16;
+      const offsetY = foldOnly || straight || preferAfterFork ? 0 : -12;
+      const groupSpine = spine ?? fork;
+      const foldMode = straight ? 'layer' : 'bundle';
+      const foldAnchor = foldJunction(parent, side, fork, center, foldMode);
       for (const item of group.placed) {
-        const showLabel = item.member.childId === labelOwner;
-        // 双出线：父从错开干直出（stemAligned 时竖直直线）；不与其它关系共中线
-        const controlPoints = straight || alone
+        // 展开关联组：边不写子类型名（由「关联」干文案承担，与关联工单并列）
+        const showLabel =
+          item.member.childId === labelOwner &&
+          !(assocOwn && relationType !== BUNDLE_FOLD_TYPE && !foldOnly);
+        const controlPoints = straight
           ? layerRoute(parent, item.child, side, fork)
-          : parentOwn
-            ? parentSeparateRoute(parent, item.child, side, spine, fork, stemCenter)
-            : routeOf(parent, item.child, side, spine, fork, center, bundleLeave);
+          : routeOf(parent, item.child, side, groupSpine, fork, center);
         const style: EdgeData['style'] = {
           controlPoints,
           labelPlacement: showLabel
@@ -260,7 +231,7 @@ export function trunkEdges(
                 side,
                 controlPoints,
                 labelCenter,
-                straight || foldOnly || stemAligned,
+                straight || foldOnly,
                 foldOnly ? 1 : 8,
                 preferAfterFork,
               )
@@ -268,17 +239,63 @@ export function trunkEdges(
           labelOffsetX: showLabel && (side === 'top' || side === 'bottom') ? offsetX + stagger : 0,
           labelOffsetY: showLabel && (side === 'left' || side === 'right') ? offsetY + stagger : 0,
         };
-        if ((straight || alone || stemAligned || foldOnly) && showLabel) {
+        if ((straight || foldOnly) && showLabel) {
           style.labelTextAlign = 'center';
           style.labelTextBaseline = 'middle';
         }
         edges.push(straightEdge(item.member, style, showLabel));
       }
-      forks.set(relationFoldKey(parentId, relationType), foldAnchor);
+      if (!(assocOwn && relationType !== BUNDLE_FOLD_TYPE)) {
+        forks.set(relationFoldKey(parentId, relationType), foldAnchor);
+      }
     });
-    // 上方位其它关系整体收起 −：钉在公共脊与中线出线的 T 口
-    if (side === 'top' && bundleKids.length && spines.bundle != null && parentId) {
-      forks.set(relationBundleFoldKey(parentId), { x: parent.x, y: spines.bundle });
+    // 展开时画独立「关联」类型线文案（收起由 +N 边自带「关联」）
+    if (assocKids.length && !hasBundleFold && spine != null && parentId && assocCenter != null) {
+      const stemOwner = closestMember(
+        parent,
+        assocGroups.flatMap((group) => group.placed),
+        side,
+      );
+      const stemChild = stemOwner ? positions?.get(stemOwner) : undefined;
+      if (stemOwner && stemChild) {
+        const stemFork = assocFork ?? forkAt([{ pos: stemChild, half: halfOf(nodes.get(stemOwner)) }], side);
+        const controlPoints = routeOf(parent, stemChild, side, spine, stemFork, assocCenter);
+        edges.push({
+          id: `${parentId}:bundle:assoc-stem`,
+          source: parentId,
+          target: stemOwner,
+          data: {
+            relationType: BUNDLE_FOLD_TYPE,
+            label: relationLabel(BUNDLE_FOLD_TYPE),
+            endArrow: false,
+            labelOnly: true,
+          },
+          style: {
+            controlPoints,
+            labelPlacement: labelRatio(
+              parent,
+              stemChild,
+              side,
+              controlPoints,
+              assocCenter,
+              false,
+              8,
+              false,
+            ),
+            labelTextAlign: 'center',
+            labelTextBaseline: 'middle',
+            labelOffsetX: 0,
+            labelOffsetY: 0,
+          },
+        });
+      }
+    }
+    // 关联整体收起 −：钉在组内分叉口（类型线 → 各卡），不是骨干分出「关联」处
+    if (assocKids.length && parentId && assocCenter != null && assocFork != null) {
+      forks.set(
+        relationBundleFoldKey(parentId),
+        foldJunction(parent, side, assocFork, assocCenter, 'bundle'),
+      );
     }
   }
   unstackSharedStrokes(edges, positions, nodes);
@@ -368,41 +385,6 @@ function forkAt(
   return Math.max(...children.map((child) => child.pos.y + child.half.h)) + FORK_PAD;
 }
 
-/** 父脊与关联等公共脊至少隔开这么多，避免画成一条横线。 */
-const SPINE_SPLIT = 56;
-
-/**
- * 父内侧脊 + 其它关系外侧公共脊。
- * 只挪父脊去躲开公共脊，绝不改 bundle 脊——否则拖父工作项会带动整条公共干。
- */
-function splitParentBundleSpines(
-  parent: GraphNodePosition,
-  side: Side,
-  parentKids: GraphNodePosition[],
-  bundleKids: GraphNodePosition[],
-  others: GraphNodePosition[],
-): { parent?: number; bundle?: number } {
-  let parentSpine = parentKids.length ? spineAt(parent, parentKids, side, others) : undefined;
-  const bundleSpine = bundleKids.length ? spineAt(parent, bundleKids, side, others) : undefined;
-  if (parentSpine == null || bundleSpine == null) {
-    return { parent: parentSpine, bundle: bundleSpine };
-  }
-  if (side === 'top') {
-    const near = parent.y - HALF_H - SPINE_PAD;
-    parentSpine = Math.min(near, Math.max(parentSpine, bundleSpine + SPINE_SPLIT));
-  } else if (side === 'bottom') {
-    const near = parent.y + HALF_H + SPINE_PAD;
-    parentSpine = Math.max(near, Math.min(parentSpine, bundleSpine - SPINE_SPLIT));
-  } else if (side === 'left') {
-    const near = parent.x - HALF_W - SPINE_PAD;
-    parentSpine = Math.min(near, Math.max(parentSpine, bundleSpine + SPINE_SPLIT));
-  } else {
-    const near = parent.x + HALF_W + SPINE_PAD;
-    parentSpine = Math.max(near, Math.min(parentSpine, bundleSpine - SPINE_SPLIT));
-  }
-  return { parent: parentSpine, bundle: bundleSpine };
-}
-
 /** 父卡片外侧的公共脊柱。让开左右（或上下）已经占住的卡片，避免横穿。 */
 function spineAt(
   parent: GraphNodePosition,
@@ -454,19 +436,6 @@ function spineAt(
   return Math.max(y, fork + 24);
 }
 
-function onAxis(
-  parent: GraphNodePosition,
-  child: GraphNodePosition | undefined,
-  side: Side,
-): boolean {
-  if (!child) {
-    return false;
-  }
-  return side === 'left' || side === 'right'
-    ? Math.abs(child.y - parent.y) < 1
-    : Math.abs(child.x - parent.x) < 1;
-}
-
 function axisCenter(children: GraphNodePosition[], side: Side): number {
   if (side === 'left' || side === 'right') {
     const ys = children.map((child) => child.y);
@@ -502,8 +471,7 @@ function layerRoute(
 }
 
 /**
- * 父卡片 → 脊柱 → 类型线（名字在这一段）→ 本组自己的分叉 → 卡片。
- * 左右双出线时 leaveAxis 可错开，把中线留给父工作项直出。
+ * 父卡片 → 公共脊 → 类型线（名字在这一段）→ 本组自己的分叉 → 卡片。
  */
 function routeOf(
   parent: GraphNodePosition,
@@ -512,14 +480,12 @@ function routeOf(
   spine: number,
   fork: number,
   center: number,
-  leaveAxis?: number,
 ): [number, number][] {
   if (side === 'right') {
     const edge = parent.x + HALF_W;
-    const leave = leaveAxis ?? parent.y;
     return dedupePoints([
-      [edge, leave],
-      [spine, leave],
+      [edge, parent.y],
+      [spine, parent.y],
       [spine, center],
       [fork, center],
       [fork, child.y],
@@ -527,10 +493,9 @@ function routeOf(
   }
   if (side === 'left') {
     const edge = parent.x - HALF_W;
-    const leave = leaveAxis ?? parent.y;
     return dedupePoints([
-      [edge, leave],
-      [spine, leave],
+      [edge, parent.y],
+      [spine, parent.y],
       [spine, center],
       [fork, center],
       [fork, child.y],
@@ -541,99 +506,6 @@ function routeOf(
     [center, spine],
     [center, fork],
     [child.x, fork],
-  ]);
-}
-
-/**
- * 双出线时相对中线错开。
- * 左右用较小间距并配合 clampStemOnCardEdge，避免出线点落到卡外。
- */
-function parentStemCenter(
-  parent: GraphNodePosition,
-  midlineCenter: number,
-  side: Side,
-  preferCenter?: number,
-): number {
-  const horizontal = side === 'left' || side === 'right';
-  const axis = horizontal ? parent.y : parent.x;
-  // 卡半高 34，左右最多错开约 24，才能仍落在左右边上
-  const gap = horizontal ? 24 : PARENT_DUAL_EXIT_GAP;
-  if (
-    preferCenter != null &&
-    Math.abs(preferCenter - axis) >= gap * 0.5 &&
-    Math.abs(preferCenter - midlineCenter) >= gap * 0.5
-  ) {
-    return preferCenter;
-  }
-  return midlineCenter >= axis ? axis - gap : axis + gap;
-}
-
-/** 出线 stem 限制在对应卡边内侧，防止控制点跑出卡片把折线挤变形 */
-function clampStemOnCardEdge(parent: GraphNodePosition, side: Side, stem: number): number {
-  const pad = 10;
-  if (side === 'left' || side === 'right') {
-    return Math.min(parent.y + HALF_H - pad, Math.max(parent.y - HALF_H + pad, stem));
-  }
-  return Math.min(parent.x + HALF_W - pad, Math.max(parent.x - HALF_W + pad, stem));
-}
-
-/**
- * 父完全单出：卡边从 stem 出，干不经过中线。
- * 左右尽量「中线式」少折：先出到 fork 再落到子卡。
- */
-function parentSeparateRoute(
-  parent: GraphNodePosition,
-  child: GraphNodePosition,
-  side: Side,
-  spine: number,
-  fork: number,
-  stem: number,
-): [number, number][] {
-  if (side === 'top') {
-    const edge = parent.y - HALF_H;
-    const rise = Math.min(spine, fork);
-    return dedupePoints([
-      [stem, edge],
-      [stem, rise],
-      [child.x, rise],
-      [child.x, fork],
-    ]);
-  }
-  if (side === 'bottom') {
-    const edge = parent.y + HALF_H;
-    const drop = Math.max(spine, fork);
-    return dedupePoints([
-      [stem, edge],
-      [stem, drop],
-      [child.x, drop],
-      [child.x, fork],
-    ]);
-  }
-  if (side === 'left') {
-    const edge = parent.x - HALF_W;
-    if (Math.abs(child.y - stem) < 1) {
-      return dedupePoints([
-        [edge, stem],
-        [fork, stem],
-      ]);
-    }
-    return dedupePoints([
-      [edge, stem],
-      [fork, stem],
-      [fork, child.y],
-    ]);
-  }
-  const edge = parent.x + HALF_W;
-  if (Math.abs(child.y - stem) < 1) {
-    return dedupePoints([
-      [edge, stem],
-      [fork, stem],
-    ]);
-  }
-  return dedupePoints([
-    [edge, stem],
-    [fork, stem],
-    [fork, child.y],
   ]);
 }
 

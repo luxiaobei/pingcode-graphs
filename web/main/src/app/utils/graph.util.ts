@@ -22,7 +22,10 @@ export function relationBundleFoldKey(parentId: string): string {
   return relationFoldKey(parentId, BUNDLE_FOLD_TYPE);
 }
 
-/** 走公共脊的其它关系（非父、非子、非整体收起占位） */
+/**
+ * 非父、非子、非整体收起占位的关系（含左右专属的关联测试/工单/产品需求）。
+ * 其中默认可并入「关联」干的子集见 `isAssocBundleRelation`。
+ */
 export function isBundleRelationType(type: string): boolean {
   return type !== 'parent' && type !== 'child' && type !== BUNDLE_FOLD_TYPE;
 }

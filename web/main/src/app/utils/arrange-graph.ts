@@ -1,6 +1,6 @@
 import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
-import { isFoldSummaryNode, relationBetween } from './graph.util';
+import { BUNDLE_FOLD_TYPE, isBundleRelationType, isFoldSummaryNode, relationBetween } from './graph.util';
 
 /** 左右分支和父卡片之间的空白，留给关系名。 */
 const H_GAP = 148;
@@ -10,13 +10,31 @@ const V_GAP = 112;
 const SIBLING_GAP = 28;
 /** 两种关系之间再隔开，主干不会粘在一起。 */
 const GROUP_GAP = 56;
-/** 上/下与其它关系共存时，父卡相对中线错开，供父干单独直出（与 route parentStem 一致） */
-export const PARENT_DUAL_EXIT_GAP = 56;
 
 const LEFT_TYPES = ['relate:idea', 'relate:ticket'] as const;
 const RIGHT_TYPES = ['relate:test_case'] as const;
 
 export type Side = 'left' | 'right' | 'top' | 'bottom';
+
+/**
+ * 默认可合并为「关联」整体收起的关系（阻塞/重复/提及/关联…）。
+ * 不含父/子，也不含左右专属的关联测试/工单/产品需求。
+ */
+export function isAssocBundleRelation(type: string): boolean {
+  if (type === BUNDLE_FOLD_TYPE) {
+    return true;
+  }
+  if (!isBundleRelationType(type)) {
+    return false;
+  }
+  if ((LEFT_TYPES as readonly string[]).includes(type)) {
+    return false;
+  }
+  if ((RIGHT_TYPES as readonly string[]).includes(type)) {
+    return false;
+  }
+  return true;
+}
 
 interface Extent {
   left: number;
@@ -102,11 +120,12 @@ function groupsOf(graph: DependencyGraph, parentId: string): RelationGroup[] {
 
 /**
  * 在思维导图坐标上覆盖已有位置（保存坐标 / 拖拽 pin）。
- * skipIds：会话 pin / 换侧重锚结果勿用旧 saved 盖回（否则拖卡后收起再展开会弹回）。
+ * skipIds：会话 pin / 换侧重锚结果勿用旧 saved 盖回。
+ * 方位一致性由调用方先按 `sideMatchesPreference` 过滤 overrides。
  */
-export function mergeLayoutPositions<T extends { x: number; y: number }>(
+export function mergeLayoutPositions<T extends { x: number; y: number; side?: Side }>(
   arranged: ReadonlyMap<string, T>,
-  overrides: ReadonlyMap<string, Partial<T>>,
+  overrides: ReadonlyMap<string, Partial<T> & { side?: Side }>,
   skipIds?: ReadonlySet<string> | null,
 ): Map<string, T> {
   const next = new Map(arranged);
@@ -120,19 +139,81 @@ export function mergeLayoutPositions<T extends { x: number; y: number }>(
 }
 
 /**
+ * 明确的关系方位偏好 vs 卡片/个人留存 side。
+ * 无明确偏好时不丢弃留存；有偏好且不一致 → 按最新方位初始展示。
+ */
+export function sideMatchesPreference(retained?: Side, preferred?: Side): boolean {
+  if (!preferred) {
+    return true;
+  }
+  if (!retained) {
+    return true;
+  }
+  return retained === preferred;
+}
+
+/** 节点 → 其关系类型上的明确方位偏好（含关联类跟 bundle）。 */
+export function preferredSideByNode(
+  graph: DependencyGraph,
+  relationSides: ReadonlyMap<string, Side> | null | undefined,
+): Map<string, Side> {
+  const result = new Map<string, Side>();
+  if (!relationSides?.size) {
+    return result;
+  }
+  const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
+  for (const node of graph.nodes) {
+    if (node.relationHub || !node.revealedByAnchorId) {
+      continue;
+    }
+    const type =
+      node.foldSummary?.relationType ??
+      relationBetween(graph.edges, nodes, node.revealedByAnchorId, node.id);
+    const preferred =
+      relationSides.get(type) ??
+      (type !== BUNDLE_FOLD_TYPE && isAssocBundleRelation(type)
+        ? relationSides.get(BUNDLE_FOLD_TYPE)
+        : undefined);
+    if (preferred) {
+      result.set(node.id, preferred);
+    }
+  }
+  return result;
+}
+
+/** 只保留 side 与明确方位偏好一致（或无 side / 无偏好）的坐标。 */
+export function retainPositionsForPreferredSide<T extends { side?: Side }>(
+  positions: ReadonlyMap<string, T>,
+  preferredByNode: ReadonlyMap<string, Side>,
+): Map<string, T> {
+  const next = new Map<string, T>();
+  for (const [id, pos] of positions) {
+    if (sideMatchesPreference(pos.side, preferredByNode.get(id))) {
+      next.set(id, pos);
+    }
+  }
+  return next;
+}
+
+/**
  * 根节点默认四向分边（保持原逻辑）：
  * 父在上、子在下，产品需求/工单偏左，测试偏右，关联/重复/阻塞等在上。
- * preferred 来自折叠占位拖拽；父工作项卡拖拽也会写入 parent 偏好。
+ * preferred 来自折叠占位拖拽写入的关系方位偏好。
  */
 export function sideOfType(type: string, preferred?: ReadonlyMap<string, Side> | null): Side {
-  const override = preferred?.get(type);
+  // 拖「关联」整体占位时只写 bundle 偏好，展开后各关联类型跟 bundle 走
+  const override =
+    preferred?.get(type) ??
+    (type !== BUNDLE_FOLD_TYPE && isAssocBundleRelation(type)
+      ? preferred?.get(BUNDLE_FOLD_TYPE)
+      : undefined);
   if (override) {
     return override;
   }
   if (type === 'child') {
     return 'bottom';
   }
-  if (type === 'parent' || type === 'bundle') {
+  if (type === 'parent' || type === BUNDLE_FOLD_TYPE) {
     return 'top';
   }
   if ((LEFT_TYPES as readonly string[]).includes(type)) {
@@ -146,16 +227,18 @@ export function sideOfType(type: string, preferred?: ReadonlyMap<string, Side> |
 
 /**
  * 根按 sideOfType；嵌套默认沿父侧继续向外。
- * 有个人偏好时该关系类型跟偏好走（折叠占位 / 父工作项拖拽写入）。
+ * 有个人偏好时该关系类型跟偏好走（折叠占位拖拽写入）。
  */
 function effectiveSide(
   type: string,
   flow: Side | 'cross',
   preferred?: ReadonlyMap<string, Side> | null,
 ): Side {
-  const override = preferred?.get(type);
-  if (override) {
-    return override;
+  const hasPreferred =
+    preferred?.has(type) ||
+    (Boolean(preferred?.has(BUNDLE_FOLD_TYPE)) && isAssocBundleRelation(type));
+  if (hasPreferred) {
+    return sideOfType(type, preferred);
   }
   if (flow !== 'cross') {
     return flow;
@@ -199,8 +282,8 @@ export function groupRank(type: string, side: Side): number {
     return index === -1 ? RIGHT_TYPES.length : index;
   }
   if (side === 'top') {
-    // 父靠内；其它关系 / 整体收起占位靠外
-    return type === 'parent' ? 0 : 1;
+    // 父靠内、关联整体其次，便于同脊 T 分叉；其余稳定靠后
+    return type === 'parent' ? 0 : type === BUNDLE_FOLD_TYPE ? 1 : 2;
   }
   return type === 'child' ? 0 : 1;
 }
@@ -265,93 +348,6 @@ function stackOnAxis(items: StackItem[], side: Side): Placed[] {
     cursor += size + item.gapAfter;
     return vertical ? shiftPlaced(item.placed, along, delta) : shiftPlaced(item.placed, delta, along);
   });
-}
-
-/**
- * 同侧同时有「父」与其它关系时：父排在靠父卡的一圈，其它关系再往外一圈。
- * 避免父与关联/阻塞等并排共脊，便于其它关系日后整体收起。
- */
-function stackSideSeparatingParent(
-  graph: DependencyGraph,
-  groups: RelationGroup[],
-  side: Side,
-  seen: Set<string>,
-  preferred?: ReadonlyMap<string, Side> | null,
-): Placed[] {
-  const parentGroups = groups.filter((group) => group.type === 'parent');
-  const otherGroups = groups.filter((group) => group.type !== 'parent');
-  const parentMemberIds = parentGroups.flatMap((group) => group.memberIds);
-  if (!parentGroups.length || !otherGroups.length) {
-    const stacked = stackOnAxis(itemsOf(graph, groups, side, seen, preferred), side);
-    // 仅父或仅其它：父成员仍贴中线，保证初始化父线竖直
-    return parentMemberIds.length
-      ? centerMemberCardsOnAxis(stacked, side, parentMemberIds)
-      : stacked;
-  }
-  // 父卡先贴中线；上/下再错开 PARENT_DUAL_EXIT_GAP，与路由父干一致，避免和其它关系共中线
-  let parentPlaced = centerMemberCardsOnAxis(
-    stackOnAxis(itemsOf(graph, parentGroups, side, seen, preferred), side),
-    side,
-    parentMemberIds,
-  );
-  if (side === 'top' || side === 'bottom') {
-    // 与 parentStemCenter 默认方向一致：中线被占用时父干取 axis - gap
-    parentPlaced = parentPlaced.map((item) => shiftPlaced(item, -PARENT_DUAL_EXIT_GAP, 0));
-  }
-  let otherPlaced = stackOnAxis(itemsOf(graph, otherGroups, side, seen, preferred), side);
-  const parentExt = unionExtent(parentPlaced.map((item) => item.extent));
-  const otherExt = unionExtent(otherPlaced.map((item) => item.extent));
-  // 把其它关系整体推到父带外侧
-  if (side === 'top') {
-    const dy = Math.min(0, parentExt.top - GROUP_GAP - otherExt.bottom);
-    if (dy) {
-      otherPlaced = otherPlaced.map((item) => shiftPlaced(item, 0, dy));
-    }
-  } else if (side === 'bottom') {
-    const dy = Math.max(0, parentExt.bottom + GROUP_GAP - otherExt.top);
-    if (dy) {
-      otherPlaced = otherPlaced.map((item) => shiftPlaced(item, 0, dy));
-    }
-  } else if (side === 'left') {
-    const dx = Math.min(0, parentExt.left - GROUP_GAP - otherExt.right);
-    if (dx) {
-      otherPlaced = otherPlaced.map((item) => shiftPlaced(item, dx, 0));
-    }
-  } else {
-    const dx = Math.max(0, parentExt.right + GROUP_GAP - otherExt.left);
-    if (dx) {
-      otherPlaced = otherPlaced.map((item) => shiftPlaced(item, dx, 0));
-    }
-  }
-  return [...parentPlaced, ...otherPlaced];
-}
-
-/** 指定成员卡片中心落到侧向轴上（arrange 相对父卡原点），父线可竖直/水平直出 */
-function centerMemberCardsOnAxis(placedList: Placed[], side: Side, memberIds: string[]): Placed[] {
-  if (!placedList.length || !memberIds.length) {
-    return placedList;
-  }
-  const coords: number[] = [];
-  for (const id of memberIds) {
-    for (const placed of placedList) {
-      const pos = placed.positions.get(id);
-      if (!pos) {
-        continue;
-      }
-      coords.push(side === 'left' || side === 'right' ? pos.y : pos.x);
-      break;
-    }
-  }
-  if (!coords.length) {
-    return placedList;
-  }
-  const avg = coords.reduce((sum, value) => sum + value, 0) / coords.length;
-  if (Math.abs(avg) < 1) {
-    return placedList;
-  }
-  return side === 'left' || side === 'right'
-    ? placedList.map((item) => shiftPlaced(item, 0, -avg))
-    : placedList.map((item) => shiftPlaced(item, -avg, 0));
 }
 
 function withSide(placed: Placed, id: string, side: Side): Placed {
@@ -470,12 +466,15 @@ export function settleReanchoredSubtree<T extends { x: number; y: number; side?:
 }
 
 /**
- * 展开/收起：有 pin 的工作项与已拖动的 +N 保位；其余相对父卡按思维导图偏移补位。
+ * 展开/收起：有 pin 且（无明确方位偏好，或 pin 方位与偏好一致）则保位；
+ * 明确偏好与留存方位不同 → 按 arrange 在新侧初始展示。
+ * 无 pin 时相对父卡按思维导图偏移补位。
  */
 export function resolvePinnedExpandCollapse<T extends { x: number; y: number; side?: Side }>(
   graph: DependencyGraph,
   arranged: ReadonlyMap<string, T>,
   pins: ReadonlyMap<string, T>,
+  preferredByNode?: ReadonlyMap<string, Side> | null,
 ): Map<string, T> {
   const nodeById = new Map(graph.nodes.map((node) => [node.id, node]));
   const childrenOf = new Map<string, string[]>();
@@ -498,10 +497,15 @@ export function resolvePinnedExpandCollapse<T extends { x: number; y: number; si
       continue;
     }
     const node = nodeById.get(id);
-    // 工作项与折叠 +N 均尊重 pin（收起后拖占位、再展开继承 side）
     const pin = pins.get(id);
-    if (pin) {
-      result.set(id, { ...arrangedPos, x: pin.x, y: pin.y, side: pin.side ?? arrangedPos.side });
+    const preferred = preferredByNode?.get(id);
+    if (pin && sideMatchesPreference(pin.side, preferred)) {
+      result.set(id, {
+        ...arrangedPos,
+        x: pin.x,
+        y: pin.y,
+        side: preferred ?? pin.side ?? arrangedPos.side,
+      });
     } else {
       const parentId = node?.revealedByAnchorId;
       const parent = parentId ? result.get(parentId) : undefined;
@@ -513,9 +517,9 @@ export function resolvePinnedExpandCollapse<T extends { x: number; y: number; si
               ...arrangedPos,
               x: parent.x + (arrangedPos.x - arrangedParent.x),
               y: parent.y + (arrangedPos.y - arrangedParent.y),
-              side: arrangedPos.side ?? parent.side,
+              side: preferred ?? arrangedPos.side ?? parent.side,
             }
-          : arrangedPos,
+          : { ...arrangedPos, side: preferred ?? arrangedPos.side },
       );
     }
     queue.push(...(childrenOf.get(id) ?? []));
@@ -578,13 +582,8 @@ function arrangeNode(
     if (!visible.length) {
       continue;
     }
-    // 下侧仍是子项直出；其它侧父与关联等分层，避免共脊
-    placedBySide.set(
-      side,
-      side === 'bottom'
-        ? stackOnAxis(itemsOf(graph, visible, side, seen, preferred), side)
-        : stackSideSeparatingParent(graph, visible, side, seen, preferred),
-    );
+    // 同侧关系共轴排列；上侧父与关联等同脊分叉，下侧子项直出
+    placedBySide.set(side, stackOnAxis(itemsOf(graph, visible, side, seen, preferred), side));
   }
 
   if (flow === 'cross') {

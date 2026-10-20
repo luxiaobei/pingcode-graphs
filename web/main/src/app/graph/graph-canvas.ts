@@ -308,18 +308,9 @@ export class GraphCanvas {
       const data = untracked(() => this.graph());
       const draggedId = this.draggingNodeId;
       this.draggingNodeId = null;
-      // 写 side / 父关系偏好；父卡换方位时整组重锚到新侧
+      // 写 side；仅折叠占位松手时同步关系方位偏好（父/子普通卡不写偏好、不整组重锚）
       this.positions.snapshot(this.g6, data, draggedId, true);
       if (!data) {
-        return;
-      }
-      const parentLayout =
-        draggedId != null ? this.positions.reanchorParentAfterDrag(data, draggedId) : null;
-      if (parentLayout) {
-        void this.applyLayoutPositions(data, parentLayout, {
-          viewport: 'none',
-          keepHiddenPins: true,
-        }).catch(() => undefined);
         return;
       }
       this.applyGraphData(data);
@@ -328,7 +319,7 @@ export class GraphCanvas {
   }
 
   /**
-   * 拖拽中按当前位置更新 side 并重算正交折点（不写关系偏好，松手再整组重锚）。
+   * 拖拽中按当前位置更新 side 并重算正交折点（不写关系偏好；松手后仅折叠占位写偏好）。
    */
   private syncEdgesWhileDragging(): void {
     const g6 = this.g6;

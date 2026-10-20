@@ -1,7 +1,40 @@
-import type { DependencyGraph } from '../entities/graph.entity';
-import type { Side } from './arrange-graph';
-import { isFoldSummaryNode, siblingsOfRelation } from './graph.util';
+import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
+import { isAssocBundleRelation, type Side } from './arrange-graph';
+import {
+  BUNDLE_FOLD_TYPE,
+  isFoldSummaryNode,
+  relationBetween,
+  siblingsOfRelation,
+} from './graph.util';
 import type { GraphNodePosition } from './to-g6-data';
+
+/**
+ * 折叠占位对应的子卡。
+ * 「关联」整体（relationType=bundle）要匹配所有可并入干的类型，不能只找 type===bundle。
+ */
+function siblingsForFold(
+  graph: DependencyGraph,
+  parentId: string,
+  relationType: string,
+  options?: { excludeFoldSummary?: boolean },
+): GraphEntity[] {
+  if (relationType !== BUNDLE_FOLD_TYPE) {
+    return siblingsOfRelation(graph, parentId, relationType, options);
+  }
+  const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
+  const excludeFold = options?.excludeFoldSummary === true;
+  return graph.nodes.filter((item) => {
+    if (item.relationHub || item.revealedByAnchorId !== parentId) {
+      return false;
+    }
+    if (excludeFold && isFoldSummaryNode(item)) {
+      return false;
+    }
+    const type =
+      item.foldSummary?.relationType ?? relationBetween(graph.edges, nodes, parentId, item.id);
+    return isAssocBundleRelation(type);
+  });
+}
 
 export interface ReanchorCluster {
   ids: Set<string>;
@@ -48,7 +81,7 @@ export function placeFoldsAtExpandedSlots(
     if (!fold || !parentId) {
       continue;
     }
-    const kids = siblingsOfRelation(prev, parentId, fold.relationType, {
+    const kids = siblingsForFold(prev, parentId, fold.relationType, {
       excludeFoldSummary: true,
     });
     const points = kids
@@ -130,7 +163,7 @@ export function clearStalePinsAfterFoldDrag(
     }
     const relationType = node.foldSummary.relationType;
     const clusterIds = new Set<string>();
-    for (const child of siblingsOfRelation(data, parentId, relationType, {
+    for (const child of siblingsForFold(data, parentId, relationType, {
       excludeFoldSummary: true,
     })) {
       const childPin = pins.get(child.id);

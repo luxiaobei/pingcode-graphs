@@ -44,8 +44,8 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
   mention: { label: '提及' },
   parent: { label: '父工作项' },
   child: { label: '子工作项' },
-  /** 上方位等其它关系整体收起时的边文案 */
-  bundle: { label: '关系' },
+  /** 上方位父/关联等整体收起时的边文案 */
+  bundle: { label: '关联' },
 };
 
 /** 与 PJM 工作项卡片一致：宽 262，高 80。 */

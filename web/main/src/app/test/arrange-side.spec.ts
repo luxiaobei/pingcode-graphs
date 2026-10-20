@@ -3,7 +3,9 @@ import type { DependencyGraph } from '../entities/graph.entity';
 import {
   arrangeGraph,
   mergeLayoutPositions,
+  preferredSideByNode,
   resolvePinnedExpandCollapse,
+  retainPositionsForPreferredSide,
   sideFromDelta,
   sideFromParent,
   sideOfType,
@@ -85,7 +87,7 @@ describe('arrangeGraph + preferredSides', () => {
 });
 
 describe('resolvePinnedExpandCollapse', () => {
-  it('有 pin 时优先用 pin 坐标与 side', () => {
+  it('无明确方位偏好时有 pin 则用 pin 坐标', () => {
     const graph: DependencyGraph = {
       rootId: 'root',
       depth: 1,
@@ -103,21 +105,56 @@ describe('resolvePinnedExpandCollapse', () => {
     const layout = resolvePinnedExpandCollapse(graph, arranged, pins);
     expect(layout.get('c1')).toMatchObject({ x: 700, y: 400, side: 'right' });
   });
+
+  it('明确方位与 pin 不同：按 arrange 新侧初始展示', () => {
+    const graph: DependencyGraph = {
+      rootId: 'root',
+      depth: 1,
+      nodes: [
+        { id: 'root', depth: 0 },
+        { id: 'm1', depth: 1, revealedByAnchorId: 'root' },
+      ],
+      edges: [{ id: 'e', source: 'root', target: 'm1', relationType: 'mention', label: '提及' }],
+    };
+    const sides = new Map([['bundle', 'right' as const]]);
+    const arranged = arrangeGraph(graph, sides);
+    const preferred = preferredSideByNode(graph, sides);
+    expect(preferred.get('m1')).toBe('right');
+    const pins = new Map([
+      ['root', { x: 0, y: 0 }],
+      ['m1', { x: 0, y: -180, side: 'top' as const }],
+    ]);
+    const layout = resolvePinnedExpandCollapse(graph, arranged, pins, preferred);
+    expect(layout.get('m1')?.side).toBe('right');
+    expect(layout.get('m1')?.x).toBe(arranged.get('m1')?.x);
+    expect(layout.get('m1')?.y).toBe(arranged.get('m1')?.y);
+  });
 });
 
 describe('mergeLayoutPositions', () => {
   it('skipIds 保护换侧重锚结果', () => {
     const arranged = new Map([['a', { x: -100, y: 0, side: 'left' as const }]]);
     const saved = new Map([['a', { x: 0, y: -100, side: 'top' as const }]]);
-    expect(mergeLayoutPositions(arranged, saved as any, new Set(['a'])).get('a')).toEqual({
+    expect(mergeLayoutPositions(arranged, saved, new Set(['a'])).get('a')).toEqual({
       x: -100,
       y: 0,
       side: 'left',
     });
-    expect(mergeLayoutPositions(arranged, saved as any).get('a')).toEqual({
+    expect(mergeLayoutPositions(arranged, saved).get('a')).toEqual({
       x: 0,
       y: -100,
       side: 'top',
     });
+  });
+
+  it('retainPositionsForPreferredSide：方位不同丢掉，相同保留', () => {
+    const preferred = new Map([['a', 'right' as const]]);
+    const saved = new Map([
+      ['a', { x: 0, y: -100, side: 'top' as const }],
+      ['b', { x: 1, y: 2, side: 'right' as const }],
+    ]);
+    const kept = retainPositionsForPreferredSide(saved, preferred);
+    expect(kept.has('a')).toBe(false);
+    expect(kept.get('b')).toEqual({ x: 1, y: 2, side: 'right' });
   });
 });

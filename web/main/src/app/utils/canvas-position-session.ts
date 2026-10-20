@@ -1,5 +1,5 @@
 import type { Graph } from '@antv/g6';
-import { graphNodeHalf } from '../constants/graph.constants';
+import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
 import type { DependencyGraph } from '../entities/graph.entity';
 import {
   arrangeGraph,
@@ -347,7 +347,9 @@ export class CanvasPositionSession {
       return;
     }
     const fold = isFoldSummaryNode(node);
-    const half = graphNodeHalf(node);
+    const half = fold
+      ? { w: FOLD_SUMMARY_SIZE.width / 2, h: FOLD_SUMMARY_SIZE.height / 2 }
+      : { w: GRAPH_NODE_SIZE.width / 2, h: GRAPH_NODE_SIZE.height / 2 };
     const side = sideFromParent(anchor, pin, half);
     this.pins.set(draggedId, { ...pin, side });
 

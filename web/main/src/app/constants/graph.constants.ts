@@ -60,18 +60,8 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
 /** 与 PJM 工作项卡片一致：宽 262，高 80。 */
 export const GRAPH_NODE_SIZE = { width: 262, height: 80 } as const;
 
-/** 收起关系时的「+ N」占位。 */
+/** 收起关系时的「+ N」占位节点尺寸 */
 export const FOLD_SUMMARY_SIZE = { width: 52, height: 28 } as const;
-
-/** 工作项卡片用固定尺寸，「+ N」用占位尺寸。 */
-export function graphNodeSize(node: GraphEntity | undefined): { width: number; height: number } {
-  return node?.foldSummary ? FOLD_SUMMARY_SIZE : GRAPH_NODE_SIZE;
-}
-
-export function graphNodeHalf(node: GraphEntity | undefined): { w: number; h: number } {
-  const size = graphNodeSize(node);
-  return { w: size.width / 2, h: size.height / 2 };
-}
 
 function entityOf(datum: NodeData): GraphEntity | undefined {
   return datum.data?.['item'] as GraphEntity | undefined;
@@ -107,11 +97,13 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
   node: {
     type: 'work-item-card',
     style: {
-      size: (d: NodeData) => {
-        const box = graphNodeSize(entityOf(d));
-        const card: [number, number] = [box.width, box.height];
-        return nodeChrome(d, card, card, [1, 1]);
-      },
+      size: (d: NodeData) =>
+        nodeChrome(
+          d,
+          [GRAPH_NODE_SIZE.width, GRAPH_NODE_SIZE.height],
+          [FOLD_SUMMARY_SIZE.width, FOLD_SUMMARY_SIZE.height],
+          [1, 1],
+        ),
       radius: (d: NodeData) => nodeChrome(d, 8, 999, 0),
       fill: (d: NodeData) => nodeChrome(d, '#ffffff', '#f5f3ff', 'transparent'),
       stroke: (d: NodeData) => nodeChrome(d, '#94a3b8', '#7c3aed', 'transparent'),

@@ -1,11 +1,12 @@
 import type { EdgeData } from '@antv/g6';
-import { GRAPH_NODE_SIZE, graphNodeHalf } from '../constants/graph.constants';
-import type { DependencyGraph } from '../entities/graph.entity';
+import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
+import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import { PARENT_DUAL_EXIT_GAP, type Side } from './arrange-graph';
 import { unstackSharedStrokes } from './unstack-strokes';
 import {
   isBundleRelationType,
   isFoldSummaryId,
+  isFoldSummaryNode,
   relationBetween,
   relationBundleFoldKey,
   relationFoldKey,
@@ -16,8 +17,14 @@ export type GraphNodePosition = { x: number; y: number; side?: Side };
 
 const HALF_W = GRAPH_NODE_SIZE.width / 2;
 const HALF_H = GRAPH_NODE_SIZE.height / 2;
+const FOLD_HALF_W = FOLD_SUMMARY_SIZE.width / 2;
+const FOLD_HALF_H = FOLD_SUMMARY_SIZE.height / 2;
 const SPINE_PAD = 28;
 const FORK_PAD = 44;
+
+function halfOf(node: GraphEntity | undefined): { w: number; h: number } {
+  return isFoldSummaryNode(node) ? { w: FOLD_HALF_W, h: FOLD_HALF_H } : { w: HALF_W, h: HALF_H };
+}
 
 interface TrunkMember {
   parentId: string;
@@ -175,7 +182,7 @@ export function trunkEdges(
       const fork = forkAt(
         group.placed.map((item) => ({
           pos: item.child,
-          half: graphNodeHalf(nodes.get(item.member.childId)),
+          half: halfOf(nodes.get(item.member.childId)),
         })),
         side,
       );

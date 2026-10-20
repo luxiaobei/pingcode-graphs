@@ -1,4 +1,4 @@
-import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
+import { foldSummarySize, GRAPH_NODE_SIZE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import { isFoldSummaryNode, relationBetween } from './graph.util';
 
@@ -46,8 +46,12 @@ interface StackItem {
   gapAfter: number;
 }
 
+function nodeSize(node: GraphEntity | undefined): { width: number; height: number } {
+  return isFoldSummaryNode(node) ? foldSummarySize(node?.foldSummary?.count ?? 0) : GRAPH_NODE_SIZE;
+}
+
 function nodeExtent(node: GraphEntity | undefined): Extent {
-  const size = isFoldSummaryNode(node) ? FOLD_SUMMARY_SIZE : GRAPH_NODE_SIZE;
+  const size = nodeSize(node);
   return {
     left: -size.width / 2,
     right: size.width / 2,
@@ -380,7 +384,7 @@ function itemsOf(
 }
 
 function boxOf(node: GraphEntity | undefined, pos: { x: number; y: number }): Extent {
-  const size = isFoldSummaryNode(node) ? FOLD_SUMMARY_SIZE : GRAPH_NODE_SIZE;
+  const size = nodeSize(node);
   return {
     left: pos.x - size.width / 2,
     right: pos.x + size.width / 2,
@@ -616,7 +620,7 @@ export function arrangeGraph(
   );
   let cursor = root.extent.right + H_GAP + GRAPH_NODE_SIZE.width / 2;
   for (const node of missing) {
-    const half = isFoldSummaryNode(node) ? FOLD_SUMMARY_SIZE.width / 2 : GRAPH_NODE_SIZE.width / 2;
+    const half = nodeSize(node).width / 2;
     positions.set(node.id, { x: cursor, y: 0 });
     cursor += half * 2 + SIBLING_GAP;
   }

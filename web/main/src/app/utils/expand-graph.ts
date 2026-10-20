@@ -158,7 +158,7 @@ export function buildVisibleGraph(
     if (topBundleEntries.length) {
       const bundleKey = relationBundleFoldKey(id);
       const bundleCount = topBundleEntries.reduce((sum, [, count]) => sum + count, 0);
-      // 仅一种时边上仍用该关系名；多种时用「关系」
+      // 仅一种时边上仍用该关系名；多种时用「关联」
       const bundleType =
         topBundleEntries.length === 1
           ? (topBundleEntries[0]?.[0] ?? BUNDLE_FOLD_TYPE)

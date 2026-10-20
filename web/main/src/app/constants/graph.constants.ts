@@ -18,7 +18,13 @@ export const GRAPH_ZOOM_RANGE: [number, number] = [0.2, 3];
 /** 初次布局落位后再适应画布的延迟（ms） */
 export const GRAPH_FIT_SETTLE_MS = 300;
 
-export const DEFAULT_EDGE_COLOR = '#b1b1b1';
+export const DEFAULT_EDGE_COLOR = '#CCD0D8';
+
+/** 关系文案。只比线条 #CCD0D8 深一点点。 */
+export const EDGE_LABEL_COLOR = '#C0C4CC';
+
+/** 箭头 [沿边长度, 张开高度]。半角约 45°，两边斜线比原先短一截。 */
+export const EDGE_ARROW_SIZE: [number, number] = [4, 10];
 
 /** 非工作项节点的默认图标（thy-icon）。 */
 export const KIND_ICON_STYLE: Record<string, { icon: string; color: string }> = {
@@ -45,14 +51,40 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
   parent: { label: '父工作项' },
   child: { label: '子工作项' },
   /** 上方位等其它关系整体收起时的边文案 */
-  bundle: { label: '关系' },
+  bundle: { label: '关联' },
 };
 
 /** 与 PJM 工作项卡片一致：宽 262，高 80。 */
 export const GRAPH_NODE_SIZE = { width: 262, height: 80 } as const;
 
-/** 收起关系时的「+ N」占位节点尺寸 */
-export const FOLD_SUMMARY_SIZE = { width: 52, height: 28 } as const;
+/** thy-tag lg 高度。箭头停在占位边上，宽高要和标签本身一致。 */
+const FOLD_SUMMARY_HEIGHT = 28;
+
+/** thy-tag lg：左右 padding 12px，边框 1px。 */
+const FOLD_TAG_CHROME_X = 12 * 2 + 1 * 2;
+
+const FOLD_LABEL_FONT =
+  '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Helvetica Neue", Arial, sans-serif';
+
+let foldLabelCanvas: HTMLCanvasElement | null = null;
+
+function foldLabelWidth(text: string): number {
+  foldLabelCanvas ??= typeof document === 'undefined' ? null : document.createElement('canvas');
+  const context = foldLabelCanvas?.getContext('2d');
+  if (!context) {
+    return 12.5 + text.replace(/^\+ /, '').length * 8.8;
+  }
+  context.font = FOLD_LABEL_FONT;
+  return context.measureText(text).width;
+}
+
+/** 「+ N」占位尺寸，贴合 thy-tag lg，避免箭头和标签之间留空。 */
+export function foldSummarySize(count: number): { width: number; height: number } {
+  return {
+    width: Math.ceil(foldLabelWidth(`+ ${count}`) + FOLD_TAG_CHROME_X),
+    height: FOLD_SUMMARY_HEIGHT,
+  };
+}
 
 function entityOf(datum: NodeData): GraphEntity | undefined {
   return datum.data?.['item'] as GraphEntity | undefined;
@@ -88,13 +120,17 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
   node: {
     type: 'work-item-card',
     style: {
-      size: (d: NodeData) =>
-        nodeChrome(
-          d,
-          [GRAPH_NODE_SIZE.width, GRAPH_NODE_SIZE.height],
-          [FOLD_SUMMARY_SIZE.width, FOLD_SUMMARY_SIZE.height],
-          [1, 1],
-        ),
+      size: (d: NodeData) => {
+        const item = entityOf(d);
+        if (item?.relationHub) {
+          return [1, 1];
+        }
+        if (item?.foldSummary) {
+          const size = foldSummarySize(item.foldSummary.count);
+          return [size.width, size.height];
+        }
+        return [GRAPH_NODE_SIZE.width, GRAPH_NODE_SIZE.height];
+      },
       radius: (d: NodeData) => nodeChrome(d, 8, 999, 0),
       fill: (d: NodeData) => nodeChrome(d, '#ffffff', '#f5f3ff', 'transparent'),
       stroke: (d: NodeData) => nodeChrome(d, '#94a3b8', '#7c3aed', 'transparent'),
@@ -116,13 +152,18 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
       radius: 10,
       endArrow: (d: EdgeData) => d.data?.['endArrow'] !== false,
       endArrowType: 'simple',
+      endArrowSize: EDGE_ARROW_SIZE,
       endArrowLineJoin: 'miter',
       labelAutoRotate: false,
       labelText: (d: EdgeData) => (d.data?.['label'] as string) ?? '',
-      labelFill: DEFAULT_EDGE_COLOR,
+      labelFill: EDGE_LABEL_COLOR,
       labelFontSize: 12,
       labelFontWeight: 600,
       labelBackground: false,
+    },
+    state: {
+      /** 悬停非主卡片时，它到主卡片的连线 */
+      link: { stroke: '#6698ff' },
     },
   },
   behaviors: [

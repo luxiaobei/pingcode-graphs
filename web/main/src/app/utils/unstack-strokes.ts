@@ -1,5 +1,5 @@
 import type { EdgeData } from '@antv/g6';
-import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
+import { foldSummarySize, GRAPH_NODE_SIZE } from '../constants/graph.constants';
 import type { GraphEntity } from '../entities/graph.entity';
 import { planStroke, resetStrokePlans } from '../graph/flat-polyline';
 import { isFoldSummaryNode } from './graph.util';
@@ -70,7 +70,9 @@ function fullPolyline(
 }
 
 function halfOf(node: GraphEntity | undefined): { w: number; h: number } {
-  const size = isFoldSummaryNode(node) ? FOLD_SUMMARY_SIZE : GRAPH_NODE_SIZE;
+  const size = isFoldSummaryNode(node)
+    ? foldSummarySize(node?.foldSummary?.count ?? 0)
+    : GRAPH_NODE_SIZE;
   return { w: size.width / 2, h: size.height / 2 };
 }
 

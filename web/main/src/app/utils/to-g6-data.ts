@@ -1,6 +1,6 @@
 import type { GraphData, NodeData } from '@antv/g6';
 import type { DependencyGraph, FoldMark, GraphEntity } from '../entities/graph.entity';
-import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
+import { GRAPH_NODE_SIZE, graphNodeSize } from '../constants/graph.constants';
 import { isFoldSummaryNode } from './graph.util';
 import { trunkEdges, type GraphNodePosition } from './route-graph-edges';
 
@@ -31,7 +31,7 @@ function toG6Node(
 ): NodeData {
   const position = positions?.get(item.id) ?? item.position;
   const fold = isFoldSummaryNode(item);
-  const size = fold ? FOLD_SUMMARY_SIZE : GRAPH_NODE_SIZE;
+  const size = graphNodeSize(item);
   const node: NodeData = {
     id: item.id,
     type: 'work-item-card',

@@ -38,11 +38,16 @@ import {
   nodeItemFromEvent,
   sharpenHtmlCamera,
 } from '../utils/g6-helpers';
-import { isFoldSummaryNode, isWorkItemEntity, openPivot } from '../utils/graph.util';
+import {
+  isFoldSummaryNode,
+  isWorkItemEntity,
+  openPivot,
+  relationBetween,
+} from '../utils/graph.util';
 import type { SavedNodePosition, SaveLayoutPayload } from '../utils/saved-graph-layout';
 import { toG6Data, type GraphNodePosition } from '../utils/to-g6-data';
+import { setFullStrokeEdges } from './flat-polyline';
 import { bindWorkItemCardRuntime } from './work-item-card';
-import './flat-polyline';
 
 @Component({
   selector: 'app-graph-canvas',
@@ -97,6 +102,13 @@ export class GraphCanvas {
   private draggingNodeId: string | null = null;
   /** 拖拽中重算折线，避免边被拉成斜线 */
   private dragEdgeRaf = 0;
+  /** 正在悬停的非主卡片。空表示连线用默认色。 */
+  private hoveredCardId: string | null = null;
+  /** 上一轮染过色的边，离开时要清掉。 */
+  private linkedEdges: string[] = [];
+  /** 染色排队：上一次画完再画下一次，避免快速划过时颜色错乱。 */
+  private hoverJob: Promise<void> | null = null;
+  private hoverAgain = false;
 
   private readonly zoomMinPercent = Math.round(GRAPH_ZOOM_RANGE[0] * 100);
   private readonly zoomMaxPercent = Math.round(GRAPH_ZOOM_RANGE[1] * 100);
@@ -217,6 +229,7 @@ export class GraphCanvas {
     const container = this.host().nativeElement;
     this.g6 = new Graph({ container, ...graphHostSize(container), ...GRAPH_OPTIONS });
     this.bindTraceMenu(container);
+    this.bindCardHover(container);
     this.bindGraphEvents();
     this.bindHtmlCamera(container);
     this.resizeObserver = new ResizeObserver(() => {
@@ -241,6 +254,9 @@ export class GraphCanvas {
     this.htmlCameraObserver?.disconnect();
     this.htmlCameraObserver = null;
     this.positions.clear();
+    this.hoveredCardId = null;
+    this.linkedEdges = [];
+    setFullStrokeEdges([]);
     window.clearTimeout(this.traceMenuTimer);
     this.traceStop.abort();
     this.g6?.off();
@@ -355,7 +371,91 @@ export class GraphCanvas {
         },
       })),
     );
-    void g6.draw();
+    void g6.draw().then(() => {
+      if (this.linkedEdges.length) {
+        this.paintHoverLink();
+      }
+    });
+  }
+
+  /** 悬停非主卡片时，把它到主卡片的折线整段染成高亮色。 */
+  private bindCardHover(container: HTMLElement): void {
+    const signal = this.traceStop.signal;
+    container.addEventListener('mouseover', this.onCardHover, { signal });
+    container.addEventListener('mouseout', this.onCardHoverOut, { signal });
+  }
+
+  private readonly onCardHover = (event: MouseEvent): void => {
+    const id = hoverCardId(
+      event.target,
+      untracked(() => this.graph()),
+    );
+    if (id === this.hoveredCardId) {
+      return;
+    }
+    this.hoveredCardId = id;
+    this.paintHoverLink();
+  };
+
+  private readonly onCardHoverOut = (event: MouseEvent): void => {
+    const data = untracked(() => this.graph());
+    if (hoverCardId(event.target, data) !== this.hoveredCardId) {
+      return;
+    }
+    // 滑到另一张卡片上时，交给 mouseover。
+    if (hoverCardId(event.relatedTarget, data)) {
+      return;
+    }
+    this.hoveredCardId = null;
+    this.paintHoverLink();
+  };
+
+  private paintHoverLink(): void {
+    if (this.hoverJob) {
+      this.hoverAgain = true;
+      return;
+    }
+    this.hoverJob = this.drawHoverLink()
+      .catch(() => undefined)
+      .finally(() => {
+        this.hoverJob = null;
+        if (!this.hoverAgain) {
+          return;
+        }
+        this.hoverAgain = false;
+        this.paintHoverLink();
+      });
+  }
+
+  private async drawHoverLink(): Promise<void> {
+    const graph = this.liveGraph();
+    if (!graph) {
+      return;
+    }
+    const data = untracked(() => this.graph());
+    const live = new Set((graph.getEdgeData() ?? []).map((edge) => String(edge.id)));
+    const next = new Set(
+      (data && this.hoveredCardId ? edgesToRoot(data, this.hoveredCardId) : []).filter((id) =>
+        live.has(id),
+      ),
+    );
+    const clear = this.linkedEdges.filter((id) => live.has(id) && !next.has(id));
+    this.linkedEdges = [...next];
+    setFullStrokeEdges(next);
+    const states: Record<string, string[]> = {};
+    for (const id of clear) {
+      states[id] = [];
+    }
+    for (const id of next) {
+      states[id] = ['link'];
+    }
+    if (!Object.keys(states).length) {
+      return;
+    }
+    await graph.setElementState(states, false);
+    if (this.linkedEdges.length) {
+      await graph.frontElement(this.linkedEdges);
+    }
   }
 
   /** 右键卡片不拖动；非当前工作项弹出「以此工作项追溯」。 */
@@ -526,6 +626,7 @@ export class GraphCanvas {
     }
 
     await graph.setElementState(buildElementStates(data), false).catch(() => undefined);
+    this.paintHoverLink();
   }
 
   /** 一键整理 / 首次进入：服务端位置优先，否则思维导图初始化。 */
@@ -593,6 +694,34 @@ export class GraphCanvas {
       this.fitTimer = null;
     }
   }
+}
+
+/** 主卡片、分叉点和「+ N」不染色。 */
+function hoverCardId(target: EventTarget | null, data: DependencyGraph | null): string | null {
+  const card = target instanceof Element ? target.closest<HTMLElement>('article.card') : null;
+  const id = card?.dataset['nodeId'];
+  const item = id && data ? data.nodes.find((node) => node.id === id) : undefined;
+  if (!data || !item || item.id === data.rootId || item.relationHub || isFoldSummaryNode(item)) {
+    return null;
+  }
+  return item.id;
+}
+
+/** 从这张卡片沿展开父级走回主卡片，边 id 与 trunkEdges 一致。 */
+function edgesToRoot(data: DependencyGraph, startId: string): string[] {
+  const nodes = new Map(data.nodes.map((node) => [node.id, node]));
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  let current = nodes.get(startId);
+  while (current?.revealedByAnchorId && !seen.has(current.id)) {
+    seen.add(current.id);
+    const parentId = current.revealedByAnchorId;
+    const relationType =
+      current.foldSummary?.relationType ?? relationBetween(data.edges, nodes, parentId, current.id);
+    ids.push(`${parentId}:${relationType}:${current.id}`);
+    current = nodes.get(parentId);
+  }
+  return ids;
 }
 
 function cardOf(event: Event): HTMLElement | null {

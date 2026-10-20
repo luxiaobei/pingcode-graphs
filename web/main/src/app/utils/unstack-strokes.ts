@@ -1,8 +1,7 @@
 import type { EdgeData } from '@antv/g6';
-import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
+import { graphNodeHalf } from '../constants/graph.constants';
 import type { GraphEntity } from '../entities/graph.entity';
 import { planStroke, resetStrokePlans } from '../graph/flat-polyline';
-import { isFoldSummaryNode } from './graph.util';
 
 type Point = [number, number];
 type NodePos = { x: number; y: number };
@@ -63,15 +62,10 @@ function fullPolyline(
     return undefined;
   }
   return dedupe([
-    cardAnchor(source, first, halfOf(nodes.get(String(edge.source)))),
+    cardAnchor(source, first, graphNodeHalf(nodes.get(String(edge.source)))),
     ...control,
-    cardAnchor(target, last, halfOf(nodes.get(String(edge.target)))),
+    cardAnchor(target, last, graphNodeHalf(nodes.get(String(edge.target)))),
   ]);
-}
-
-function halfOf(node: GraphEntity | undefined): { w: number; h: number } {
-  const size = isFoldSummaryNode(node) ? FOLD_SUMMARY_SIZE : GRAPH_NODE_SIZE;
-  return { w: size.width / 2, h: size.height / 2 };
 }
 
 function cardAnchor(node: NodePos, toward: Point, half: { w: number; h: number }): Point {

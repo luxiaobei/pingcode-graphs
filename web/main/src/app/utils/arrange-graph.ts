@@ -1,4 +1,4 @@
-import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
+import { graphNodeSize, GRAPH_NODE_SIZE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import { isFoldSummaryNode, relationBetween } from './graph.util';
 
@@ -47,7 +47,7 @@ interface StackItem {
 }
 
 function nodeExtent(node: GraphEntity | undefined): Extent {
-  const size = isFoldSummaryNode(node) ? FOLD_SUMMARY_SIZE : GRAPH_NODE_SIZE;
+  const size = graphNodeSize(node);
   return {
     left: -size.width / 2,
     right: size.width / 2,
@@ -213,11 +213,15 @@ function orderedGroups(
 ): RelationGroup[] {
   return groups
     .filter((group) => effectiveSide(group.type, flow, preferred) === side)
-    .sort((a, b) => groupRank(a.type, side) - groupRank(b.type, side) || a.type.localeCompare(b.type));
+    .sort(
+      (a, b) => groupRank(a.type, side) - groupRank(b.type, side) || a.type.localeCompare(b.type),
+    );
 }
 
 function crossSize(side: Side): number {
-  return side === 'left' || side === 'right' ? GRAPH_NODE_SIZE.width + H_GAP : GRAPH_NODE_SIZE.height + V_GAP;
+  return side === 'left' || side === 'right'
+    ? GRAPH_NODE_SIZE.width + H_GAP
+    : GRAPH_NODE_SIZE.height + V_GAP;
 }
 
 /**
@@ -263,7 +267,9 @@ function stackOnAxis(items: StackItem[], side: Side): Placed[] {
       : (item.placed.extent.left + item.placed.extent.right) / 2;
     const delta = cursor + size / 2 - center;
     cursor += size + item.gapAfter;
-    return vertical ? shiftPlaced(item.placed, along, delta) : shiftPlaced(item.placed, delta, along);
+    return vertical
+      ? shiftPlaced(item.placed, along, delta)
+      : shiftPlaced(item.placed, delta, along);
   });
 }
 
@@ -385,7 +391,7 @@ function itemsOf(
 }
 
 function boxOf(node: GraphEntity | undefined, pos: { x: number; y: number }): Extent {
-  const size = isFoldSummaryNode(node) ? FOLD_SUMMARY_SIZE : GRAPH_NODE_SIZE;
+  const size = graphNodeSize(node);
   return {
     left: pos.x - size.width / 2,
     right: pos.x + size.width / 2,
@@ -394,7 +400,12 @@ function boxOf(node: GraphEntity | undefined, pos: { x: number; y: number }): Ex
   };
 }
 
-function mtvPreferred(a: Extent, b: Extent, preferred: Side, pad: number): { dx: number; dy: number } {
+function mtvPreferred(
+  a: Extent,
+  b: Extent,
+  preferred: Side,
+  pad: number,
+): { dx: number; dy: number } {
   const overlapX = Math.min(a.right, b.right) - Math.max(a.left, b.left) + pad;
   const overlapY = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) + pad;
   if (overlapX <= 0 || overlapY <= 0) {
@@ -448,8 +459,10 @@ export function settleReanchoredSubtree<T extends { x: number; y: number; side?:
     let worst: { dx: number; dy: number; area: number } | null = null;
     for (const id of obstacles) {
       const other = boxOf(nodes.get(id), layout.get(id)!);
-      const overlapX = Math.min(moveBox.right, other.right) - Math.max(moveBox.left, other.left) + SIBLING_GAP;
-      const overlapY = Math.min(moveBox.bottom, other.bottom) - Math.max(moveBox.top, other.top) + SIBLING_GAP;
+      const overlapX =
+        Math.min(moveBox.right, other.right) - Math.max(moveBox.left, other.left) + SIBLING_GAP;
+      const overlapY =
+        Math.min(moveBox.bottom, other.bottom) - Math.max(moveBox.top, other.top) + SIBLING_GAP;
       if (overlapX <= 0 || overlapY <= 0) {
         continue;
       }
@@ -591,7 +604,10 @@ function arrangeNode(
     const beside = [...(placedBySide.get('left') ?? []), ...(placedBySide.get('right') ?? [])];
     const besideExtent = unionExtent([selfExtent, ...beside.map((item) => item.extent)]);
     placedBySide.set('top', clearVertical(placedBySide.get('top') ?? [], 'top', besideExtent.top));
-    placedBySide.set('bottom', clearVertical(placedBySide.get('bottom') ?? [], 'bottom', besideExtent.bottom));
+    placedBySide.set(
+      'bottom',
+      clearVertical(placedBySide.get('bottom') ?? [], 'bottom', besideExtent.bottom),
+    );
   }
 
   const placed = [...placedBySide.values()].flat();
@@ -616,12 +632,10 @@ export function arrangeGraph(
 ): Map<string, { x: number; y: number; side?: Side }> {
   const root = arrangeNode(graph, graph.rootId, 'cross', new Set(), preferredSides);
   const positions = new Map(root.positions);
-  const missing = graph.nodes.filter(
-    (node) => !positions.has(node.id) && !node.relationHub,
-  );
+  const missing = graph.nodes.filter((node) => !positions.has(node.id) && !node.relationHub);
   let cursor = root.extent.right + H_GAP + GRAPH_NODE_SIZE.width / 2;
   for (const node of missing) {
-    const half = isFoldSummaryNode(node) ? FOLD_SUMMARY_SIZE.width / 2 : GRAPH_NODE_SIZE.width / 2;
+    const half = graphNodeSize(node).width / 2;
     positions.set(node.id, { x: cursor, y: 0 });
     cursor += half * 2 + SIBLING_GAP;
   }

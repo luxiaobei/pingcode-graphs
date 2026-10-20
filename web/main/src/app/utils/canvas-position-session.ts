@@ -1,5 +1,5 @@
 import type { Graph } from '@antv/g6';
-import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
+import { graphNodeHalf } from '../constants/graph.constants';
 import type { DependencyGraph } from '../entities/graph.entity';
 import {
   arrangeGraph,
@@ -132,7 +132,9 @@ export class CanvasPositionSession {
     return layout;
   }
 
-  setRelationSides(sides: ReadonlyMap<string, Side> | Record<string, Side> | null | undefined): void {
+  setRelationSides(
+    sides: ReadonlyMap<string, Side> | Record<string, Side> | null | undefined,
+  ): void {
     assignRelationSides(this.relationSides, sides);
   }
 
@@ -145,7 +147,8 @@ export class CanvasPositionSession {
    * 仅 sync 可见节点会丢掉 fold 坐标，导致根用绝对坐标、fold 用相对 arrange 而跑到左侧。
    */
   replaceSaved(
-    positions: ReadonlyMap<string, GraphNodePosition> | Record<string, GraphNodePosition> | null | undefined,
+    positions:
+      ReadonlyMap<string, GraphNodePosition> | Record<string, GraphNodePosition> | null | undefined,
   ): void {
     this.saved.clear();
     if (!positions) {
@@ -156,7 +159,10 @@ export class CanvasPositionSession {
       if (!id || !pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) {
         continue;
       }
-      this.saved.set(id, pos.side ? { x: pos.x, y: pos.y, side: pos.side } : { x: pos.x, y: pos.y });
+      this.saved.set(
+        id,
+        pos.side ? { x: pos.x, y: pos.y, side: pos.side } : { x: pos.x, y: pos.y },
+      );
     }
   }
 
@@ -214,9 +220,7 @@ export class CanvasPositionSession {
     if (!this.lastGraph) {
       return false;
     }
-    const prevIds = this.lastGraph.nodes
-      .filter((node) => !node.relationHub)
-      .map((node) => node.id);
+    const prevIds = this.lastGraph.nodes.filter((node) => !node.relationHub).map((node) => node.id);
     if (prevIds.length !== ids.length) {
       return false;
     }
@@ -232,10 +236,7 @@ export class CanvasPositionSession {
   /** 基准布局：saved / 关系方位偏好优先，缺的用思维导图补齐。 */
   resolveBaseline(data: DependencyGraph): Map<string, GraphNodePosition> {
     this.syncSaved(data);
-    const layout = mergeLayoutPositions(
-      arrangeGraph(data, this.relationSides),
-      this.saved,
-    );
+    const layout = mergeLayoutPositions(arrangeGraph(data, this.relationSides), this.saved);
     this.lastGraph = data;
     return layout;
   }
@@ -246,9 +247,7 @@ export class CanvasPositionSession {
    */
   resolveExpandCollapse(data: DependencyGraph): Map<string, GraphNodePosition> {
     // 先取出 fold pin（含即将展开消失的），供写偏好 + 清旧侧子树；勿删 pin
-    const foldPins = new Map(
-      [...this.pins].filter(([id]) => isFoldSummaryId(id)),
-    );
+    const foldPins = new Map([...this.pins].filter(([id]) => isFoldSummaryId(id)));
     syncRelationSidesFromFolds(this.lastGraph, foldPins, this.relationSides);
     const reanchored = clearStalePinsAfterFoldDrag(data, this.lastGraph, foldPins, this.pins);
     const reanchoredIds = new Set(reanchored.flatMap((cluster) => [...cluster.ids]));
@@ -279,7 +278,10 @@ export class CanvasPositionSession {
       if (!pos) {
         continue;
       }
-      this.saved.set(id, pos.side ? { x: pos.x, y: pos.y, side: pos.side } : { x: pos.x, y: pos.y });
+      this.saved.set(
+        id,
+        pos.side ? { x: pos.x, y: pos.y, side: pos.side } : { x: pos.x, y: pos.y },
+      );
     }
     this.lastGraph = data;
     return layout;
@@ -347,9 +349,7 @@ export class CanvasPositionSession {
       return;
     }
     const fold = isFoldSummaryNode(node);
-    const half = fold
-      ? { w: FOLD_SUMMARY_SIZE.width / 2, h: FOLD_SUMMARY_SIZE.height / 2 }
-      : { w: GRAPH_NODE_SIZE.width / 2, h: GRAPH_NODE_SIZE.height / 2 };
+    const half = graphNodeHalf(node);
     const side = sideFromParent(anchor, pin, half);
     this.pins.set(draggedId, { ...pin, side });
 

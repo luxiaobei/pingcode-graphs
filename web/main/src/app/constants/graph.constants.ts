@@ -1,4 +1,10 @@
-import type { EdgeData, GraphOptions, IElementDragEvent, IPointerEvent, NodeData } from '@antv/g6';
+import type {
+  EdgeData,
+  GraphOptions,
+  IElementDragEvent,
+  IPointerEvent,
+  NodeData,
+} from '@antv/g6';
 import type { GraphEntity, RelationStyle } from '../entities/graph.entity';
 
 export const GRAPH_MIN_SIZE = 320;

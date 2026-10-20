@@ -51,9 +51,13 @@ function foldJunction(
       : { x: parent.x, y: fork };
   }
   if (mode === 'parent') {
-    return side === 'left' || side === 'right' ? { x: spine, y: axis } : { x: axis, y: spine };
+    return side === 'left' || side === 'right'
+      ? { x: spine, y: axis }
+      : { x: axis, y: spine };
   }
-  return side === 'left' || side === 'right' ? { x: fork, y: axis } : { x: axis, y: fork };
+  return side === 'left' || side === 'right'
+    ? { x: fork, y: axis }
+    : { x: axis, y: fork };
 }
 
 /** 先沿父卡片走出关系类型，再从类型线另开一条分支接到这组卡片。类型只是线上的名字。 */
@@ -70,7 +74,8 @@ export function trunkEdges(
     }
     const fold = child.foldSummary;
     const relationType =
-      fold?.relationType ?? relationBetween(graph.edges, nodes, child.revealedByAnchorId, child.id);
+      fold?.relationType ??
+      relationBetween(graph.edges, nodes, child.revealedByAnchorId, child.id);
     const member: TrunkMember = {
       parentId: child.revealedByAnchorId,
       childId: child.id,
@@ -156,10 +161,13 @@ export function trunkEdges(
           )
       : parentAxis;
     // 左右错开必须落在卡边内，否则出线点跑到卡外会把关系线挤成折角
-    const bundleLeave =
-      dualExit && horizontal
-        ? clampStemOnCardEdge(parent, side, parentStemCenter(parent, parentAxis, side, midlineAxis))
-        : parentAxis;
+    const bundleLeave = dualExit && horizontal
+      ? clampStemOnCardEdge(
+          parent,
+          side,
+          parentStemCenter(parent, parentAxis, side, midlineAxis),
+        )
+      : parentAxis;
     lane.forEach((group) => {
       const kids = group.placed.map((item) => item.child);
       const foldOnly = group.members.every((member) => isFoldSummaryId(member.childId));
@@ -180,30 +188,32 @@ export function trunkEdges(
       const stemAligned =
         parentOwn &&
         kids.length === 1 &&
-        (horizontal ? Math.abs(kids[0].y - parentStem) < 1 : Math.abs(kids[0].x - parentStem) < 1);
+        (horizontal
+          ? Math.abs(kids[0].y - parentStem) < 1
+          : Math.abs(kids[0].x - parentStem) < 1);
       const alone = stemAligned && Math.abs(parentStem - parentAxis) < 1;
       const stemCenter = parentOwn ? parentStem : center;
-      const spine = parentOwn ? (spines.parent ?? fork) : (spines.bundle ?? spines.parent ?? fork);
+      const spine = parentOwn
+        ? (spines.parent ?? fork)
+        : (spines.bundle ?? spines.parent ?? fork);
       // 中线直出用 layer；双出线父干错开时 fold 钉在父干上
       const foldMode = straight || alone ? 'layer' : parentOwn ? 'parent' : 'bundle';
-      const foldAxis =
-        straight || alone
-          ? parentAxis
-          : parentOwn
-            ? stemCenter
-            : horizontal && dualExit
-              ? bundleLeave
-              : stemCenter;
+      const foldAxis = straight || alone
+        ? parentAxis
+        : parentOwn
+          ? stemCenter
+          : horizontal && dualExit
+            ? bundleLeave
+            : stemCenter;
       const foldAnchor = foldJunction(parent, side, fork, spine, foldAxis, foldMode);
       for (const item of group.placed) {
         const showLabel = item.member.childId === labelOwner;
         // 双出线：父从错开干直出（stemAligned 时竖直直线）；不与其它关系共中线
-        const controlPoints =
-          straight || alone
-            ? layerRoute(parent, item.child, side, fork)
-            : parentOwn
-              ? parentSeparateRoute(parent, item.child, side, spine, fork, stemCenter)
-              : routeOf(parent, item.child, side, spine, fork, center, bundleLeave);
+        const controlPoints = straight || alone
+          ? layerRoute(parent, item.child, side, fork)
+          : parentOwn
+            ? parentSeparateRoute(parent, item.child, side, spine, fork, stemCenter)
+            : routeOf(parent, item.child, side, spine, fork, center, bundleLeave);
         const style: EdgeData['style'] = { controlPoints };
         if (showLabel) {
           const corner = labelCorner(side, relationType === 'child');
@@ -230,7 +240,11 @@ export function trunkEdges(
   return { edges, forks };
 }
 
-function straightEdge(member: TrunkMember, style?: EdgeData['style'], showLabel = true): EdgeData {
+function straightEdge(
+  member: TrunkMember,
+  style?: EdgeData['style'],
+  showLabel = true,
+): EdgeData {
   return {
     id: `${member.parentId}:${member.relationType}:${member.childId}`,
     source: member.parentId,

@@ -38,12 +38,7 @@ import {
   nodeItemFromEvent,
   sharpenHtmlCamera,
 } from '../utils/g6-helpers';
-import {
-  isFoldSummaryNode,
-  isWorkItemEntity,
-  openPivot,
-  relationBetween,
-} from '../utils/graph.util';
+import { isFoldSummaryNode, isWorkItemEntity, openPivot, relationBetween } from '../utils/graph.util';
 import type { SavedNodePosition, SaveLayoutPayload } from '../utils/saved-graph-layout';
 import { toG6Data, type GraphNodePosition } from '../utils/to-g6-data';
 import { setFullStrokeEdges } from './flat-polyline';

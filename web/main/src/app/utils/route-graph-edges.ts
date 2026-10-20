@@ -18,7 +18,7 @@ export type GraphNodePosition = { x: number; y: number; side?: Side };
 const HALF_W = GRAPH_NODE_SIZE.width / 2;
 const HALF_H = GRAPH_NODE_SIZE.height / 2;
 const SPINE_PAD = 28;
-const FORK_PAD = 36;
+const FORK_PAD = 44;
 
 function halfOf(node: GraphEntity | undefined): { w: number; h: number } {
   if (!isFoldSummaryNode(node)) {

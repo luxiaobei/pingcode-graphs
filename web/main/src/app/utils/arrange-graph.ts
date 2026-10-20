@@ -104,16 +104,21 @@ function groupsOf(graph: DependencyGraph, parentId: string): RelationGroup[] {
   return [...groups.values()];
 }
 
-/** 在思维导图坐标上覆盖已有位置（保存坐标 / 拖拽 pin）。 */
+/**
+ * 在思维导图坐标上覆盖已有位置（保存坐标 / 拖拽 pin）。
+ * skipIds：会话 pin / 换侧重锚结果勿用旧 saved 盖回（否则拖卡后收起再展开会弹回）。
+ */
 export function mergeLayoutPositions<T extends { x: number; y: number }>(
   arranged: ReadonlyMap<string, T>,
   overrides: ReadonlyMap<string, Partial<T>>,
+  skipIds?: ReadonlySet<string> | null,
 ): Map<string, T> {
   const next = new Map(arranged);
   for (const [id, pos] of overrides) {
-    if (next.has(id)) {
-      next.set(id, { ...next.get(id)!, ...pos });
+    if (skipIds?.has(id) || !next.has(id)) {
+      continue;
     }
+    next.set(id, { ...next.get(id)!, ...pos });
   }
   return next;
 }

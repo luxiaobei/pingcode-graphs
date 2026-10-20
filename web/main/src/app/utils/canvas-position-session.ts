@@ -251,10 +251,17 @@ export class CanvasPositionSession {
     );
     syncRelationSidesFromFolds(this.lastGraph, foldPins, this.relationSides);
     const reanchored = clearStalePinsAfterFoldDrag(data, this.lastGraph, foldPins, this.pins);
+    const reanchoredIds = new Set(reanchored.flatMap((cluster) => [...cluster.ids]));
     const arranged = arrangeGraph(data, this.relationSides);
     let layout = resolvePinnedExpandCollapse(data, arranged, this.pins);
     for (const cluster of reanchored) {
       settleReanchoredSubtree(data, layout, cluster.ids, cluster.side, cluster.anchor);
+      for (const id of cluster.ids) {
+        const pos = layout.get(id);
+        if (pos) {
+          layout.set(id, { ...pos, side: cluster.side });
+        }
+      }
     }
     placeFoldsAtExpandedSlots(
       data,
@@ -264,8 +271,16 @@ export class CanvasPositionSession {
       foldPins,
       this.relationSides,
     );
-    // 展开后新出现的卡：用个人视图坐标覆盖 arrange 相对位
-    layout = mergeLayoutPositions(layout, this.saved);
+    // pin > saved：会话拖过的卡跳过 merge；无 pin 的首次展开仍用 saved；换侧重锚写回 saved
+    const skipIds = new Set<string>([...this.pins.keys(), ...reanchoredIds]);
+    layout = mergeLayoutPositions(layout, this.saved, skipIds);
+    for (const id of reanchoredIds) {
+      const pos = layout.get(id);
+      if (!pos) {
+        continue;
+      }
+      this.saved.set(id, pos.side ? { x: pos.x, y: pos.y, side: pos.side } : { x: pos.x, y: pos.y });
+    }
     this.lastGraph = data;
     return layout;
   }

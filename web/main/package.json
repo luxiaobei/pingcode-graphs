@@ -6,7 +6,8 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "private": true,
   "packageManager": "npm@11.6.2",
@@ -29,6 +30,10 @@
     "@angular/cli": "^22.1.0",
     "@angular/compiler-cli": "^22.1.0",
     "prettier": "^3.8.1",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "vitest": "4.1.11"
   }
 }

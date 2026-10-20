@@ -13,14 +13,41 @@ thy-content {
   padding: 0;
 }
 
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+thy-header thy-action {
+  cursor: pointer;
 }
 
-.header-actions thy-action {
+.graph-stage {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  background: #f8fafc;
+}
+
+.graph-corner {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 6%);
+}
+
+.graph-corner thy-action {
   cursor: pointer;
+}
+
+.graph-corner__split {
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: #e2e8f0;
 }
 
 .ghost-btn {

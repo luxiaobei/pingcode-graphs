@@ -40,7 +40,7 @@ export async function getDependencyGraph(
   payload: GetDependencyGraphPayload = {},
 ): Promise<DependencyGraph> {
   const context = await view.getContext<{ workitem?: { id?: string } }>();
-  const workitemId = payload.workitemId || context.extension?.data?.workitem?.id;
+  const workitemId = payload.workitemId || readWorkitemId(context.extension);
   if (!workitemId) {
     throw new Error('缺少当前工作项，无法加载关系图');
   }
@@ -50,6 +50,13 @@ export async function getDependencyGraph(
     fetchRelation(nodeId, ['parent_of'], CHILD_DEPTH, 'incoming'),
   ]);
   return toDependencyGraph(nodeId, CHILD_DEPTH, mergeResults(relations, children));
+}
+
+function readWorkitemId(extension: {
+  data?: { workitem?: { id?: string } };
+  modal?: { workitem?: { id?: string } };
+}): string | undefined {
+  return extension.data?.workitem?.id ?? extension.modal?.workitem?.id;
 }
 
 function fetchRelation(

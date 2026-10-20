@@ -62,8 +62,21 @@ export interface KgNodeInput {
     active?: boolean;
 }
 
+const KG_NODE_KINDS: ReadonlySet<string> = new Set(Object.values(KG_NODE_KIND));
+
 export function kgNodeId(kind: KgNodeKind, refId: string): string {
     return `${kind}:${refId}`;
+}
+
+/** `{kind}:{refId}`：kind 为已知节点类型，refId 非空且不含 `:`。 */
+export function isKgNodeId(nodeId: string): boolean {
+    const separator = nodeId.indexOf(":");
+    if (separator <= 0 || separator !== nodeId.lastIndexOf(":")) {
+        return false;
+    }
+    const kind = nodeId.slice(0, separator);
+    const refId = nodeId.slice(separator + 1);
+    return KG_NODE_KINDS.has(kind) && refId.length > 0;
 }
 
 export function excerptText(text: string | undefined): string | undefined {

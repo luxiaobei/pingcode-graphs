@@ -16,7 +16,7 @@ function toTicketNode(ticketInfo: any) {
     const input: TicketNodeInput = {
         refId: ticketInfo["id"],
         name: ticketInfo["title"],
-        identifier: ticketInfo["identifier"],
+        identifier: ticketInfo["whole_identifier"],
         stateType: ticketInfo["state"]?.["type"],
         stateName: ticketInfo["state"]?.["name"],
         description: ticketInfo["description"],

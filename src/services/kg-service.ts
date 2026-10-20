@@ -1,8 +1,9 @@
 import type { NexusAppContext } from "@pc-nexus/core";
 import { ces } from "@pc-nexus/storage";
 import { KG_EDGE_ENTITY_NAME, type KgEdge, type KgEdgeType } from "../models/pc-kg-edge.js";
-import { KG_NODE_ENTITY_NAME, type KgNode } from "../models/pc-kg-node.js";
+import { KG_NODE_ENTITY_NAME, KG_NODE_KIND, isKgNodeId, type KgNode, type KgNodeKind } from "../models/pc-kg-node.js";
 import { KG_VIEW_ENTITY_NAME, kgViewId, type KgView } from "../models/pc-kg-view.js";
+import { isVisible } from "./visibility.js";
 
 /** outgoing：from → to；incoming：to → from；both：不区分存储方向。 */
 export type KgRelationDirection = "outgoing" | "incoming" | "both";
@@ -132,6 +133,9 @@ export class KgService {
     ): Promise<KgDeepRelation> {
         if (!nodeId) {
             throw new Error("Node id is required");
+        }
+        if (!isKgNodeId(nodeId)) {
+            throw new Error("Node id format is invalid");
         }
         const types = normalizeTypes(type);
         if (types.length === 0) {

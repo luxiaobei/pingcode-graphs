@@ -34,6 +34,8 @@
           <app-graph-canvas
             [graph]="data"
             [showTools]="surface() === 'dialog' || surface() === 'fullscreen'"
+            [allowRetrace]="surface() === 'dialog' || surface() === 'fullscreen'"
+            [openInPage]="surface() === 'tab'"
             [relationSides]="relationSides()"
             [savedPositions]="savedLayout()?.positions ?? null"
             (toggleExpand)="onToggleExpand($event)"

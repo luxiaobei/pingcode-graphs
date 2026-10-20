@@ -54,41 +54,12 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
 /** 与 PJM 工作项卡片一致：宽 262，高 80。 */
 export const GRAPH_NODE_SIZE = { width: 262, height: 80 } as const;
 
-/** thy-tag lg：高 28，左右 padding 12，边框 1。 */
-const FOLD_TAG_HEIGHT = 28;
-const FOLD_TAG_CHROME_X = 12 * 2 + 1 * 2;
-const FOLD_LABEL_FONT =
-  '14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Helvetica Neue", Arial, sans-serif';
+/** 收起关系时的「+ N」占位。 */
+export const FOLD_SUMMARY_SIZE = { width: 52, height: 28 } as const;
 
-let foldLabelCanvas: HTMLCanvasElement | null = null;
-
-function foldLabelWidth(text: string): number {
-  const context = foldLabelContext();
-  if (!context) {
-    return 12.5 + text.replace(/^\+ /, '').length * 8.8;
-  }
-  context.font = FOLD_LABEL_FONT;
-  return context.measureText(text).width;
-}
-
-function foldLabelContext(): CanvasRenderingContext2D | null {
-  if (typeof document === 'undefined') {
-    return null;
-  }
-  foldLabelCanvas ??= document.createElement('canvas');
-  return foldLabelCanvas.getContext('2d');
-}
-
-function foldSummarySize(count: number): { width: number; height: number } {
-  return {
-    width: Math.ceil(foldLabelWidth(`+ ${count}`) + FOLD_TAG_CHROME_X),
-    height: FOLD_TAG_HEIGHT,
-  };
-}
-
-/** 工作项卡片用固定尺寸，「+ N」按数量贴合标签。 */
+/** 工作项卡片用固定尺寸，「+ N」用占位尺寸。 */
 export function graphNodeSize(node: GraphEntity | undefined): { width: number; height: number } {
-  return node?.foldSummary ? foldSummarySize(node.foldSummary.count) : GRAPH_NODE_SIZE;
+  return node?.foldSummary ? FOLD_SUMMARY_SIZE : GRAPH_NODE_SIZE;
 }
 
 export function graphNodeHalf(node: GraphEntity | undefined): { w: number; h: number } {

@@ -2,7 +2,7 @@ import type { EventHandler } from "@pc-nexus/event";
 import { ces } from "@pc-nexus/storage";
 import { linkKindMap } from "../commons/common.js";
 import { createKgEdge, KG_EDGE_ENTITY_NAME, KG_EDGE_TYPE, type KgEdge, type KgEdgeType } from "../models/pc-kg-edge.js";
-import { KG_NODE_ENTITY_NAME, KG_NODE_KIND, kgNodeId, type KgNode } from "../models/pc-kg-node.js";
+import { KG_NODE_KIND, kgNodeId, type KgNode, type KgNodeKind } from "../models/pc-kg-node.js";
 import { publishEntityChanged, type EntityChangeAction } from "../realtime.js";
 
 /** relation_type.category → 图谱边类型（含 camelCase / snake_case）。 */
@@ -26,29 +26,29 @@ export const onLinkAddedHandler: EventHandler = async (context, event) => {
     const targetInfo = (event.payload as any)["changelog"]["target"];
     let toId = "";
     let type: KgEdgeType = KG_EDGE_TYPE.relates;
-    const principalNodes = await ces.entity<KgNode>(KG_NODE_ENTITY_NAME).find((cb) => {
-        cb.field("ref_id").eq(principalInfo["id"]);
-    });
+    let principalKind = linkKindMap[targetInfo["principal_type"]];
     if (targetInfo["target_work_item"]) {
         toId = kgNodeId(KG_NODE_KIND.workItem, targetInfo["target_work_item"]?.["id"]);
         type = edgeTypeMap[targetInfo["relation_type"]?.["category"]] ?? KG_EDGE_TYPE.relates;
+        principalKind = KG_NODE_KIND.workItem;
     } else if (targetInfo["target_type"]) {
         toId = kgNodeId(linkKindMap[targetInfo["target_type"]]!, targetInfo["target"]["id"]);
     }
-    if (principalNodes.length > 0 && toId) {
+    if (principalKind && toId) {
+        const kindId = kgNodeId(principalKind, principalInfo["id"]);
         const edges = await ces.entity<KgEdge>(KG_EDGE_ENTITY_NAME).find((cb) => {
-            cb.field("from_id").eq(principalNodes[0]!.id);
+            cb.field("from_id").eq(kindId);
             cb.field("to_id").eq(toId);
             cb.field("type").eq(type);
         });
         if (edges.length === 0) {
             await ces.entity(KG_EDGE_ENTITY_NAME).insert(createKgEdge({
-                fromId: principalNodes[0]!.id,
+                fromId: kindId,
                 toId,
                 type,
             }));
         }
-        await publishLinkChanged("link_added", principalNodes[0]!, toId);
+        await publishLinkChanged("link_added", principalKind, principalInfo["id"], toId);
     }
 };
 
@@ -57,40 +57,41 @@ export const onLinkRemovedHandler: EventHandler = async (context, event) => {
     const originInfo = (event.payload as any)["changelog"]["origin"];
     let toId = "";
     let type: KgEdgeType = KG_EDGE_TYPE.relates;
-    const principalNodes = await ces.entity<KgNode>(KG_NODE_ENTITY_NAME).find((cb) => {
-        cb.field("ref_id").eq(principalInfo["id"]);
-    });
+    let principalKind = linkKindMap[originInfo["principal_type"]];
     if (originInfo["target_work_item"]) {
         toId = kgNodeId(KG_NODE_KIND.workItem, originInfo["target_work_item"]?.["id"]);
         type = edgeTypeMap[originInfo["relation_type"]?.["category"]] ?? KG_EDGE_TYPE.relates;
+        principalKind = KG_NODE_KIND.workItem;
     } else if (originInfo["target_type"]) {
         toId = kgNodeId(linkKindMap[originInfo["target_type"]]!, originInfo["target"]["id"]);
     }
-    if (principalNodes.length > 0 && toId) {
+    if (principalKind && toId) {
+        const kindId = kgNodeId(principalKind, principalInfo["id"]);
         await ces.entity<KgEdge>(KG_EDGE_ENTITY_NAME).delete((cb) => {
             cb.or((or) => {
                 or.and((and) => {
-                    and.field("from_id").eq(principalNodes[0]!.id);
+                    and.field("from_id").eq(kindId);
                     and.field("to_id").eq(toId);
                     and.field("type").eq(type);
                 });
                 or.and((and) => {
                     and.field("from_id").eq(toId);
-                    and.field("to_id").eq(principalNodes[0]!.id);
+                    and.field("to_id").eq(kindId);
                     and.field("type").eq(type);
                 });
             });
         });
-        await publishLinkChanged("link_removed", principalNodes[0]!, toId);
+        await publishLinkChanged("link_removed", principalKind, principalInfo["id"], toId);
     }
 };
 
 async function publishLinkChanged(
     action: EntityChangeAction,
-    principal: KgNode,
+    principalKind: KgNodeKind,
+    principalRefId: string,
     toId: string,
 ): Promise<void> {
-    await publishEntityChanged(action, principal.kind, principal.ref_id);
+    await publishEntityChanged(action, principalKind, principalRefId);
     const sep = toId.indexOf(":");
     if (sep > 0) {
         const kind = toId.slice(0, sep) as KgNode["kind"];

@@ -60,6 +60,9 @@ import './flat-polyline';
 export class GraphCanvas {
   readonly graph = input<DependencyGraph | null>(null);
 
+  /** 详情 tab 关掉左侧画布操作。 */
+  readonly showTools = input(true);
+
   /** 用户级关系方位偏好（跨工作项） */
   readonly relationSides = input<Record<string, Side> | null>(null);
 

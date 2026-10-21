@@ -1,7 +1,21 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.view-settings {
+  height: 100%;
+
+  // 内容区不要灰底
+  .thy-layout-content {
+    background: transparent;
+  }
+}
+
 .display-settings {
   list-style: none;
   margin: 0;
-  padding: 4px 8px 8px;
+  padding: 8px 8px 0;
   display: flex;
   flex-direction: column;
   gap: 22px;
@@ -14,4 +28,40 @@
   gap: 16px;
   font-size: 14px;
   color: #333;
+}
+
+// 原型图二：label 在上、radio 在下，左对齐（首行对齐）
+.line-color {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.line-color__label {
+  margin: 0;
+  font-size: 14px;
+  color: #333;
+  line-height: 22px;
+}
+
+.line-color__required {
+  color: #ff5b57;
+  margin-left: 4px;
+}
+
+.line-color__radios {
+  .form-check-inline {
+    margin-right: 24px;
+
+    &:last-child {
+      margin-right: 0;
+    }
+  }
+
+  // 圆点与文字间距 8px（走 form-check-label，不用 ng-content）
+  .form-check-label {
+    margin-left: 8px !important;
+  }
 }

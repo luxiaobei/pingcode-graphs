@@ -6,7 +6,16 @@ export interface DisplaySetting {
   enabled: boolean;
 }
 
-/** 展示配置项。enabled 只在读配置失败时使用，正常开闭以 resolver 为准。 */
+/** 线条颜色：默认灰线，或按事项/关系类型色。 */
+export type LineColorMode = 'default' | 'item';
+
+/** 视图设置：数据开关 + 展示（线条颜色）。 */
+export interface ViewSettings {
+  settings: DisplaySetting[];
+  lineColorMode: LineColorMode;
+}
+
+/** 数据配置项。enabled 只在读配置失败时使用，正常开闭以 resolver 为准。 */
 export const DEFAULT_DISPLAY_SETTINGS: readonly DisplaySetting[] = [
   { id: 'parent', label: '父子关系', enabled: true },
   { id: 'relate', label: '关联关系', enabled: true },
@@ -15,8 +24,17 @@ export const DEFAULT_DISPLAY_SETTINGS: readonly DisplaySetting[] = [
   { id: 'test', label: '关联测试', enabled: true },
 ];
 
+export const DEFAULT_LINE_COLOR_MODE: LineColorMode = 'default';
+
 export function cloneDisplaySettings(settings: readonly DisplaySetting[]): DisplaySetting[] {
   return settings.map((item) => ({ ...item }));
+}
+
+export function cloneViewSettings(view: ViewSettings): ViewSettings {
+  return {
+    settings: cloneDisplaySettings(view.settings),
+    lineColorMode: view.lineColorMode,
+  };
 }
 
 /** 开闭以 resolver 返回的开关为准。请求失败时才退回页面默认项。 */
@@ -29,25 +47,54 @@ export function applySavedDisplaySettings(
   }));
 }
 
-/** 读取当前用户的展示配置。没有记录时由 resolver 返回全部打开。 */
-export async function loadDisplaySettings(): Promise<DisplaySetting[]> {
+function readLineColorMode(value: unknown): LineColorMode {
+  return value === 'item' ? 'item' : DEFAULT_LINE_COLOR_MODE;
+}
+
+export function applySavedViewSettings(
+  saved: Readonly<Record<string, unknown>> | null | undefined,
+): ViewSettings {
+  const flags =
+    saved && typeof saved === 'object'
+      ? (Object.fromEntries(
+          Object.entries(saved).filter(([, v]) => typeof v === 'boolean'),
+        ) as Record<string, boolean>)
+      : null;
+  return {
+    settings: applySavedDisplaySettings(flags),
+    lineColorMode: readLineColorMode(saved?.['lineColorMode']),
+  };
+}
+
+/** 读取当前用户的视图设置。没有记录时由 resolver 返回全部打开 + 默认色。 */
+export async function loadViewSettings(): Promise<ViewSettings> {
   try {
-    const saved = await invoke<undefined, Record<string, boolean>>('getDisplaySettings');
-    return applySavedDisplaySettings(saved);
+    const saved = await invoke<undefined, Record<string, unknown>>('getDisplaySettings');
+    return applySavedViewSettings(saved);
   } catch {
-    return applySavedDisplaySettings(null);
+    return applySavedViewSettings(null);
   }
 }
 
-/** 把当前开关写到当前用户名下。没有用户时后端不保存。 */
-export function saveDisplaySettings(settings: readonly DisplaySetting[]): Promise<void> {
-  return invoke(
-    'saveDisplaySettings',
-    Object.fromEntries(settings.map((item) => [item.id, item.enabled])),
-  );
+/** @deprecated 使用 loadViewSettings */
+export async function loadDisplaySettings(): Promise<DisplaySetting[]> {
+  return (await loadViewSettings()).settings;
 }
 
-/** 展示开关覆盖的关系类型。未列入的关系始终展示。 */
+/** 把当前开关与线条颜色写到当前用户名下。没有用户时后端不保存。 */
+export function saveViewSettings(view: ViewSettings): Promise<void> {
+  return invoke('saveDisplaySettings', {
+    ...Object.fromEntries(view.settings.map((item) => [item.id, item.enabled])),
+    lineColorMode: view.lineColorMode,
+  });
+}
+
+/** @deprecated 使用 saveViewSettings */
+export function saveDisplaySettings(settings: readonly DisplaySetting[]): Promise<void> {
+  return saveViewSettings({ settings: [...settings], lineColorMode: DEFAULT_LINE_COLOR_MODE });
+}
+
+/** 数据配置开关覆盖的关系类型。未列入的关系始终展示。 */
 export const DISPLAY_SETTING_RELATIONS: Record<string, readonly string[]> = {
   parent: ['parent', 'child'],
   relate: [

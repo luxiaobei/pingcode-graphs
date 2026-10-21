@@ -11,11 +11,12 @@ import { GraphCanvas } from './graph/graph-canvas';
 import { ENTITY_CHANGED_CHANNEL, type EntityChangedPayload } from './realtime/entity-changed';
 import { getDependencyGraph } from './services/graph.service';
 import {
-  applySavedDisplaySettings,
-  cloneDisplaySettings,
-  loadDisplaySettings,
-  saveDisplaySettings,
-  type DisplaySetting,
+  applySavedViewSettings,
+  cloneViewSettings,
+  loadViewSettings,
+  saveViewSettings,
+  type LineColorMode,
+  type ViewSettings,
 } from './settings/display-settings';
 import { DisplaySettingsDialog } from './settings/display-settings-dialog';
 import type { Side } from './utils/arrange-graph';
@@ -73,7 +74,7 @@ function graphSurface(
 export class App {
   /** 上下文回来之前保持 pending，避免页头和工具栏闪一下。 */
   protected readonly surface = signal<GraphSurface>('pending');
-  protected readonly displaySettings = signal<DisplaySetting[]>(applySavedDisplaySettings(null));
+  protected readonly viewSettings = signal<ViewSettings>(applySavedViewSettings(null));
 
   private readonly dialog = inject(ThyDialog);
   private readonly destroyRef = inject(DestroyRef);
@@ -101,11 +102,15 @@ export class App {
     if (!source) {
       return null;
     }
-    const filtered = filterGraphByDisplaySettings(source, this.displaySettings());
+    const filtered = filterGraphByDisplaySettings(source, this.viewSettings().settings);
     const visible = buildVisibleGraph(filtered, new Set(this.collapsedAnchors()));
     // fold 节点在 buildVisibleGraph 之后才有，必须在此再套一层 saved
     return applySavedGraphLayout(visible, this.savedLayout());
   });
+
+  protected readonly lineColorMode = computed(
+    (): LineColorMode => this.viewSettings().lineColorMode,
+  );
 
   constructor() {
     void this.bindViewMode();
@@ -203,7 +208,7 @@ export class App {
     try {
       const traceId = this.traceWorkItemId();
       const dataPromise = getDependencyGraph(traceId ? { workitemId: traceId } : {});
-      const [data, settings] = await Promise.all([dataPromise, loadDisplaySettings()]);
+      const [data, settings] = await Promise.all([dataPromise, loadViewSettings()]);
       if (seq !== this.requestSeq) {
         return;
       }
@@ -211,7 +216,7 @@ export class App {
       if (seq !== this.requestSeq) {
         return;
       }
-      this.displaySettings.set(settings);
+      this.viewSettings.set(settings);
       if (silent) {
         this.error.set(null);
       }
@@ -273,18 +278,29 @@ export class App {
   }
 
   protected openSettings(): void {
+    const draft = cloneViewSettings(this.viewSettings());
     const dialogRef = this.dialog.open(DisplaySettingsDialog, {
-      size: ThyDialogSizes.md,
+      size: ThyDialogSizes.maxLg,
+      height: '520px',
       initialState: {
-        settings: cloneDisplaySettings(this.displaySettings()),
+        settings: draft.settings,
+        lineColorMode: draft.lineColorMode,
       },
     });
     dialogRef.afterClosed().subscribe((result) => {
-      if (!Array.isArray(result)) {
+      if (!isViewSettings(result)) {
         return;
       }
-      this.displaySettings.set(result);
-      void saveDisplaySettings(result).catch(() => undefined);
+      this.viewSettings.set(result);
+      void saveViewSettings(result).catch(() => undefined);
     });
   }
+}
+
+function isViewSettings(value: unknown): value is ViewSettings {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const record = value as Partial<ViewSettings>;
+  return Array.isArray(record.settings) && (record.lineColorMode === 'default' || record.lineColorMode === 'item');
 }

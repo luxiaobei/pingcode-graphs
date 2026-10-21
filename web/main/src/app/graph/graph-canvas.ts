@@ -29,6 +29,7 @@ import {
   GRAPH_ZOOM_STEP,
 } from '../constants/graph.constants';
 import type { DependencyGraph } from '../entities/graph.entity';
+import type { LineColorMode } from '../settings/display-settings';
 import type { Side } from '../utils/arrange-graph';
 import { CanvasPositionSession } from '../utils/canvas-position-session';
 import {
@@ -75,6 +76,9 @@ export class GraphCanvas {
 
   /** 个人视图完整坐标（含 fold / 收起子卡），供 baseline 合并 */
   readonly savedPositions = input<Record<string, SavedNodePosition> | null>(null);
+
+  /** 线条颜色：默认灰线，或按事项/关系类型色 */
+  readonly lineColorMode = input<LineColorMode>('default');
 
   readonly toggleExpand = output<string>();
 
@@ -130,6 +134,7 @@ export class GraphCanvas {
 
     effect(() => {
       if (this.ready()) {
+        this.lineColorMode();
         void this.render(this.graph());
       }
     });
@@ -283,7 +288,7 @@ export class GraphCanvas {
     if (!this.g6) {
       return;
     }
-    this.g6.setData(toG6Data(data, layout ?? this.positions.pins));
+    this.g6.setData(toG6Data(data, layout ?? this.positions.pins, this.lineColorMode()));
   }
 
   private bindGraphEvents(): void {
@@ -358,7 +363,7 @@ export class GraphCanvas {
       return;
     }
     this.positions.snapshot(g6, data, draggedId, false);
-    const next = toG6Data(data, this.positions.pins);
+    const next = toG6Data(data, this.positions.pins, this.lineColorMode());
     g6.updateEdgeData(
       (next.edges ?? []).map((edge) => ({
         id: edge.id,

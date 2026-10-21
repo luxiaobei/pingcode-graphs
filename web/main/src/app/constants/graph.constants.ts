@@ -20,6 +20,33 @@ export const EDGE_LABEL_COLOR = '#c0c4cc';
 /** 悬停连回主卡片的线，与根卡片描边相同。 */
 export const EDGE_LINK_COLOR = '#6698ff';
 
+/** 彩色模式线色兑白比例（写成实色，避免半透明叠灰）。 */
+export const EDGE_COLOR_OPACITY = 0.5;
+
+/** 彩色模式文案兑白比例。 */
+export const EDGE_LABEL_COLOR_OPACITY = 0.8;
+
+/** 实色按 opacity 叠到白底。 */
+export function fadeColorOnWhite(hex: string, opacity: number): string {
+  const raw = hex.replace('#', '');
+  const full =
+    raw.length === 3
+      ? raw
+          .split('')
+          .map((c) => c + c)
+          .join('')
+      : raw;
+  if (full.length !== 6) {
+    return hex;
+  }
+  const n = Number.parseInt(full, 16);
+  const mix = (channel: number) => Math.round(channel * opacity + 255 * (1 - opacity));
+  const r = mix((n >> 16) & 255);
+  const g = mix((n >> 8) & 255);
+  const b = mix(n & 255);
+  return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
+}
+
 /** 箭头 [沿边长度, 张开高度]。 */
 export const EDGE_ARROW_SIZE: [number, number] = [4, 10];
 
@@ -30,26 +57,29 @@ export const KIND_ICON_STYLE: Record<string, { icon: string; color: string }> = 
   test_case: { icon: 'test-case-square-fill', color: '#3ddc91' },
 };
 
-/** 关系展示名。正反向各自独立。 */
+/** 关系文案与彩色线色；正反向同色，方向靠箭头与文案。 */
 export const RELATION_STYLE: Record<string, RelationStyle> = {
-  block: { label: '阻塞' },
-  blockedBy: { label: '被阻塞' },
-  cause: { label: '原因' },
-  causedBy: { label: '结果' },
-  clone: { label: '拷贝' },
-  clonedBy: { label: '副本' },
-  relate: { label: '关联' },
-  'relate:work_item': { label: '关联工作项' },
-  'relate:idea': { label: '关联产品需求' },
-  'relate:ticket': { label: '关联工单' },
-  'relate:test_case': { label: '关联测试' },
-  duplicate: { label: '重复' },
-  mention: { label: '提及' },
-  parent: { label: '父工作项' },
-  child: { label: '子工作项' },
-  /** 上方位父/关联等整体收起时的边文案 */
-  bundle: { label: '关联' },
+  block: { label: '阻塞', color: '#e03131' },
+  blockedBy: { label: '被阻塞', color: '#e03131' },
+  cause: { label: '原因', color: '#f59f00' },
+  causedBy: { label: '结果', color: '#f59f00' },
+  clone: { label: '拷贝', color: '#0ca678' },
+  clonedBy: { label: '副本', color: '#0ca678' },
+  relate: { label: '关联', color: '#7048e8' },
+  'relate:work_item': { label: '关联工作项', color: '#7048e8' },
+  bundle: { label: '关联', color: '#7048e8' },
+  'relate:idea': { label: '关联产品需求', color: KIND_ICON_STYLE['idea'].color },
+  'relate:ticket': { label: '关联工单', color: KIND_ICON_STYLE['ticket'].color },
+  'relate:test_case': { label: '关联测试', color: KIND_ICON_STYLE['test_case'].color },
+  duplicate: { label: '重复', color: '#c2255c' },
+  mention: { label: '提及', color: '#0b7285' },
+  parent: { label: '父工作项', color: '#1c7ed6' },
+  child: { label: '子工作项', color: '#22b8cf' },
 };
+
+export function relationEdgeColor(relationType: string): string {
+  return RELATION_STYLE[relationType]?.color ?? DEFAULT_EDGE_COLOR;
+}
 
 /** 与 PJM 工作项卡片一致：宽 262，高 80。 */
 export const GRAPH_NODE_SIZE = { width: 262, height: 80 } as const;
@@ -114,7 +144,7 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
   edge: {
     type: 'flat-polyline',
     style: {
-      stroke: DEFAULT_EDGE_COLOR,
+      stroke: (d: EdgeData) => (d.data?.['edgeColor'] as string) ?? DEFAULT_EDGE_COLOR,
       lineWidth: 1,
       radius: 10,
       endArrow: (d: EdgeData) => d.data?.['endArrow'] !== false,
@@ -123,13 +153,13 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
       endArrowLineJoin: 'miter',
       labelAutoRotate: false,
       labelText: (d: EdgeData) => (d.data?.['label'] as string) ?? '',
-      labelFill: EDGE_LABEL_COLOR,
+      labelFill: (d: EdgeData) => (d.data?.['labelColor'] as string) ?? EDGE_LABEL_COLOR,
       labelFontSize: 12,
       labelFontWeight: 600,
       labelBackground: false,
     },
     state: {
-      /** 悬停非主卡片时，它到主卡片的连线 */
+      /** 悬停连回主卡片 */
       link: { stroke: EDGE_LINK_COLOR },
     },
   },

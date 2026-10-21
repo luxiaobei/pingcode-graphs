@@ -1,8 +1,9 @@
 import type { NexusAppContext } from "@pc-nexus/core";
 import { ces } from "@pc-nexus/storage";
 import { KG_EDGE_ENTITY_NAME, type KgEdge, type KgEdgeType } from "../models/pc-kg-edge.js";
-import { KG_NODE_ENTITY_NAME, type KgNode } from "../models/pc-kg-node.js";
+import { KG_NODE_ENTITY_NAME, isKgNodeId, type KgNode, type KgNodeKind } from "../models/pc-kg-node.js";
 import { KG_VIEW_ENTITY_NAME, kgViewId, type KgView } from "../models/pc-kg-view.js";
+import { isVisible } from "./visibility.js";
 
 /** outgoing：from → to；incoming：to → from；both：不区分存储方向。 */
 export type KgRelationDirection = "outgoing" | "incoming" | "both";
@@ -98,6 +99,47 @@ async function findRelationEdges(nodeIds: string[], types: readonly KgEdgeType[]
     return edges.filter((edge) => edge.active !== false);
 }
 
+function emptyDeepRelation(
+    rootId: string,
+    types: KgEdgeType[],
+    depth: number,
+    direction: KgRelationDirection,
+): KgDeepRelation {
+    return { rootId, types, depth, direction, nodes: [], edges: [] };
+}
+
+async function isNodeVisible(nodeId: string): Promise<boolean> {
+    if (!isKgNodeId(nodeId)) {
+        return false;
+    }
+    const separator = nodeId.indexOf(":");
+    return isVisible(nodeId.slice(0, separator) as KgNodeKind, nodeId.slice(separator + 1));
+}
+
+/** 同一批节点并行判断可见性，重复 id 只请求一次。 */
+async function visibleNodeIds(nodeIds: readonly string[]): Promise<Set<string>> {
+    const unique: string[] = [];
+    const seen = new Set<string>();
+    for (const id of nodeIds) {
+        if (seen.has(id)) {
+            continue;
+        }
+        seen.add(id);
+        unique.push(id);
+    }
+    if (unique.length === 0) {
+        return new Set();
+    }
+    const flags = await Promise.all(unique.map((id) => isNodeVisible(id)));
+    const visible = new Set<string>();
+    for (let index = 0; index < unique.length; index++) {
+        if (flags[index]) {
+            visible.add(unique[index]!);
+        }
+    }
+    return visible;
+}
+
 async function findNodesByIds(ids: string[]): Promise<KgNode[]> {
     if (ids.length === 0) {
         return [];
@@ -122,6 +164,7 @@ export class KgService {
      * 从节点出发，沿一种或多种关系逐层扩展。
      * type 可传单个类型或类型数组，同一层会一次查出这些关系。
      * depth 为最大嵌套层数，1 表示只取直接关联。
+     * 不可见节点会从结果中去掉，并且不会再沿着它继续扩展。
      */
     async getDeepRelation(
         context: NexusAppContext,
@@ -133,6 +176,9 @@ export class KgService {
         if (!nodeId) {
             throw new Error("Node id is required");
         }
+        if (!isKgNodeId(nodeId)) {
+            throw new Error("Node id format is invalid");
+        }
         const types = normalizeTypes(type);
         if (types.length === 0) {
             throw new Error("Relation type is required");
@@ -143,24 +189,56 @@ export class KgService {
 
         const maxDepth = Math.floor(depth);
         const resolvedDirection = direction ?? "outgoing";
-        const depthOf = new Map<string, number>([[nodeId, 0]]);
+        const depthOf = new Map<string, number>();
         const edges = new Map<string, KgEdge>();
+        const rootVisible = isNodeVisible(nodeId);
         let frontier = [nodeId];
 
         for (let level = 0; level < maxDepth && frontier.length > 0; level++) {
-            const found = await findRelationEdges(frontier, types, resolvedDirection);
-            const frontierSet = new Set(frontier);
-            const next: string[] = [];
-            for (const edge of found) {
-                edges.set(edge.id, edge);
-                const nextId = neighborId(edge, frontierSet, resolvedDirection);
-                if (!nextId || depthOf.has(nextId)) {
-                    continue;
+            const foundPromise = findRelationEdges(frontier, types, resolvedDirection);
+            let found: KgEdge[];
+            if (level === 0) {
+                const [relationEdges, visible] = await Promise.all([foundPromise, rootVisible]);
+                if (!visible) {
+                    return emptyDeepRelation(nodeId, types, maxDepth, resolvedDirection);
                 }
-                depthOf.set(nextId, level + 1);
-                next.push(nextId);
+                depthOf.set(nodeId, 0);
+                found = relationEdges;
+            } else {
+                found = await foundPromise;
+            }
+
+            const frontierSet = new Set(frontier);
+            const pending: Array<{ edge: KgEdge; nextId: string | undefined }> = [];
+            const candidates: string[] = [];
+            for (const edge of found) {
+                const nextId = neighborId(edge, frontierSet, resolvedDirection);
+                pending.push({ edge, nextId });
+                if (nextId && !depthOf.has(nextId)) {
+                    candidates.push(nextId);
+                }
+            }
+
+            const visibleIds = await visibleNodeIds(candidates);
+            const next: string[] = [];
+            for (const { edge, nextId } of pending) {
+                if (nextId && !depthOf.has(nextId)) {
+                    if (!visibleIds.has(nextId)) {
+                        continue;
+                    }
+                    depthOf.set(nextId, level + 1);
+                    next.push(nextId);
+                }
+                edges.set(edge.id, edge);
             }
             frontier = next;
+        }
+
+        if (!depthOf.has(nodeId)) {
+            if (!(await rootVisible)) {
+                return emptyDeepRelation(nodeId, types, maxDepth, resolvedDirection);
+            }
+            depthOf.set(nodeId, 0);
         }
 
         const nodes = await findNodesByIds([...depthOf.keys()]);

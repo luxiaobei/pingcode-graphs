@@ -10,7 +10,7 @@ export const onIdeaCreatedHandler: EventHandler = async (context, event) => {
     const ideaNode = createIdeaNode({
         refId: ideaInfo["id"],
         name: ideaInfo["title"],
-        identifier: ideaInfo["identifier"],
+        identifier: ideaInfo["whole_identifier"],
         stateType: ideaInfo["state"]?.["type"],
         stateName: ideaInfo["state"]?.["name"],
         description: ideaInfo["description"],
@@ -37,7 +37,7 @@ export const onIdeaUpdatedHandler: EventHandler = async (context, event) => {
     const ideaNode = createIdeaNode({
         refId: ideaInfo["id"],
         name: ideaInfo["title"],
-        identifier: ideaInfo["identifier"],
+        identifier: ideaInfo["whole_identifier"],
         stateType: ideaInfo["state"]?.["type"],
         stateName: ideaInfo["state"]?.["name"],
         description: ideaInfo["description"],

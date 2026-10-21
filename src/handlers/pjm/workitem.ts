@@ -21,7 +21,7 @@ export const onWorkItemCreatedHandler: EventHandler = async (context, event) => 
     const workitemNode = createWorkItemNode({
         refId: workitemInfo["id"],
         name: workitemInfo["title"],
-        identifier: workitemInfo["identifier"],
+        identifier: workitemInfo["whole_identifier"],
         typeName: typeInfo["name"],
         typeIcon: typeInfo["icon"],
         typeColor: typeInfo["color"],
@@ -52,7 +52,7 @@ export const onWorkItemUpdatedHandler: EventHandler = async (context, event) => 
     const workitemNode = createWorkItemNode({
         refId: workitemInfo["id"],
         name: workitemInfo["title"],
-        identifier: workitemInfo["identifier"],
+        identifier: workitemInfo["whole_identifier"],
         typeName: typeInfo["name"],
         typeIcon: typeInfo["icon"],
         typeColor: typeInfo["color"],

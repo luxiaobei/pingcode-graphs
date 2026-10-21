@@ -154,8 +154,6 @@ export function trunkEdges(
     const dualExit = Boolean(parentKids.length && midlineKids.length);
     const midlineAxis = midlineKids.length ? axisCenter(midlineKids, side) : undefined;
     const parentKidsAxis = parentKids.length ? axisCenter(parentKids, side) : undefined;
-    const labelStagger = (index: number): number =>
-      lane.length <= 1 ? 0 : (index - (lane.length - 1) / 2) * 16;
     const parentId = lane[0]?.members[0]?.parentId ?? '';
     // 双出线：上下父干错开；左右父走中线直出、关系出线错开（避免卡心斜切到错开点）
     const horizontal = side === 'left' || side === 'right';
@@ -177,7 +175,7 @@ export function trunkEdges(
           parentStemCenter(parent, parentAxis, side, midlineAxis),
         )
       : parentAxis;
-    lane.forEach((group, groupIndex) => {
+    lane.forEach((group) => {
       const kids = group.placed.map((item) => item.child);
       const foldOnly = group.members.every((member) => isFoldSummaryId(member.childId));
       const center = axisCenter(kids, side);
@@ -202,34 +200,6 @@ export function trunkEdges(
           : Math.abs(kids[0].x - parentStem) < 1);
       const alone = stemAligned && Math.abs(parentStem - parentAxis) < 1;
       const stemCenter = parentOwn ? parentStem : center;
-      // 文案落在本组类型线（子卡轴向），勿用共干 leave，否则多关系叠在同一段
-      const labelCenter = straight || alone ? parentAxis : stemCenter;
-      const leaveAxisForLabel = horizontal ? bundleLeave : parentAxis;
-      const onSharedStem = Math.abs(labelCenter - leaveAxisForLabel) < 1;
-      // 同侧多关系：共干或类型线过近时，文案改到分岔后独占段，避免叠字
-      const peerCrowded =
-        !straight &&
-        !alone &&
-        !foldOnly &&
-        lane.length > 1 &&
-        lane.some((peer, peerIndex) => {
-          if (peerIndex === groupIndex) {
-            return false;
-          }
-          const peerType = peer.members[0]?.relationType ?? '';
-          if (peerType === 'child') {
-            return false;
-          }
-          const peerCenter = axisCenter(
-            peer.placed.map((item) => item.child),
-            side,
-          );
-          return Math.abs(peerCenter - labelCenter) < 28;
-        });
-      const preferAfterFork = (onSharedStem || peerCrowded) && lane.length > 1 && !straight && !alone;
-      const stagger = foldOnly || preferAfterFork || !onSharedStem ? 0 : labelStagger(groupIndex);
-      const offsetX = foldOnly || straight || alone || preferAfterFork ? 0 : 16;
-      const offsetY = foldOnly || straight || alone || preferAfterFork ? 0 : -12;
       const spine = parentOwn
         ? (spines.parent ?? fork)
         : (spines.bundle ?? spines.parent ?? fork);
@@ -251,26 +221,18 @@ export function trunkEdges(
           : parentOwn
             ? parentSeparateRoute(parent, item.child, side, spine, fork, stemCenter)
             : routeOf(parent, item.child, side, spine, fork, center, bundleLeave);
-        const style: EdgeData['style'] = {
-          controlPoints,
-          labelPlacement: showLabel
-            ? labelRatio(
-                parent,
-                item.child,
-                side,
-                controlPoints,
-                labelCenter,
-                straight || foldOnly || stemAligned,
-                foldOnly ? 1 : 8,
-                preferAfterFork,
-              )
-            : 'center',
-          labelOffsetX: showLabel && (side === 'top' || side === 'bottom') ? offsetX + stagger : 0,
-          labelOffsetY: showLabel && (side === 'left' || side === 'right') ? offsetY + stagger : 0,
-        };
-        if ((straight || alone || stemAligned || foldOnly) && showLabel) {
-          style.labelTextAlign = 'center';
-          style.labelTextBaseline = 'middle';
+        const style: EdgeData['style'] = { controlPoints };
+        if (showLabel) {
+          const corner = labelCorner(side, relationType === 'child');
+          const spot = pointOnPath(
+            [leavePoint(parent, side), ...controlPoints, rootEnterPoint(item.child, side)],
+            [foldAnchor.x, foldAnchor.y],
+          );
+          style.labelPlacement = spot.ratio;
+          style.labelOffsetX = foldAnchor.x + corner.dx - spot.at[0];
+          style.labelOffsetY = foldAnchor.y + corner.dy - spot.at[1];
+          style.labelTextAlign = corner.align;
+          style.labelTextBaseline = corner.baseline;
         }
         edges.push(straightEdge(item.member, style, showLabel));
       }
@@ -476,7 +438,7 @@ function axisCenter(children: GraphNodePosition[], side: Side): number {
   return (Math.min(...xs) + Math.max(...xs)) / 2;
 }
 
-/** 子工作项：沿父卡片中线笔直落到下一层，再分到子卡片。类型名在这段直线上。 */
+/** 子工作项：沿父卡片中线笔直落到下一层，再分到子卡片。 */
 function layerRoute(
   parent: GraphNodePosition,
   child: GraphNodePosition,
@@ -675,71 +637,82 @@ function rootEnterPoint(child: GraphNodePosition, side: Side): [number, number] 
   return [child.x, child.y + HALF_H];
 }
 
+/** 收起圆半径 8，文案再让开一截，避免压线和挡住按钮。 */
+const LABEL_GAP = 14;
+
 /**
- * 名字落在类型线上。
- * 子工作项用从父卡片直下来的那一段。
- * 其他关系优先本组独占类型线；共干叠字时改落到分岔后通向子卡的那段。
+ * 子工作项在交叉点右上方。
+ * 其它关系：按钮在主卡片左侧时，文案在按钮右上方；在右侧时，文案在按钮左上方。
  */
-function labelRatio(
-  parent: GraphNodePosition,
-  child: GraphNodePosition,
+function labelCorner(
   side: Side,
+  child: boolean,
+): { dx: number; dy: number; align: 'left' | 'right'; baseline: 'top' | 'bottom' } {
+  if (child || side === 'left' || side === 'bottom') {
+    return { dx: LABEL_GAP, dy: -LABEL_GAP, align: 'left', baseline: 'bottom' };
+  }
+  if (side === 'right') {
+    return { dx: -LABEL_GAP, dy: -LABEL_GAP, align: 'right', baseline: 'bottom' };
+  }
+  return { dx: LABEL_GAP, dy: LABEL_GAP, align: 'left', baseline: 'top' };
+}
+
+/** 折线上离目标最近的点，以及它在整段路径上的比例。 */
+function pointOnPath(
   points: [number, number][],
-  center: number,
-  stem: boolean,
-  minSpan = 8,
-  preferAfterFork = false,
-): number {
-  const leave = leavePoint(parent, side);
-  const knots = [leave, ...points, rootEnterPoint(child, side)];
-  const lengths: number[] = [];
+  target: [number, number],
+): { ratio: number; at: [number, number] } {
+  const fallback = points[0] ?? target;
   let total = 0;
-  for (let index = 1; index < knots.length; index += 1) {
-    const len = Math.hypot(knots[index][0] - knots[index - 1][0], knots[index][1] - knots[index - 1][1]);
-    lengths.push(len);
-    total += len;
+  const spans: number[] = [];
+  for (let index = 1; index < points.length; index += 1) {
+    const from = points[index - 1];
+    const to = points[index];
+    const span = from && to ? Math.hypot(to[0] - from[0], to[1] - from[1]) : 0;
+    spans.push(span);
+    total += span;
   }
   if (total < 1) {
-    return 0.5;
+    return { ratio: 0.5, at: fallback };
   }
-  const ratioAt = (cursor: number, span: number) =>
-    Math.min(0.92, Math.max(0.08, (cursor + span / 2) / total));
-  const leaveAxis = side === 'left' || side === 'right' ? leave[1] : leave[0];
-  let exclusiveType: number | undefined;
-  let sharedType: number | undefined;
-  let afterFork: number | undefined;
-  let afterForkSpan = 0;
+  let best = Number.POSITIVE_INFINITY;
+  let along = 0;
+  let at = fallback;
   let cursor = 0;
-  for (let index = 0; index < lengths.length; index += 1) {
-    const from = knots[index];
-    const to = knots[index + 1];
-    const span = lengths[index] ?? 0;
-    const onType =
-      side === 'left' || side === 'right'
-        ? Math.abs(from[1] - center) < 1 && Math.abs(to[1] - center) < 1 && span > minSpan
-        : Math.abs(from[0] - center) < 1 && Math.abs(to[0] - center) < 1 && span > minSpan;
-    if (onType && from && to) {
-      const ratio = ratioAt(cursor, span);
-      if (stem) {
-        return ratio;
-      }
-      const fromCard = Math.abs(from[0] - leave[0]) < 1 && Math.abs(from[1] - leave[1]) < 1;
-      const onLeaveAxis = Math.abs(center - leaveAxis) < 1;
-      if (!fromCard && !onLeaveAxis) {
-        exclusiveType ??= ratio;
-      } else {
-        sharedType ??= ratio;
-      }
+  for (let index = 0; index < spans.length; index += 1) {
+    const from = points[index];
+    const to = points[index + 1];
+    const span = spans[index] ?? 0;
+    if (!from || !to) {
+      cursor += span;
+      continue;
     }
-    // 分岔后末几段：取较长独占臂放文案，避免落在入卡短 stub 上贴卡/贴岔口
-    if (!stem && span > minSpan && index >= lengths.length - 2 && span >= afterForkSpan) {
-      afterForkSpan = span;
-      afterFork = Math.min(0.86, Math.max(0.2, (cursor + span * 0.55) / total));
+    const t = span < 1 ? 0 : clamp01(project(from, to, target));
+    const point: [number, number] = [
+      from[0] + (to[0] - from[0]) * t,
+      from[1] + (to[1] - from[1]) * t,
+    ];
+    const distance = Math.hypot(point[0] - target[0], point[1] - target[1]);
+    if (distance < best) {
+      best = distance;
+      along = cursor + span * t;
+      at = point;
     }
     cursor += span;
   }
-  if (preferAfterFork) {
-    return afterFork ?? exclusiveType ?? sharedType ?? 0.45;
+  return { ratio: Math.min(0.98, Math.max(0.02, along / total)), at };
+}
+
+function project(from: [number, number], to: [number, number], target: [number, number]): number {
+  const dx = to[0] - from[0];
+  const dy = to[1] - from[1];
+  const span = dx * dx + dy * dy;
+  if (span < 1) {
+    return 0;
   }
-  return exclusiveType ?? afterFork ?? sharedType ?? 0.45;
+  return ((target[0] - from[0]) * dx + (target[1] - from[1]) * dy) / span;
+}
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
 }

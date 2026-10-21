@@ -18,7 +18,16 @@ export const GRAPH_ZOOM_RANGE: [number, number] = [0.2, 3];
 /** 初次布局落位后再适应画布的延迟（ms） */
 export const GRAPH_FIT_SETTLE_MS = 300;
 
-export const DEFAULT_EDGE_COLOR = '#b1b1b1';
+export const DEFAULT_EDGE_COLOR = '#ccd0d8';
+
+/** 关系文案，略深于线条。 */
+export const EDGE_LABEL_COLOR = '#c0c4cc';
+
+/** 悬停连回主卡片的线，与根卡片描边相同。 */
+export const EDGE_LINK_COLOR = '#6698ff';
+
+/** 箭头 [沿边长度, 张开高度]。 */
+export const EDGE_ARROW_SIZE: [number, number] = [4, 10];
 
 /** 非工作项节点的默认图标（thy-icon）。 */
 export const KIND_ICON_STYLE: Record<string, { icon: string; color: string }> = {
@@ -45,7 +54,7 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
   parent: { label: '父工作项' },
   child: { label: '子工作项' },
   /** 上方位等其它关系整体收起时的边文案 */
-  bundle: { label: '关系' },
+  bundle: { label: '关联' },
 };
 
 /** 与 PJM 工作项卡片一致：宽 262，高 80。 */
@@ -105,7 +114,7 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
       pointerEvents: (d: NodeData) => nodeChrome(d, 'auto', 'auto', 'none'),
     },
     state: {
-      root: { stroke: '#6698ff', lineWidth: 2, fill: '#eff6ff' },
+      root: { stroke: EDGE_LINK_COLOR, lineWidth: 2, fill: '#eff6ff' },
     },
   },
   edge: {
@@ -116,13 +125,18 @@ export const GRAPH_OPTIONS: Omit<GraphOptions, 'container' | 'width' | 'height'>
       radius: 10,
       endArrow: (d: EdgeData) => d.data?.['endArrow'] !== false,
       endArrowType: 'simple',
+      endArrowSize: EDGE_ARROW_SIZE,
       endArrowLineJoin: 'miter',
       labelAutoRotate: false,
       labelText: (d: EdgeData) => (d.data?.['label'] as string) ?? '',
-      labelFill: DEFAULT_EDGE_COLOR,
+      labelFill: EDGE_LABEL_COLOR,
       labelFontSize: 12,
       labelFontWeight: 600,
       labelBackground: false,
+    },
+    state: {
+      /** 悬停非主卡片时，它到主卡片的连线 */
+      link: { stroke: EDGE_LINK_COLOR },
     },
   },
   behaviors: [

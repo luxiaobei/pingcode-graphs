@@ -63,6 +63,12 @@ export class GraphCanvas {
   /** 详情 tab 关掉左侧画布操作。 */
   readonly showTools = input(true);
 
+  /** 工作项 tab 不提供换根追溯。 */
+  readonly allowRetrace = input(true);
+
+  /** 工作项 tab 里用路由打开详情，避免在详情页内再调 openDetail。 */
+  readonly openInPage = input(false);
+
   /** 用户级关系方位偏好（跨工作项） */
   readonly relationSides = input<Record<string, Side> | null>(null);
 
@@ -277,7 +283,7 @@ export class GraphCanvas {
         this.toggleExpand.emit(foldKey);
         return;
       }
-      openPivot(item);
+      openPivot(item, { inPage: this.openInPage() });
     });
 
     this.g6.on(GraphEvent.AFTER_TRANSFORM, () => {
@@ -363,6 +369,9 @@ export class GraphCanvas {
   };
 
   private readonly onTraceMenu = (event: MouseEvent): void => {
+    if (!this.allowRetrace()) {
+      return;
+    }
     const card = cardOf(event);
     if (!card) {
       return;

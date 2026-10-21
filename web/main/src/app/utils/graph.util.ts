@@ -1,5 +1,5 @@
 import { idea, page, testcase, ticket, workitem } from '@pc-nexus/capabilities';
-import { NavigationTarget } from '@pc-nexus/bridge';
+import { NavigationTarget, router } from '@pc-nexus/bridge';
 import { RELATION_STYLE } from '../constants/graph.constants';
 import type { DependencyGraph, GraphEdge, GraphEntity } from '../entities/graph.entity';
 import type { RelationType } from '../enums/graph.enum';
@@ -133,9 +133,46 @@ const pivotOpeners: Partial<Record<NavigationTarget, (identifier: string) => Pro
   [NavigationTarget.Page]: (identifier) => page.openDetail(identifier),
 };
 
-/** 通过 SDK 打开详情。工作项等传编号（如 GRA-3），测试用例传用例 id。 */
-export function openPivot(item: GraphEntity): void {
+const ENTITY_KIND_MARKERS = [
+  'work_item:',
+  'test_case:',
+  'idea:',
+  'ticket:',
+  'page:',
+  'project:',
+  'library:',
+  'space:',
+  'product:',
+] as const;
+
+/** 节点 id 里的对象 id。同一对象多次出现时 id 会带前缀，取最后一段 kind。 */
+function entityRefId(item: GraphEntity): string {
+  let markerAt = -1;
+  let marker = '';
+  for (const candidate of ENTITY_KIND_MARKERS) {
+    const index = item.id.lastIndexOf(candidate);
+    if (index > markerAt) {
+      markerAt = index;
+      marker = candidate;
+    }
+  }
+  return markerAt < 0 ? '' : item.id.slice(markerAt + marker.length).trim();
+}
+
+/**
+ * 打开详情。
+ * 菜单弹窗用 openDetail。工作项 tab 嵌在详情页里，openDetail 会报错，改为路由跳转。
+ */
+export function openPivot(item: GraphEntity, options?: { inPage?: boolean }): void {
   const target = resolveNavigationTarget(item) ?? NavigationTarget.Workitem;
+  if (options?.inPage) {
+    const id = entityRefId(item);
+    if (!id) {
+      return;
+    }
+    void router.navigate({ target, id }).catch(() => undefined);
+    return;
+  }
   const identifier = pivotIdentifier(item, target);
   if (!identifier) {
     return;

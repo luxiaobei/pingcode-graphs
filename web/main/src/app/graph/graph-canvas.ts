@@ -1,11 +1,11 @@
 import {
+  afterNextRender,
   ApplicationRef,
   Component,
   DestroyRef,
+  effect,
   ElementRef,
   EnvironmentInjector,
-  afterNextRender,
-  effect,
   inject,
   input,
   output,
@@ -39,7 +39,12 @@ import {
   nodeItemFromEvent,
   sharpenHtmlCamera,
 } from '../utils/g6-helpers';
-import { isFoldSummaryNode, isWorkItemEntity, openPivot, relationBetween } from '../utils/graph.util';
+import {
+  isFoldSummaryNode,
+  isWorkItemEntity,
+  openPivot,
+  relationBetween,
+} from '../utils/graph.util';
 import type { SavedNodePosition, SaveLayoutPayload } from '../utils/saved-graph-layout';
 import { tidyGraphLayout } from '../utils/tidy-graph-layout';
 import { toG6Data, type GraphNodePosition } from '../utils/to-g6-data';
@@ -112,6 +117,8 @@ export class GraphCanvas {
   private hoveredCardId: string | null = null;
   /** 上一轮染过色的边，离开时要清掉。 */
   private linkedEdges: string[] = [];
+  /** 写过 --card-accent 的卡片。 */
+  private accentCard: HTMLElement | null = null;
   /** 染色排队：上一次画完再画下一次，避免快速划过时颜色错乱。 */
   private hoverJob: Promise<void> | null = null;
   private hoverAgain = false;
@@ -272,6 +279,7 @@ export class GraphCanvas {
     this.positions.clear();
     this.hoveredCardId = null;
     this.linkedEdges = [];
+    this.clearCardAccent();
     setFullStrokeEdges([]);
     window.clearTimeout(this.traceMenuTimer);
     this.traceStop.abort();
@@ -288,7 +296,17 @@ export class GraphCanvas {
     if (!this.g6) {
       return;
     }
-    this.g6.setData(toG6Data(data, layout ?? this.positions.pins, this.lineColorMode()));
+    const next = toG6Data(data, layout ?? this.positions.pins, this.lineColorMode());
+    this.clearCardAccent();
+    this.g6.setData(next);
+    // 切换线条模式后覆盖边色（G6 setData 会合并残留字段）
+    this.g6.updateEdgeData(
+      (next.edges ?? []).map((edge) => ({
+        id: edge.id,
+        data: edge.data,
+        style: edge.style,
+      })),
+    );
   }
 
   private bindGraphEvents(): void {
@@ -451,20 +469,83 @@ export class GraphCanvas {
     const clear = this.linkedEdges.filter((id) => live.has(id) && !next.has(id));
     this.linkedEdges = [...next];
     setFullStrokeEdges(next);
-    const states: Record<string, string[]> = {};
-    for (const id of clear) {
-      states[id] = [];
+    const colorMode = this.lineColorMode() === 'item';
+    this.syncCardAccent(graph, data, this.hoveredCardId, colorMode);
+
+    if (colorMode) {
+      // 彩色：hover 只加深线条
+      const patches: { id: string; data: Record<string, unknown> }[] = [];
+      for (const id of clear) {
+        const edge = graph.getEdgeData(id);
+        const faded = edge?.data?.['edgeColorFaded'];
+        if (edge?.data && typeof faded === 'string') {
+          patches.push({
+            id,
+            data: { ...edge.data, edgeColor: faded },
+          });
+        }
+      }
+      for (const id of next) {
+        const edge = graph.getEdgeData(id);
+        const solid = edge?.data?.['edgeColorSolid'];
+        if (edge?.data && typeof solid === 'string') {
+          patches.push({
+            id,
+            data: { ...edge.data, edgeColor: solid },
+          });
+        }
+      }
+      if (patches.length) {
+        graph.updateEdgeData(patches);
+        await graph.draw();
+      }
+    } else {
+      const states: Record<string, string[]> = {};
+      for (const id of clear) {
+        states[id] = [];
+      }
+      for (const id of next) {
+        states[id] = ['link'];
+      }
+      if (Object.keys(states).length) {
+        await graph.setElementState(states, false);
+      }
     }
-    for (const id of next) {
-      states[id] = ['link'];
-    }
-    if (!Object.keys(states).length) {
-      return;
-    }
-    await graph.setElementState(states, false);
     if (this.linkedEdges.length) {
       await graph.frontElement(this.linkedEdges);
     }
+  }
+
+  /** 彩色 hover：卡片边框跟关系色。 */
+  private syncCardAccent(
+    graph: Graph,
+    data: DependencyGraph | null,
+    cardId: string | null,
+    colorMode: boolean,
+  ): void {
+    this.clearCardAccent();
+    if (!colorMode || !data || !cardId) {
+      return;
+    }
+    const edgeId = edgesToRoot(data, cardId)[0];
+    const solid = edgeId ? graph.getEdgeData(edgeId)?.data?.['edgeColorSolid'] : null;
+    if (typeof solid !== 'string') {
+      return;
+    }
+    const card = findCardEl(this.host().nativeElement, cardId);
+    if (!card) {
+      return;
+    }
+    card.style.setProperty('--card-accent', solid);
+    this.accentCard = card;
+  }
+
+  private clearCardAccent(): void {
+    if (!this.accentCard) {
+      return;
+    }
+    this.accentCard.style.removeProperty('--card-accent');
+    this.accentCard = null;
   }
 
   /** 右键卡片不拖动；非当前工作项弹出「以此工作项追溯」。 */
@@ -734,6 +815,16 @@ function edgesToRoot(data: DependencyGraph, startId: string): string[] {
     current = nodes.get(parentId);
   }
   return ids;
+}
+
+function findCardEl(root: HTMLElement, cardId: string): HTMLElement | null {
+  const cards = root.querySelectorAll<HTMLElement>('article.card');
+  for (const card of cards) {
+    if (card.dataset['nodeId'] === cardId) {
+      return card;
+    }
+  }
+  return null;
 }
 
 function cardOf(event: Event): HTMLElement | null {

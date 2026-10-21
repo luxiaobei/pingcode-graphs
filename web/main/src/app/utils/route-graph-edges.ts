@@ -83,6 +83,7 @@ function foldOnTypeStem(
 export function trunkEdges(
   graph: DependencyGraph,
   positions?: ReadonlyMap<string, GraphNodePosition>,
+  options?: { unstack?: boolean },
 ): { edges: EdgeData[]; forks: Map<string, { x: number; y: number }> } {
   const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
   const groups = new Map<string, TrunkMember[]>();
@@ -344,7 +345,10 @@ export function trunkEdges(
       forks.set(relationBundleFoldKey(parentId), foldAtArmFork(side, assocHub, assocSpine));
     }
   }
-  unstackSharedStrokes(edges, positions, nodes);
+  // 彩色模式跳过卸叠，靠绘制顺序分层
+  if (options?.unstack !== false) {
+    unstackSharedStrokes(edges, positions, nodes);
+  }
   return { edges, forks };
 }
 

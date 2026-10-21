@@ -2,9 +2,13 @@ import type { EdgeData, GraphData, NodeData } from '@antv/g6';
 import type { DependencyGraph, FoldMark, GraphEntity } from '../entities/graph.entity';
 import {
   DEFAULT_EDGE_COLOR,
+  EDGE_COLOR_OPACITY,
+  EDGE_LABEL_COLOR,
+  EDGE_LABEL_COLOR_OPACITY,
   FOLD_SUMMARY_SIZE,
   GRAPH_NODE_SIZE,
-  KIND_ICON_STYLE,
+  fadeColorOnWhite,
+  relationEdgeColor,
 } from '../constants/graph.constants';
 import type { LineColorMode } from '../settings/display-settings';
 import { isFoldSummaryNode } from './graph.util';
@@ -21,54 +25,62 @@ export function toG6Data(
   positions?: ReadonlyMap<string, GraphNodePosition>,
   lineColorMode: LineColorMode = 'default',
 ): GraphData {
-  const { edges, forks } = trunkEdges(graph, positions);
+  const colorMode = lineColorMode === 'item';
+  const { edges, forks } = trunkEdges(graph, positions, { unstack: !colorMode });
   const cards = graph.nodes.filter((item) => !item.relationHub);
-  const nodesById = new Map(graph.nodes.map((item) => [item.id, item]));
+  const painted = edges.map((edge) => applyLineColorMode(edge, lineColorMode));
+  // 彩色：关联干先画，具体关系后画盖住共用段
+  if (colorMode) {
+    painted.sort((a, b) => edgePaintOrder(a) - edgePaintOrder(b));
+  }
   return {
     nodes: cards.map((item) => toG6Node(item, positions, graph.rootId, forks)),
-    edges:
-      lineColorMode === 'item' ? edges.map((edge) => colorEdgeByItem(edge, nodesById)) : edges,
+    edges: painted,
   };
 }
 
-/** 按目标事项类型色（或关系专属色）描边；透明占位边不动。 */
-function colorEdgeByItem(
-  edge: EdgeData,
-  nodesById: ReadonlyMap<string, GraphEntity>,
-): EdgeData {
+/** 越大越后画。 */
+function edgePaintOrder(edge: EdgeData): number {
+  const type = String(edge.data?.['relationType'] ?? '');
+  if (type === 'bundle' || type === 'relate' || type === 'relate:work_item') {
+    return 0;
+  }
+  if (type.startsWith('relate:')) {
+    return 1;
+  }
+  return 2;
+}
+
+/** 写入边/文案色；默认色也要覆盖，否则 G6 合并 data 会残留上一模式的彩色。 */
+function applyLineColorMode(edge: EdgeData, mode: LineColorMode): EdgeData {
   if (edge.data?.['labelOnly'] === true || edge.style?.['stroke'] === 'transparent') {
     return edge;
   }
-  const color = resolveItemEdgeColor(edge, nodesById);
+  if (mode === 'item') {
+    const solid = relationEdgeColor(String(edge.data?.['relationType'] ?? ''));
+    const faded = fadeColorOnWhite(solid, EDGE_COLOR_OPACITY);
+    const labelFaded = fadeColorOnWhite(solid, EDGE_LABEL_COLOR_OPACITY);
+    return {
+      ...edge,
+      data: {
+        ...edge.data,
+        edgeColorSolid: solid,
+        edgeColorFaded: faded,
+        edgeColor: faded,
+        labelColor: labelFaded,
+      },
+    };
+  }
   return {
     ...edge,
-    style: {
-      ...edge.style,
-      stroke: color,
-      labelFill: color,
+    data: {
+      ...edge.data,
+      edgeColorSolid: DEFAULT_EDGE_COLOR,
+      edgeColorFaded: DEFAULT_EDGE_COLOR,
+      edgeColor: DEFAULT_EDGE_COLOR,
+      labelColor: EDGE_LABEL_COLOR,
     },
   };
-}
-
-function resolveItemEdgeColor(
-  edge: EdgeData,
-  nodesById: ReadonlyMap<string, GraphEntity>,
-): string {
-  const target = nodesById.get(String(edge.target));
-  if (target?.iconColor) {
-    return target.iconColor;
-  }
-  const relationType = String(edge.data?.['relationType'] ?? '');
-  if (relationType === 'relate:idea') {
-    return KIND_ICON_STYLE['idea'].color;
-  }
-  if (relationType === 'relate:ticket') {
-    return KIND_ICON_STYLE['ticket'].color;
-  }
-  if (relationType === 'relate:test_case') {
-    return KIND_ICON_STYLE['test_case'].color;
-  }
-  return DEFAULT_EDGE_COLOR;
 }
 
 /** 业务卡片或折叠占位。关系按钮的坐标相对这张卡片。 */

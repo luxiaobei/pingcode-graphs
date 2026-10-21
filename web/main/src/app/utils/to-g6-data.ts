@@ -1,6 +1,12 @@
-import type { GraphData, NodeData } from '@antv/g6';
+import type { EdgeData, GraphData, NodeData } from '@antv/g6';
 import type { DependencyGraph, FoldMark, GraphEntity } from '../entities/graph.entity';
-import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
+import {
+  DEFAULT_EDGE_COLOR,
+  FOLD_SUMMARY_SIZE,
+  GRAPH_NODE_SIZE,
+  KIND_ICON_STYLE,
+} from '../constants/graph.constants';
+import type { LineColorMode } from '../settings/display-settings';
 import { isFoldSummaryNode } from './graph.util';
 import { trunkEdges, type GraphNodePosition } from './route-graph-edges';
 
@@ -13,13 +19,56 @@ const HALF_H = GRAPH_NODE_SIZE.height / 2;
 export function toG6Data(
   graph: DependencyGraph,
   positions?: ReadonlyMap<string, GraphNodePosition>,
+  lineColorMode: LineColorMode = 'default',
 ): GraphData {
   const { edges, forks } = trunkEdges(graph, positions);
   const cards = graph.nodes.filter((item) => !item.relationHub);
+  const nodesById = new Map(graph.nodes.map((item) => [item.id, item]));
   return {
     nodes: cards.map((item) => toG6Node(item, positions, graph.rootId, forks)),
-    edges,
+    edges:
+      lineColorMode === 'item' ? edges.map((edge) => colorEdgeByItem(edge, nodesById)) : edges,
   };
+}
+
+/** 按目标事项类型色（或关系专属色）描边；透明占位边不动。 */
+function colorEdgeByItem(
+  edge: EdgeData,
+  nodesById: ReadonlyMap<string, GraphEntity>,
+): EdgeData {
+  if (edge.data?.['labelOnly'] === true || edge.style?.['stroke'] === 'transparent') {
+    return edge;
+  }
+  const color = resolveItemEdgeColor(edge, nodesById);
+  return {
+    ...edge,
+    style: {
+      ...edge.style,
+      stroke: color,
+      labelFill: color,
+    },
+  };
+}
+
+function resolveItemEdgeColor(
+  edge: EdgeData,
+  nodesById: ReadonlyMap<string, GraphEntity>,
+): string {
+  const target = nodesById.get(String(edge.target));
+  if (target?.iconColor) {
+    return target.iconColor;
+  }
+  const relationType = String(edge.data?.['relationType'] ?? '');
+  if (relationType === 'relate:idea') {
+    return KIND_ICON_STYLE['idea'].color;
+  }
+  if (relationType === 'relate:ticket') {
+    return KIND_ICON_STYLE['ticket'].color;
+  }
+  if (relationType === 'relate:test_case') {
+    return KIND_ICON_STYLE['test_case'].color;
+  }
+  return DEFAULT_EDGE_COLOR;
 }
 
 /** 业务卡片或折叠占位。关系按钮的坐标相对这张卡片。 */

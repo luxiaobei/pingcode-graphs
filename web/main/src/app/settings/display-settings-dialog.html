@@ -1,15 +1,61 @@
-<thy-dialog-header thyTitle="展示配置"></thy-dialog-header>
-<thy-dialog-body>
-  <ul class="display-settings">
-    @for (item of settings; track item.id) {
-      <li class="display-settings__row">
-        <span>{{ item.label }}</span>
-        <thy-switch [(ngModel)]="item.enabled"></thy-switch>
-      </li>
-    }
-  </ul>
-</thy-dialog-body>
-<thy-dialog-footer thyAlign="right">
-  <button thyButton="default" thyAppearance="link" type="button" (click)="cancel()">取消</button>
-  <button thyButton="primary" type="button" (click)="confirm()">确定</button>
-</thy-dialog-footer>
+<thy-layout class="view-settings">
+  <thy-sidebar thyTheme="light" [thyWidth]="200">
+    <thy-sidebar-header thyTitle="视图设置"></thy-sidebar-header>
+    <thy-sidebar-content>
+      <thy-menu thyVariant="loose" class="pt-0">
+        <a
+          thy-menu-item
+          href="javascript:;"
+          [class.active]="activeTab === 'data'"
+          (click)="activeTab = 'data'"
+        >
+          <span thy-menu-item-name>数据配置</span>
+        </a>
+        <a
+          thy-menu-item
+          href="javascript:;"
+          [class.active]="activeTab === 'display'"
+          (click)="activeTab = 'display'"
+        >
+          <span thy-menu-item-name>展示配置</span>
+        </a>
+      </thy-menu>
+    </thy-sidebar-content>
+  </thy-sidebar>
+
+  <thy-layout>
+    <thy-header [thyTitle]="panelTitle">
+      <ng-template #headerOperation>
+        <thy-action thyIcon="close" (click)="cancel()"></thy-action>
+      </ng-template>
+    </thy-header>
+
+    <thy-content>
+      @if (activeTab === 'data') {
+        <ul class="display-settings">
+          @for (item of settings; track item.id) {
+            <li class="display-settings__row">
+              <span>{{ item.label }}</span>
+              <thy-switch [(ngModel)]="item.enabled"></thy-switch>
+            </li>
+          }
+        </ul>
+      } @else {
+        <div class="line-color">
+          <div class="line-color__label">
+            线条颜色<span class="line-color__required">*</span>
+          </div>
+          <thy-radio-group class="line-color__radios" [(ngModel)]="lineColorMode">
+            <label thy-radio [thyInline]="true" thyValue="default" thyLabelText="默认颜色"></label>
+            <label thy-radio [thyInline]="true" thyValue="item" thyLabelText="事项/关系颜色"></label>
+          </thy-radio-group>
+        </div>
+      }
+    </thy-content>
+
+    <thy-dialog-footer thyAlign="right">
+      <button thyButton="default" thyAppearance="link" type="button" (click)="cancel()">取消</button>
+      <button thyButton="primary" type="button" (click)="confirm()">确定</button>
+    </thy-dialog-footer>
+  </thy-layout>
+</thy-layout>

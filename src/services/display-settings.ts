@@ -3,16 +3,31 @@ import { kvs } from "@pc-nexus/storage";
 
 const KEY_PREFIX = "graph-display-settings:";
 
-/** 展示配置开关。没有用户、没有记录或读失败时，resolver 返回全部打开。 */
-export type DisplaySettingFlags = Record<string, boolean>;
+/** 线条颜色：默认灰线，或按事项/关系类型色。 */
+export type LineColorMode = "default" | "item";
+
+/** 展示/数据配置。没有用户、没有记录或读失败时，resolver 返回全部打开 + 默认色。 */
+export type DisplaySettingFlags = {
+    parent?: boolean;
+    relate?: boolean;
+    product?: boolean;
+    ticket?: boolean;
+    test?: boolean;
+    lineColorMode?: LineColorMode;
+    [key: string]: boolean | LineColorMode | undefined;
+};
 
 const SETTING_IDS = ["parent", "relate", "product", "ticket", "test"] as const;
 
 function allOn(): DisplaySettingFlags {
-    return Object.fromEntries(SETTING_IDS.map((id) => [id, true]));
+    return { ...Object.fromEntries(SETTING_IDS.map((id) => [id, true])), lineColorMode: "default" };
 }
 
-/** 只保留已知开关里的布尔值。没有有效值时返回 null。 */
+function readLineColorMode(value: unknown): LineColorMode | undefined {
+    return value === "default" || value === "item" ? value : undefined;
+}
+
+/** 只保留已知开关里的布尔值与线条颜色。没有有效值时返回 null。 */
 function readFlags(value: unknown): DisplaySettingFlags | null {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
         return null;
@@ -23,6 +38,10 @@ function readFlags(value: unknown): DisplaySettingFlags | null {
         if (typeof record[id] === "boolean") {
             flags[id] = record[id];
         }
+    }
+    const lineColorMode = readLineColorMode(record["lineColorMode"]);
+    if (lineColorMode) {
+        flags.lineColorMode = lineColorMode;
     }
     return Object.keys(flags).length > 0 ? flags : null;
 }

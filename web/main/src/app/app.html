@@ -38,6 +38,7 @@
             [openInPage]="surface() === 'tab'"
             [relationSides]="relationSides()"
             [savedPositions]="savedLayout()?.positions ?? null"
+            [lineColorMode]="lineColorMode()"
             (toggleExpand)="onToggleExpand($event)"
             (retrace)="onRetrace($event)"
             (saveLayout)="onSaveLayout($event)"

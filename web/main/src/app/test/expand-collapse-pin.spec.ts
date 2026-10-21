@@ -68,10 +68,7 @@ describe('父工作项拖拽不再整组重锚', () => {
     );
     // 模拟松手 snapshot 的 applyDragSide：无 g6，直接验证偏好不被父卡污染
     const fakeG6 = {
-      getNodeData: () => [
-        { id: 'root' },
-        { id: parentId },
-      ],
+      getNodeData: () => [{ id: 'root' }, { id: parentId }],
       getElementPosition: (id: string) => {
         if (id === 'root') {
           return [0, 0];
@@ -185,5 +182,20 @@ describe('resolveExpandCollapse pin vs saved', () => {
     const layout = session.resolveExpandCollapse(expanded);
 
     expect(layout.get(parentId)).toMatchObject(draggedParent);
+  });
+});
+
+describe('CanvasPositionSession.clear', () => {
+  it('清空 pin/saved 时保留用户级 relationSides', () => {
+    const session = new CanvasPositionSession();
+    session.setRelationSides({ bundle: 'top', child: 'bottom', parent: 'top' });
+    session.seed(new Map([['root', { x: 0, y: 0 }]]));
+    session.clear();
+    expect(session.getRelationSides()).toEqual({
+      bundle: 'top',
+      child: 'bottom',
+      parent: 'top',
+    });
+    expect(session.pins.size).toBe(0);
   });
 });

@@ -1,4 +1,5 @@
 :host {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -7,10 +8,12 @@
   box-sizing: border-box;
   overflow: visible;
   pointer-events: auto;
+  // 拖拽画布/卡片时禁止选中文案，避免蓝底选区卡住要再点一次才消失
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .card {
-  position: relative;
   display: block;
   box-sizing: border-box;
   width: 100%;
@@ -21,6 +24,8 @@
   background: #fff;
   overflow: visible;
   cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .card--root {
@@ -129,12 +134,19 @@
   transform: translate(-50%, -50%);
   border-radius: 50%;
   background: #fff;
-  color: #aaa;
+  color: #ccd0d8;
   cursor: pointer;
   user-select: none;
 }
 
 .fold-summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  white-space: nowrap;
   cursor: pointer;
   user-select: none;
 }

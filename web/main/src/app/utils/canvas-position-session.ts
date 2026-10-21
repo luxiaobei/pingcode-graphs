@@ -39,7 +39,7 @@ export class CanvasPositionSession {
   clear(): void {
     this.pins.clear();
     this.saved.clear();
-    this.relationSides.clear();
+    // relationSides 跨工作项共用：勿随画布清空；由 setRelationSides / 松手写入更新
     this.lastGraph = null;
     this.lastDepth = null;
     this.lastRootId = null;

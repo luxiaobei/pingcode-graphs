@@ -297,8 +297,9 @@ export class GraphCanvas {
       return;
     }
     const next = toG6Data(data, layout ?? this.positions.pins, this.lineColorMode());
+    this.clearCardAccent();
     this.g6.setData(next);
-    // 切换线条模式后刷新边色
+    // 切换线条模式后覆盖边色（G6 setData 会合并残留字段）
     this.g6.updateEdgeData(
       (next.edges ?? []).map((edge) => ({
         id: edge.id,

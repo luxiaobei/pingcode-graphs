@@ -1,7 +1,9 @@
 import type { EdgeData, GraphData, NodeData } from '@antv/g6';
 import type { DependencyGraph, FoldMark, GraphEntity } from '../entities/graph.entity';
 import {
+  DEFAULT_EDGE_COLOR,
   EDGE_COLOR_OPACITY,
+  EDGE_LABEL_COLOR,
   EDGE_LABEL_COLOR_OPACITY,
   FOLD_SUMMARY_SIZE,
   GRAPH_NODE_SIZE,
@@ -49,26 +51,34 @@ function edgePaintOrder(edge: EdgeData): number {
   return 2;
 }
 
-/** 彩色模式写入兑白后的边/文案色；默认色不写。 */
+/** 写入边/文案色；默认色也要覆盖，否则 G6 合并 data 会残留上一模式的彩色。 */
 function applyLineColorMode(edge: EdgeData, mode: LineColorMode): EdgeData {
-  if (
-    mode !== 'item' ||
-    edge.data?.['labelOnly'] === true ||
-    edge.style?.['stroke'] === 'transparent'
-  ) {
+  if (edge.data?.['labelOnly'] === true || edge.style?.['stroke'] === 'transparent') {
     return edge;
   }
-  const solid = relationEdgeColor(String(edge.data?.['relationType'] ?? ''));
-  const faded = fadeColorOnWhite(solid, EDGE_COLOR_OPACITY);
-  const labelFaded = fadeColorOnWhite(solid, EDGE_LABEL_COLOR_OPACITY);
+  if (mode === 'item') {
+    const solid = relationEdgeColor(String(edge.data?.['relationType'] ?? ''));
+    const faded = fadeColorOnWhite(solid, EDGE_COLOR_OPACITY);
+    const labelFaded = fadeColorOnWhite(solid, EDGE_LABEL_COLOR_OPACITY);
+    return {
+      ...edge,
+      data: {
+        ...edge.data,
+        edgeColorSolid: solid,
+        edgeColorFaded: faded,
+        edgeColor: faded,
+        labelColor: labelFaded,
+      },
+    };
+  }
   return {
     ...edge,
     data: {
       ...edge.data,
-      edgeColorSolid: solid,
-      edgeColorFaded: faded,
-      edgeColor: faded,
-      labelColor: labelFaded,
+      edgeColorSolid: DEFAULT_EDGE_COLOR,
+      edgeColorFaded: DEFAULT_EDGE_COLOR,
+      edgeColor: DEFAULT_EDGE_COLOR,
+      labelColor: EDGE_LABEL_COLOR,
     },
   };
 }

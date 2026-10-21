@@ -57,24 +57,24 @@ export const KIND_ICON_STYLE: Record<string, { icon: string; color: string }> = 
   test_case: { icon: 'test-case-square-fill', color: '#3ddc91' },
 };
 
-/** 关系文案与彩色线色；正反向同色，方向靠箭头与文案。 */
+/** 关系文案与彩色线色（关联类色值对齐产品「关联」选择器）。 */
 export const RELATION_STYLE: Record<string, RelationStyle> = {
-  block: { label: '阻塞', color: '#e03131' },
-  blockedBy: { label: '被阻塞', color: '#e03131' },
-  cause: { label: '原因', color: '#f59f00' },
-  causedBy: { label: '结果', color: '#f59f00' },
-  clone: { label: '拷贝', color: '#0ca678' },
-  clonedBy: { label: '副本', color: '#0ca678' },
-  relate: { label: '关联', color: '#7048e8' },
-  'relate:work_item': { label: '关联工作项', color: '#7048e8' },
-  bundle: { label: '关联', color: '#7048e8' },
+  block: { label: '阻塞', color: '#fa8888' },
+  blockedBy: { label: '被阻塞', color: '#ff9f73' },
+  cause: { label: '原因', color: '#f6c659' },
+  causedBy: { label: '结果', color: '#73d897' },
+  clone: { label: '拷贝', color: '#a9e072' },
+  clonedBy: { label: '副本', color: '#56abfb' },
+  relate: { label: '关联', color: '#868af6' },
+  'relate:work_item': { label: '关联工作项', color: '#868af6' },
+  bundle: { label: '关联', color: '#868af6' },
   'relate:idea': { label: '关联产品需求', color: KIND_ICON_STYLE['idea'].color },
   'relate:ticket': { label: '关联工单', color: KIND_ICON_STYLE['ticket'].color },
   'relate:test_case': { label: '关联测试', color: KIND_ICON_STYLE['test_case'].color },
-  duplicate: { label: '重复', color: '#c2255c' },
-  mention: { label: '提及', color: '#0b7285' },
-  parent: { label: '父工作项', color: '#1c7ed6' },
-  child: { label: '子工作项', color: '#22b8cf' },
+  duplicate: { label: '重复', color: '#5dcfff' },
+  mention: { label: '提及', color: '#d287f8' },
+  parent: { label: '父工作项', color: EDGE_LINK_COLOR },
+  child: { label: '子工作项', color: EDGE_LINK_COLOR },
 };
 
 export function relationEdgeColor(relationType: string): string {

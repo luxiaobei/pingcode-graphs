@@ -158,6 +158,78 @@ describe('关联整体 fold 换侧后展开', () => {
 });
 
 describe('resolveExpandCollapse pin vs saved', () => {
+  it('父卡拖到右侧后展开其它关系：不被 relationSides.parent=top 拉回上方', () => {
+    const rootId = 'root';
+    const parentId = 'p1';
+    const foldId = `fold:${rootId}::relate:ticket`;
+    const ticketId = 't1';
+    const collapsed: DependencyGraph = {
+      rootId,
+      depth: 1,
+      nodes: [
+        { id: rootId, title: 'root', depth: 0 },
+        { id: parentId, title: 'parent', depth: 1, revealedByAnchorId: rootId },
+        {
+          id: foldId,
+          title: '+4',
+          depth: 1,
+          revealedByAnchorId: rootId,
+          foldSummary: {
+            key: `${rootId}::relate:ticket`,
+            relationType: 'relate:ticket',
+            count: 4,
+            expanded: false,
+          },
+        },
+      ],
+      edges: [
+        { id: 'e-p', source: rootId, target: parentId, relationType: 'parent', label: '父工作项' },
+        {
+          id: 'e-f',
+          source: rootId,
+          target: foldId,
+          relationType: 'relate:ticket',
+          label: '关联工单',
+        },
+      ],
+    };
+    const expanded: DependencyGraph = {
+      rootId,
+      depth: 1,
+      nodes: [
+        { id: rootId, title: 'root', depth: 0 },
+        { id: parentId, title: 'parent', depth: 1, revealedByAnchorId: rootId },
+        { id: ticketId, title: 'ticket', depth: 1, revealedByAnchorId: rootId },
+      ],
+      edges: [
+        { id: 'e-p', source: rootId, target: parentId, relationType: 'parent', label: '父工作项' },
+        {
+          id: 'e-t',
+          source: rootId,
+          target: ticketId,
+          relationType: 'relate:ticket',
+          label: '关联工单',
+        },
+      ],
+    };
+
+    const session = new CanvasPositionSession();
+    // 偏好仍记父在上，但父卡 pin 已在右侧
+    session.setRelationSides({ parent: 'top', 'relate:ticket': 'right' });
+    const draggedParent: GraphNodePosition = { x: 280, y: 40, side: 'right' };
+    session.seed(
+      new Map<string, GraphNodePosition>([
+        [rootId, { x: 0, y: 0 }],
+        [parentId, draggedParent],
+        [foldId, { x: 260, y: -20, side: 'right' }],
+      ]),
+    );
+    session.rememberGraph(collapsed);
+
+    const layout = session.resolveExpandCollapse(expanded);
+    expect(layout.get(parentId)).toMatchObject(draggedParent);
+  });
+
   it('拖动父卡后收起再展开：保留 pin，不被旧 saved 盖回', () => {
     const { collapsed, expanded, parentId } = parentFoldFixture();
     const session = new CanvasPositionSession();

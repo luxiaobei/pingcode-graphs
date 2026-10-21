@@ -1,8 +1,13 @@
 import type { EdgeData } from '@antv/g6';
 import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
+import {
+  LAYOUT_ASSOC_SPINE_GAP,
+  LAYOUT_FORK_PAD,
+  LAYOUT_LABEL_GAP,
+  LAYOUT_SPINE_PAD,
+} from '../constants/layout.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import { isAssocBundleRelation, type Side } from './arrange-graph';
-import { unstackSharedStrokes } from './unstack-strokes';
 import {
   BUNDLE_FOLD_TYPE,
   isFoldSummaryId,
@@ -12,6 +17,7 @@ import {
   relationFoldKey,
   relationLabel,
 } from './graph.util';
+import { unstackSharedStrokes } from './unstack-strokes';
 
 export type GraphNodePosition = { x: number; y: number; side?: Side };
 
@@ -19,8 +25,6 @@ const HALF_W = GRAPH_NODE_SIZE.width / 2;
 const HALF_H = GRAPH_NODE_SIZE.height / 2;
 const FOLD_HALF_W = FOLD_SUMMARY_SIZE.width / 2;
 const FOLD_HALF_H = FOLD_SUMMARY_SIZE.height / 2;
-const SPINE_PAD = 28;
-const FORK_PAD = 44;
 
 function halfOf(node: GraphEntity | undefined): { w: number; h: number } {
   return isFoldSummaryNode(node) ? { w: FOLD_HALF_W, h: FOLD_HALF_H } : { w: HALF_W, h: HALF_H };
@@ -40,10 +44,7 @@ interface LaneGroup {
   side: Side;
 }
 
-/**
- * − 钉在分岔口（干/类型线与叉线交点），与 controlPoints 角点一致。
- * 勿取路径段中点——同类型多卡时中点会落在横梁上跑偏。
- */
+/** − 钉在干/叉交点（勿取路径中点）。 */
 function foldJunction(
   parent: GraphNodePosition,
   side: Side,
@@ -61,7 +62,7 @@ function foldJunction(
     : { x: axis, y: fork };
 }
 
-/** 父工作项 −：偏脊侧，避免与关联横脊交叉；文案用 labelCorner 让开 − */
+/** 父工作项 −：偏脊侧，避开关联横脊。 */
 const PARENT_FOLD_ALONG = 0.38;
 
 function foldOnTypeStem(
@@ -146,15 +147,14 @@ export function trunkEdges(
     const skip = new Set(lane.flatMap((group) => group.members.map((member) => member.childId)));
     skip.add(lane[0]?.members[0]?.parentId ?? '');
     const others = otherNodes(positions, skip);
-    // 同侧一条骨干，再按类型组分叉。
-    // 「关联」整组：骨干 → 关联支 → 组内第二脊 → 各子类型再分叉（保留原因/结果/重复等文案）。
+    // 同侧骨干 → 类型分叉；关联组再走第二脊
     const allKids = lane.flatMap((group) => group.placed.map((item) => item.child));
     const assocGroups = lane.filter((group) =>
       isAssocBundleRelation(group.members[0]?.relationType ?? ''),
     );
     const assocKids = assocGroups.flatMap((group) => group.placed.map((item) => item.child));
     const assocHub = assocKids.length ? axisCenter(assocKids, side) : undefined;
-    // 公共脊不含父/子卡：拖父不会带动关联横脊；父项单独算脊
+    // 公共脊不含父/子；父项单独算脊
     const nonParentKids = lane
       .filter((group) => {
         const type = group.members[0]?.relationType ?? '';
@@ -171,7 +171,19 @@ export function trunkEdges(
         ? spineAt(parent, parentKidsOnly, side, others)
         : spine;
     const assocSpineRaw = assocKids.length ? spineAt(parent, assocKids, side, others) : undefined;
-    // 关联组干对齐同侧「原始」专属关系（工单/产品需求/测试…），不跟父/子，避免交叉与拖父联动
+    const assocTypeFork =
+      assocKids.length > 0
+        ? forkAt(
+            assocGroups.flatMap((group) =>
+              group.placed.map((item) => ({
+                pos: item.child,
+                half: halfOf(nodes.get(item.member.childId)),
+              })),
+            ),
+            side,
+          )
+        : undefined;
+    // 关联第二脊对齐同侧专属关系臂（不含父/子）
     const peerForks = lane
       .filter((group) => {
         const type = group.members[0]?.relationType ?? '';
@@ -191,7 +203,7 @@ export function trunkEdges(
     const peerAlignFork = peerForks.length ? extremeFork(peerForks, side) : undefined;
     const assocSpine =
       spine != null && assocSpineRaw != null
-        ? alignAssocSpine(side, spine, assocSpineRaw, peerAlignFork)
+        ? alignAssocSpine(side, spine, assocSpineRaw, peerAlignFork, assocTypeFork)
         : undefined;
     const useAssocGroup = Boolean(
       assocKids.length && spine != null && assocHub != null && assocSpine != null,
@@ -223,7 +235,7 @@ export function trunkEdges(
       const groupSpine =
         isParent && parentSpine != null ? parentSpine : (spine ?? fork);
       const foldMode = straight ? 'layer' : 'bundle';
-      // 父工作项 − 偏脊侧，不落在与关联横线交叉口
+      // 父 − 偏脊侧
       const foldAnchor =
         isParent && !straight && groupSpine != null
           ? foldOnTypeStem(side, groupSpine, fork, center, PARENT_FOLD_ALONG)
@@ -244,7 +256,7 @@ export function trunkEdges(
                 center,
               )
             : routeOf(parent, item.child, side, groupSpine, fork, center);
-        // 同事样式：文案钉在 − 旁（path 最近点 + labelCorner 让开）
+        // 文案钉在 − 旁
         const style: EdgeData['style'] = { controlPoints };
         if (showLabel) {
           const corner = labelCorner(side, relationType === 'child');
@@ -264,7 +276,7 @@ export function trunkEdges(
         forks.set(relationFoldKey(parentId, relationType), foldAnchor);
       }
     });
-    // 「关联」文案钉在组内分叉口旁；不描线（labelOnly + lineWidth:0），避免多出游离残段
+    // 关联文案钉分叉口；labelOnly 不描线
     if (assocKids.length && !hasBundleFold && useAssocGroup && parentId && spine != null) {
       const stemOwner = closestMember(
         parent,
@@ -327,7 +339,7 @@ export function trunkEdges(
         });
       }
     }
-    // 关联整体收起 −：钉在组内干线分叉口（第二脊 × 汇合点）
+    // 关联收起 − 钉第二脊分叉口
     if (assocKids.length && parentId && useAssocGroup && assocHub != null && assocSpine != null) {
       forks.set(relationBundleFoldKey(parentId), foldAtArmFork(side, assocHub, assocSpine));
     }
@@ -408,18 +420,53 @@ function forkAt(
   side: Side,
 ): number {
   if (side === 'right') {
-    return Math.min(...children.map((child) => child.pos.x - child.half.w)) - FORK_PAD;
+    return Math.min(...children.map((child) => child.pos.x - child.half.w)) - LAYOUT_FORK_PAD;
   }
   if (side === 'left') {
-    return Math.max(...children.map((child) => child.pos.x + child.half.w)) + FORK_PAD;
+    return Math.max(...children.map((child) => child.pos.x + child.half.w)) + LAYOUT_FORK_PAD;
   }
   if (side === 'bottom') {
-    return Math.min(...children.map((child) => child.pos.y - child.half.h)) - FORK_PAD;
+    return Math.min(...children.map((child) => child.pos.y - child.half.h)) - LAYOUT_FORK_PAD;
   }
-  return Math.max(...children.map((child) => child.pos.y + child.half.h)) + FORK_PAD;
+  return Math.max(...children.map((child) => child.pos.y + child.half.h)) + LAYOUT_FORK_PAD;
 }
 
-/** 父卡片外侧的公共脊柱。让开左右（或上下）已经占住的卡片，避免横穿。 */
+/** 上下出线：主卡竖廊内障碍。 */
+function corridorObstacles(
+  parent: GraphNodePosition,
+  others: GraphNodePosition[],
+  side: Side,
+): GraphNodePosition[] {
+  if (side === 'top' || side === 'bottom') {
+    return others.filter((node) => Math.abs(node.x - parent.x) <= HALF_W + LAYOUT_SPINE_PAD);
+  }
+  return others;
+}
+
+/** 上下横脊扫过的左右列（跨度相交）；用外缘抬脊，避免穿列。 */
+function besideSpanObstacles(
+  parent: GraphNodePosition,
+  children: GraphNodePosition[],
+  others: GraphNodePosition[],
+  side: Side,
+): GraphNodePosition[] {
+  if (side !== 'top' && side !== 'bottom') {
+    return [];
+  }
+  const xs = [parent.x, ...children.map((child) => child.x)];
+  const spanLeft = Math.min(...xs) - HALF_W;
+  const spanRight = Math.max(...xs) + HALF_W;
+  return others.filter((node) => {
+    if (Math.abs(node.x - parent.x) <= HALF_W + LAYOUT_SPINE_PAD) {
+      return false;
+    }
+    const left = node.x - HALF_W;
+    const right = node.x + HALF_W;
+    return right >= spanLeft && left <= spanRight;
+  });
+}
+
+/** 公共脊：让开竖廊障碍；上下侧再抬过左右列外缘。 */
 function spineAt(
   parent: GraphNodePosition,
   children: GraphNodePosition[],
@@ -430,41 +477,56 @@ function spineAt(
     children.map((pos) => ({ pos, half: { w: HALF_W, h: HALF_H } })),
     side,
   );
+  const obstacles = corridorObstacles(parent, others, side);
   if (side === 'right') {
-    let x = parent.x + HALF_W + SPINE_PAD;
-    for (const node of others) {
+    let x = parent.x + HALF_W + LAYOUT_SPINE_PAD;
+    for (const node of obstacles) {
       const near = node.x - HALF_W;
       if (near > parent.x && near < fork) {
-        x = Math.max(x, near + SPINE_PAD);
+        x = Math.max(x, near + LAYOUT_SPINE_PAD);
       }
     }
     return Math.min(x, fork - 24);
   }
   if (side === 'left') {
-    let x = parent.x - HALF_W - SPINE_PAD;
-    for (const node of others) {
+    let x = parent.x - HALF_W - LAYOUT_SPINE_PAD;
+    for (const node of obstacles) {
       const near = node.x + HALF_W;
       if (near < parent.x && near > fork) {
-        x = Math.min(x, near - SPINE_PAD);
+        x = Math.min(x, near - LAYOUT_SPINE_PAD);
       }
     }
     return Math.max(x, fork + 24);
   }
   if (side === 'bottom') {
-    let y = parent.y + HALF_H + SPINE_PAD;
-    for (const node of others) {
+    let y = parent.y + HALF_H + LAYOUT_SPINE_PAD;
+    for (const node of obstacles) {
       const near = node.y - HALF_H;
       if (near > parent.y && near < fork) {
-        y = Math.max(y, near + SPINE_PAD);
+        y = Math.max(y, near + LAYOUT_SPINE_PAD);
+      }
+    }
+    // 脊压到左右列底以下
+    for (const node of besideSpanObstacles(parent, children, others, side)) {
+      const outer = node.y + HALF_H;
+      if (outer > parent.y && outer < fork) {
+        y = Math.max(y, outer + LAYOUT_SPINE_PAD);
       }
     }
     return Math.min(y, fork - 24);
   }
-  let y = parent.y - HALF_H - SPINE_PAD;
-  for (const node of others) {
-    const near = node.y - HALF_H;
+  let y = parent.y - HALF_H - LAYOUT_SPINE_PAD;
+  for (const node of obstacles) {
+    const near = node.y + HALF_H;
     if (near < parent.y && near > fork) {
-      y = Math.min(y, near - SPINE_PAD);
+      y = Math.min(y, near - LAYOUT_SPINE_PAD);
+    }
+  }
+  // 脊抬到左右列顶以上
+  for (const node of besideSpanObstacles(parent, children, others, side)) {
+    const outer = node.y - HALF_H;
+    if (outer < parent.y && outer > fork) {
+      y = Math.min(y, outer - LAYOUT_SPINE_PAD);
     }
   }
   return Math.max(y, fork + 24);
@@ -504,9 +566,6 @@ function layerRoute(
   ];
 }
 
-/** 关联组第二脊：无同伴时相对骨干保底 gap；有同伴时贴齐该侧原始类型臂高度（不超额外扩） */
-const ASSOC_SPINE_GAP = 72;
-
 function extremeFork(forks: number[], side: Side): number {
   if (side === 'top' || side === 'left') {
     return Math.min(...forks);
@@ -516,31 +575,66 @@ function extremeFork(forks: number[], side: Side): number {
 
 function offsetAssocSpine(side: Side, junction: number, assocSpine: number): number {
   if (side === 'top') {
-    return Math.min(assocSpine, junction - ASSOC_SPINE_GAP);
+    return Math.min(assocSpine, junction - LAYOUT_ASSOC_SPINE_GAP);
   }
   if (side === 'bottom') {
-    return Math.max(assocSpine, junction + ASSOC_SPINE_GAP);
+    return Math.max(assocSpine, junction + LAYOUT_ASSOC_SPINE_GAP);
   }
   if (side === 'left') {
-    return Math.min(assocSpine, junction - ASSOC_SPINE_GAP);
+    return Math.min(assocSpine, junction - LAYOUT_ASSOC_SPINE_GAP);
   }
-  return Math.max(assocSpine, junction + ASSOC_SPINE_GAP);
+  return Math.max(assocSpine, junction + LAYOUT_ASSOC_SPINE_GAP);
 }
 
-/** 第二脊：有同侧同伴则对齐其类型臂末端（同高）；否则自身保底 gap */
+/** 关联第二脊：对齐同伴类型臂或相对公共脊保底；夹在公共脊与分叉之间。 */
 function alignAssocSpine(
   side: Side,
   junction: number,
   assocSpineRaw: number,
   peerFork?: number,
+  typeFork?: number,
 ): number {
-  if (peerFork != null && Number.isFinite(peerFork)) {
-    return peerFork;
+  const raw =
+    peerFork != null && Number.isFinite(peerFork)
+      ? peerFork
+      : offsetAssocSpine(side, junction, assocSpineRaw);
+  if (typeFork == null || !Number.isFinite(typeFork)) {
+    return raw;
   }
-  return offsetAssocSpine(side, junction, assocSpineRaw);
+  const pad = 20;
+  if (side === 'top') {
+    const hi = junction - pad;
+    const lo = typeFork + pad;
+    if (lo > hi) {
+      return (junction + typeFork) / 2;
+    }
+    return Math.min(hi, Math.max(lo, raw));
+  }
+  if (side === 'bottom') {
+    const lo = junction + pad;
+    const hi = typeFork - pad;
+    if (lo > hi) {
+      return (junction + typeFork) / 2;
+    }
+    return Math.max(lo, Math.min(hi, raw));
+  }
+  if (side === 'left') {
+    const hi = junction - pad;
+    const lo = typeFork + pad;
+    if (lo > hi) {
+      return (junction + typeFork) / 2;
+    }
+    return Math.min(hi, Math.max(lo, raw));
+  }
+  const lo = junction + pad;
+  const hi = typeFork - pad;
+  if (lo > hi) {
+    return (junction + typeFork) / 2;
+  }
+  return Math.max(lo, Math.min(hi, raw));
 }
 
-/** 关联整体收起 −：钉在组干分叉口（汇合臂 × 第二脊） */
+/** 关联收起 −：钉汇合臂 × 第二脊。 */
 function foldAtArmFork(
   side: Side,
   arm: number,
@@ -551,9 +645,7 @@ function foldAtArmFork(
     : { x: arm, y: forkSpine };
 }
 
-/**
- * 父卡片 → 公共脊 → 类型线（名字在这一段）→ 本组自己的分叉 → 卡片。
- */
+/** 公共脊 → 类型线 → 分叉 → 卡。 */
 function routeOf(
   parent: GraphNodePosition,
   child: GraphNodePosition,
@@ -590,10 +682,7 @@ function routeOf(
   ]);
 }
 
-/**
- * 「关联」整组：公共脊 → 关联汇合 → 组内第二脊 → 子类型线 → 分叉 → 卡。
- * 子类型（原因/结果/重复…）在第二脊上各自中心分叉，文案落在类型线上。
- */
+/** 关联组：公共脊 → 汇合 → 第二脊 → 子类型分叉 → 卡。 */
 function routeAssocGroup(
   parent: GraphNodePosition,
   child: GraphNodePosition,
@@ -676,10 +765,6 @@ function rootEnterPoint(child: GraphNodePosition, side: Side): [number, number] 
   return [child.x, child.y + HALF_H];
 }
 
-/** 文案距分叉口留白，避免贴在 − / 竖叉上（短臂时略偏脊侧） */
-/** 收起圆半径 8，文案再让开一截，避免压线和挡住按钮。 */
-const LABEL_GAP = 14;
-
 /**
  * 子工作项在交叉点右上方。
  * 其它关系：按钮在主卡片左侧时，文案在按钮右上方；在右侧时，文案在按钮左上方。
@@ -689,12 +774,12 @@ function labelCorner(
   child: boolean,
 ): { dx: number; dy: number; align: 'left' | 'right'; baseline: 'top' | 'bottom' } {
   if (child || side === 'left' || side === 'bottom') {
-    return { dx: LABEL_GAP, dy: -LABEL_GAP, align: 'left', baseline: 'bottom' };
+    return { dx: LAYOUT_LABEL_GAP, dy: -LAYOUT_LABEL_GAP, align: 'left', baseline: 'bottom' };
   }
   if (side === 'right') {
-    return { dx: -LABEL_GAP, dy: -LABEL_GAP, align: 'right', baseline: 'bottom' };
+    return { dx: -LAYOUT_LABEL_GAP, dy: -LAYOUT_LABEL_GAP, align: 'right', baseline: 'bottom' };
   }
-  return { dx: LABEL_GAP, dy: LABEL_GAP, align: 'left', baseline: 'top' };
+  return { dx: LAYOUT_LABEL_GAP, dy: LAYOUT_LABEL_GAP, align: 'left', baseline: 'top' };
 }
 
 /** 折线上离目标最近的点，以及它在整段路径上的比例。 */

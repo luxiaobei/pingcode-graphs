@@ -26,7 +26,11 @@ const noPermissionCodeMap: Record<string, string> = {
 };
 
 export async function isVisible(kind: KgNodeKind, refId: string): Promise<boolean> {
-    const response = await api.invoke(`${visibilityUrlMap[kind]}/${refId}`, { as: "user" });
+    const path = visibilityUrlMap[kind];
+    if (!path) {
+        return true;
+    }
+    const response = await api.invoke(`${path}/${refId}`, { as: "user" });
     const data = await response.json();
     if (noPermissionCodeMap[kind] === data.code) {
         return false;

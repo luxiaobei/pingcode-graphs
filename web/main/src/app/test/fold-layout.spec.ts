@@ -160,6 +160,82 @@ describe('clearStalePinsAfterFoldDrag', () => {
     expect(clearStalePinsAfterFoldDrag(expanded, collapsed, foldPins, pins)).toHaveLength(0);
     expect(pins.has(parentId)).toBe(true);
   });
+
+  it('「关联」整体 fold 拖到右侧后展开：清掉上侧 mention/重复等 pin', () => {
+    const rootId = 'root';
+    const foldId = `fold:${rootId}::bundle`;
+    const mentionId = 'm1';
+    const dupId = 'd1';
+    const collapsed: DependencyGraph = {
+      rootId,
+      depth: 1,
+      nodes: [
+        { id: rootId, title: 'root', depth: 0 },
+        {
+          id: foldId,
+          title: '+ 2',
+          depth: 1,
+          revealedByAnchorId: rootId,
+          foldSummary: {
+            key: `${rootId}::bundle`,
+            relationType: 'bundle',
+            count: 2,
+            expanded: false,
+          },
+        },
+      ],
+      edges: [
+        {
+          id: 'e-fold',
+          source: rootId,
+          target: foldId,
+          relationType: 'bundle',
+          label: '关联',
+        },
+      ],
+    };
+    const expanded: DependencyGraph = {
+      rootId,
+      depth: 1,
+      nodes: [
+        { id: rootId, title: 'root', depth: 0 },
+        { id: mentionId, title: 'mention', depth: 1, revealedByAnchorId: rootId },
+        { id: dupId, title: 'dup', depth: 1, revealedByAnchorId: rootId },
+      ],
+      edges: [
+        {
+          id: 'e-m',
+          source: rootId,
+          target: mentionId,
+          relationType: 'mention',
+          label: '提及',
+        },
+        {
+          id: 'e-d',
+          source: rootId,
+          target: dupId,
+          relationType: 'duplicate',
+          label: '重复',
+        },
+      ],
+    };
+    const pins = new Map<string, GraphNodePosition>([
+      [rootId, { x: 0, y: 0 }],
+      [foldId, { x: 220, y: 0, side: 'right' }],
+      [mentionId, { x: -40, y: -160, side: 'top' }],
+      [dupId, { x: 40, y: -160, side: 'top' }],
+    ]);
+    const foldPins = new Map([[foldId, pins.get(foldId)!]]);
+
+    const clusters = clearStalePinsAfterFoldDrag(expanded, collapsed, foldPins, pins);
+
+    expect(pins.has(mentionId)).toBe(false);
+    expect(pins.has(dupId)).toBe(false);
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0]?.side).toBe('right');
+    expect(clusters[0]?.ids.has(mentionId)).toBe(true);
+    expect(clusters[0]?.ids.has(dupId)).toBe(true);
+  });
 });
 
 describe('syncRelationSidesFromFolds', () => {

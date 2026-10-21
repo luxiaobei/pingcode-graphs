@@ -24,11 +24,33 @@ export function unstackSharedStrokes(
   if (!positions) {
     return;
   }
+  // labelOnly（如「关联」文案干）只挂字，不描线、不占段，避免卸叠后留下游离残段
   const routed = edges.flatMap((edge) => {
+    if (edge.data?.['labelOnly']) {
+      return [];
+    }
     const points = fullPolyline(edge, positions, nodes);
     return points && edge.id ? [{ edge, points }] : [];
   });
+  if (!routed.length) {
+    return;
+  }
+
+  const pinLabel = (edge: EdgeData, points: Point[]): void => {
+    if (!edge.id) {
+      return;
+    }
+    const label = labelAt(edge, points);
+    // 有文案时始终钉绝对坐标，避免 G6 按整段 path 再偏一次（短臂时会贴到分叉口）
+    if (label) {
+      planStroke(edge.id, points, label);
+    }
+  };
+
   if (routed.length < 2) {
+    for (const item of routed) {
+      pinLabel(item.edge, item.points);
+    }
     return;
   }
 
@@ -42,8 +64,15 @@ export function unstackSharedStrokes(
     const points = insertSplits(item.points, vertices);
     const start = firstOpenSegment(points, claimed);
     claimSegments(points.slice(start), claimed);
-    if (start > 0 && item.edge.id) {
-      planStroke(item.edge.id, strokeFrom(points, start), labelAt(item.edge, item.points));
+    if (!item.edge.id) {
+      continue;
+    }
+    const label = labelAt(item.edge, item.points);
+    if (start > 0) {
+      planStroke(item.edge.id, strokeFrom(points, start), label);
+    } else if (label) {
+      // 整段自绘也要钉文案，否则短类型臂上 G6 原生 placement 会靠到分叉
+      planStroke(item.edge.id, points, label);
     }
   }
 }

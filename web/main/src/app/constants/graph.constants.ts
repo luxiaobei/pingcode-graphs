@@ -1,10 +1,4 @@
-import type {
-  EdgeData,
-  GraphOptions,
-  IElementDragEvent,
-  IPointerEvent,
-  NodeData,
-} from '@antv/g6';
+import type { EdgeData, GraphOptions, IElementDragEvent, IPointerEvent, NodeData } from '@antv/g6';
 import type { GraphEntity, RelationStyle } from '../entities/graph.entity';
 
 export const GRAPH_MIN_SIZE = 320;
@@ -53,7 +47,7 @@ export const RELATION_STYLE: Record<string, RelationStyle> = {
   mention: { label: '提及' },
   parent: { label: '父工作项' },
   child: { label: '子工作项' },
-  /** 上方位等其它关系整体收起时的边文案 */
+  /** 上方位父/关联等整体收起时的边文案 */
   bundle: { label: '关联' },
 };
 

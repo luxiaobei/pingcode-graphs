@@ -229,6 +229,11 @@ export class GraphCanvas {
   private initGraph(): void {
     const container = this.host().nativeElement;
     this.g6 = new Graph({ container, ...graphHostSize(container), ...GRAPH_OPTIONS });
+    // 按下画布即清选区（平移/点选都可能残留蓝底）
+    container.addEventListener('pointerdown', () => window.getSelection()?.removeAllRanges(), {
+      capture: true,
+      signal: this.traceStop.signal,
+    });
     this.bindTraceMenu(container);
     this.bindCardHover(container);
     this.bindGraphEvents();
@@ -304,6 +309,8 @@ export class GraphCanvas {
     this.g6.on(NodeEvent.DRAG_START, (event: IElementEvent) => {
       this.g6?.stopLayout();
       this.draggingNodeId = String(event.target.id);
+      // 拖拽易带出浏览器文字选区，卡住蓝底需再点卡片才消
+      window.getSelection()?.removeAllRanges();
     });
     this.g6.on(NodeEvent.DRAG, () => {
       if (this.dragEdgeRaf) {
@@ -325,18 +332,9 @@ export class GraphCanvas {
       const data = untracked(() => this.graph());
       const draggedId = this.draggingNodeId;
       this.draggingNodeId = null;
-      // 写 side / 父关系偏好；父卡换方位时整组重锚到新侧
+      // 写 side；仅折叠占位松手时同步关系方位偏好（父/子普通卡不写偏好、不整组重锚）
       this.positions.snapshot(this.g6, data, draggedId, true);
       if (!data) {
-        return;
-      }
-      const parentLayout =
-        draggedId != null ? this.positions.reanchorParentAfterDrag(data, draggedId) : null;
-      if (parentLayout) {
-        void this.applyLayoutPositions(data, parentLayout, {
-          viewport: 'none',
-          keepHiddenPins: true,
-        }).catch(() => undefined);
         return;
       }
       this.applyGraphData(data);
@@ -345,7 +343,7 @@ export class GraphCanvas {
   }
 
   /**
-   * 拖拽中按当前位置更新 side 并重算正交折点（不写关系偏好，松手再整组重锚）。
+   * 拖拽中按当前位置更新 side 并重算正交折点（不写关系偏好；松手后仅折叠占位写偏好）。
    */
   private syncEdgesWhileDragging(): void {
     const g6 = this.g6;

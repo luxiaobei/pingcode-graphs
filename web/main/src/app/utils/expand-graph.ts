@@ -1,19 +1,13 @@
 import type { DependencyGraph, GraphEdge, GraphEntity, RelationFold } from '../entities/graph.entity';
-import { sideOfType } from './arrange-graph';
+import { isAssocBundleRelation } from './arrange-graph';
 import {
   BUNDLE_FOLD_TYPE,
   foldSummaryNodeId,
-  isBundleRelationType,
   isFoldSummaryNode,
   relationBundleFoldKey,
   relationFoldKey,
   relationLabel,
 } from './graph.util';
-
-/** 默认落在上侧、走公共脊的其它关系（关联/阻塞/重复等，不含父） */
-function isTopBundleRelation(type: string): boolean {
-  return isBundleRelationType(type) && sideOfType(type) === 'top';
-}
 
 /** 无向邻接表：source/target 互为邻居 */
 function neighborMap(edges: GraphEdge[]): Map<string, Set<string>> {
@@ -123,9 +117,9 @@ export function buildVisibleGraph(
   while (queue.length) {
     const current = queue.shift()!;
     for (const step of outward(current)) {
-      // 上方位其它关系：整体收起；父/子/左右仍按类型收起
+      // 「关联」类（默认可上方位合并的）：整体收起；父/子/左右专属仍按类型收起
       if (
-        isTopBundleRelation(step.relationType) &&
+        isAssocBundleRelation(step.relationType) &&
         collapsedIds.has(relationBundleFoldKey(current))
       ) {
         continue;
@@ -154,14 +148,15 @@ export function buildVisibleGraph(
       return undefined;
     }
     const folds: RelationFold[] = [];
-    const topBundleEntries = [...groups.entries()].filter(([type]) => isTopBundleRelation(type));
-    if (topBundleEntries.length) {
+    const assocBundleEntries = [...groups.entries()].filter(([type]) => isAssocBundleRelation(type));
+    if (assocBundleEntries.length) {
       const bundleKey = relationBundleFoldKey(id);
-      const bundleCount = topBundleEntries.reduce((sum, [, count]) => sum + count, 0);
-      // 仅一种时边上仍用该关系名；多种时用「关联」
+      const bundleCount = assocBundleEntries.reduce((sum, [, count]) => sum + count, 0);
+      // 与父同侧或多种类型时统一「关联」；仅一种且无父时仍用该关系名
+      const withParent = groups.has('parent');
       const bundleType =
-        topBundleEntries.length === 1
-          ? (topBundleEntries[0]?.[0] ?? BUNDLE_FOLD_TYPE)
+        assocBundleEntries.length === 1 && !withParent
+          ? (assocBundleEntries[0]?.[0] ?? BUNDLE_FOLD_TYPE)
           : BUNDLE_FOLD_TYPE;
       folds.push({
         key: bundleKey,
@@ -171,8 +166,8 @@ export function buildVisibleGraph(
       });
     }
     for (const [relationType, count] of groups.entries()) {
-      if (isTopBundleRelation(relationType)) {
-        // 上方位其它关系只保留整体收起
+      if (isAssocBundleRelation(relationType)) {
+        // 「关联」类只保留整体收起
         continue;
       }
       const key = relationFoldKey(id, relationType);

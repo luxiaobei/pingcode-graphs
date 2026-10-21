@@ -40,6 +40,7 @@ import {
 } from '../utils/g6-helpers';
 import { isFoldSummaryNode, isWorkItemEntity, openPivot, relationBetween } from '../utils/graph.util';
 import type { SavedNodePosition, SaveLayoutPayload } from '../utils/saved-graph-layout';
+import { tidyGraphLayout } from '../utils/tidy-graph-layout';
 import { toG6Data, type GraphNodePosition } from '../utils/to-g6-data';
 import { setFullStrokeEdges } from './flat-polyline';
 import { bindWorkItemCardRuntime } from './work-item-card';
@@ -185,15 +186,19 @@ export class GraphCanvas {
     });
   }
 
-  /**
-   * 一键整理：优先还原服务端位置；没有服务端数据时用思维导图初始化位置。
-   */
+  /** 一键整理：当前 pins 多数票重排；不读 saved、不自动保存。初始化走 layoutBaseline。 */
   protected organize(): void {
     const data = untracked(() => this.graph());
-    if (!data?.nodes.length || !this.liveGraph()) {
+    const g6 = this.liveGraph();
+    if (!data?.nodes.length || !g6) {
       return;
     }
-    void this.layoutBaseline(data, { viewport: 'fit' }).catch(() => undefined);
+    this.positions.snapshot(g6, data);
+    const tidied = tidyGraphLayout(data, this.positions.pins);
+    void this.applyLayoutPositions(data, tidied, {
+      viewport: 'none',
+      keepHiddenPins: true,
+    }).catch(() => undefined);
   }
 
   protected fit(): void {
@@ -631,12 +636,12 @@ export class GraphCanvas {
     this.paintHoverLink();
   }
 
-  /** 一键整理 / 首次进入：服务端位置优先，否则思维导图初始化。 */
+  /** 首次进入 / 换根：saved 优先，否则 arrange。 */
   private async layoutBaseline(
     data: DependencyGraph,
     options: { viewport: 'fit' | 'root' | 'none' },
   ): Promise<void> {
-    // 个人视图坐标已是画布绝对坐标，再 centerForViewport 会整体平移且与 arrange 相对位混用错位
+    // saved 已是绝对坐标，勿再 centerForViewport
     const viewport = this.positions.hasSavedPositions() ? 'none' : options.viewport;
     await this.applyLayoutPositions(data, this.positions.resolveBaseline(data), { viewport });
     if (viewport === 'none' && options.viewport === 'root') {

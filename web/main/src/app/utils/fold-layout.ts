@@ -36,7 +36,7 @@ function siblingsForFold(
   });
 }
 
-export interface ReanchorCluster {
+interface ReanchorCluster {
   ids: Set<string>;
   side: Side;
   anchor: { x: number; y: number };

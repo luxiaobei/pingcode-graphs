@@ -84,6 +84,37 @@ describe('arrangeGraph + preferredSides', () => {
     expect((layout.get('p1')?.x ?? 0) < (layout.get('root')?.x ?? 0)).toBe(true);
     expect((layout.get('c1')?.x ?? 0) > (layout.get('root')?.x ?? 0)).toBe(true);
   });
+
+  it('有左右列时上侧相对左列顶再上拉开一点（不外推左右）', () => {
+    const mixed: DependencyGraph = {
+      rootId: 'root',
+      depth: 1,
+      nodes: [
+        { id: 'root', title: 'root', depth: 0 },
+        { id: 'p1', title: 'parent', depth: 1, revealedByAnchorId: 'root' },
+        { id: 't1', title: 't1', depth: 1, revealedByAnchorId: 'root' },
+        { id: 't2', title: 't2', depth: 1, revealedByAnchorId: 'root' },
+        { id: 'idea1', title: 'idea', depth: 1, revealedByAnchorId: 'root' },
+        { id: 'idea2', title: 'idea2', depth: 1, revealedByAnchorId: 'root' },
+      ],
+      edges: [
+        { id: 'e-p', source: 'root', target: 'p1', relationType: 'parent', label: '父' },
+        { id: 'e-t1', source: 'root', target: 't1', relationType: 'relate:ticket', label: '工单' },
+        { id: 'e-t2', source: 'root', target: 't2', relationType: 'relate:ticket', label: '工单' },
+        { id: 'e-i1', source: 'root', target: 'idea1', relationType: 'relate:idea', label: '需求' },
+        { id: 'e-i2', source: 'root', target: 'idea2', relationType: 'relate:idea', label: '需求' },
+      ],
+    };
+    const withBeside = arrangeGraph(mixed);
+    const topOnly = arrangeGraph({
+      ...mixed,
+      nodes: mixed.nodes.filter((n) => n.id === 'root' || n.id === 'p1'),
+      edges: mixed.edges.filter((e) => e.target === 'p1'),
+    });
+    // 有左列时上侧再拉开出线带
+    expect((withBeside.get('p1')?.y ?? 0) < (topOnly.get('p1')?.y ?? 0)).toBe(true);
+    expect(Math.abs(withBeside.get('p1')?.x ?? 0)).toBeLessThan(400);
+  });
 });
 
 describe('resolvePinnedExpandCollapse', () => {
@@ -106,7 +137,7 @@ describe('resolvePinnedExpandCollapse', () => {
     expect(layout.get('c1')).toMatchObject({ x: 700, y: 400, side: 'right' });
   });
 
-  it('明确方位与 pin 不同：按 arrange 新侧初始展示', () => {
+  it('有 pin 时保位：不受 relationSides 偏好覆盖（普通卡拖拽）', () => {
     const graph: DependencyGraph = {
       rootId: 'root',
       depth: 1,
@@ -125,9 +156,7 @@ describe('resolvePinnedExpandCollapse', () => {
       ['m1', { x: 0, y: -180, side: 'top' as const }],
     ]);
     const layout = resolvePinnedExpandCollapse(graph, arranged, pins, preferred);
-    expect(layout.get('m1')?.side).toBe('right');
-    expect(layout.get('m1')?.x).toBe(arranged.get('m1')?.x);
-    expect(layout.get('m1')?.y).toBe(arranged.get('m1')?.y);
+    expect(layout.get('m1')).toMatchObject({ x: 0, y: -180, side: 'top' });
   });
 });
 

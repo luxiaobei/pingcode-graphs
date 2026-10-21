@@ -1,25 +1,20 @@
 import { FOLD_SUMMARY_SIZE, GRAPH_NODE_SIZE } from '../constants/graph.constants';
+import {
+  LAYOUT_GROUP_GAP,
+  LAYOUT_H_GAP,
+  LAYOUT_SIBLING_GAP,
+  LAYOUT_V_BESIDE_ROUTE_CLEAR,
+  LAYOUT_V_GAP,
+} from '../constants/layout.constants';
 import type { DependencyGraph, GraphEntity } from '../entities/graph.entity';
 import { BUNDLE_FOLD_TYPE, isBundleRelationType, isFoldSummaryNode, relationBetween } from './graph.util';
-
-/** 左右分支和父卡片之间的空白，留给关系名。 */
-const H_GAP = 148;
-/** 上下分支和父卡片之间的空白。 */
-const V_GAP = 112;
-/** 同一关系里相邻卡片的间距。 */
-const SIBLING_GAP = 28;
-/** 两种关系之间再隔开，主干不会粘在一起。 */
-const GROUP_GAP = 56;
 
 const LEFT_TYPES = ['relate:idea', 'relate:ticket'] as const;
 const RIGHT_TYPES = ['relate:test_case'] as const;
 
 export type Side = 'left' | 'right' | 'top' | 'bottom';
 
-/**
- * 默认可合并为「关联」整体收起的关系（阻塞/重复/提及/关联…）。
- * 不含父/子，也不含左右专属的关联测试/工单/产品需求。
- */
+/** 可并入「关联」整体收起的关系（不含父/子与左右专属类型）。 */
 export function isAssocBundleRelation(type: string): boolean {
   if (type === BUNDLE_FOLD_TYPE) {
     return true;
@@ -118,11 +113,7 @@ function groupsOf(graph: DependencyGraph, parentId: string): RelationGroup[] {
   return [...groups.values()];
 }
 
-/**
- * 在思维导图坐标上覆盖已有位置（保存坐标 / 拖拽 pin）。
- * skipIds：会话 pin / 换侧重锚结果勿用旧 saved 盖回。
- * 方位一致性由调用方先按 `sideMatchesPreference` 过滤 overrides。
- */
+/** 用 overrides 盖 arrange；skipIds 跳过（会话 pin / 换侧重锚）。 */
 export function mergeLayoutPositions<T extends { x: number; y: number; side?: Side }>(
   arranged: ReadonlyMap<string, T>,
   overrides: ReadonlyMap<string, Partial<T> & { side?: Side }>,
@@ -138,11 +129,8 @@ export function mergeLayoutPositions<T extends { x: number; y: number; side?: Si
   return next;
 }
 
-/**
- * 明确的关系方位偏好 vs 卡片/个人留存 side。
- * 无明确偏好时不丢弃留存；有偏好且不一致 → 按最新方位初始展示。
- */
-export function sideMatchesPreference(retained?: Side, preferred?: Side): boolean {
+/** 留存 side 与明确偏好是否一致（无偏好则视为一致）。 */
+function sideMatchesPreference(retained?: Side, preferred?: Side): boolean {
   if (!preferred) {
     return true;
   }
@@ -195,13 +183,8 @@ export function retainPositionsForPreferredSide<T extends { side?: Side }>(
   return next;
 }
 
-/**
- * 根节点默认四向分边（保持原逻辑）：
- * 父在上、子在下，产品需求/工单偏左，测试偏右，关联/重复/阻塞等在上。
- * preferred 来自折叠占位拖拽写入的关系方位偏好。
- */
+/** 关系类型默认方位；preferred 可覆盖（关联类可跟 bundle）。 */
 export function sideOfType(type: string, preferred?: ReadonlyMap<string, Side> | null): Side {
-  // 拖「关联」整体占位时只写 bundle 偏好，展开后各关联类型跟 bundle 走
   const override =
     preferred?.get(type) ??
     (type !== BUNDLE_FOLD_TYPE && isAssocBundleRelation(type)
@@ -225,10 +208,7 @@ export function sideOfType(type: string, preferred?: ReadonlyMap<string, Side> |
   return 'top';
 }
 
-/**
- * 根按 sideOfType；嵌套默认沿父侧继续向外。
- * 有个人偏好时该关系类型跟偏好走（折叠占位拖拽写入）。
- */
+/** 根用 sideOfType；嵌套沿父侧；有偏好则跟偏好。 */
 function effectiveSide(
   type: string,
   flow: Side | 'cross',
@@ -272,7 +252,7 @@ export function sideFromParent(
   return scores[0]?.side ?? sideFromDelta(dx, dy);
 }
 
-export function groupRank(type: string, side: Side): number {
+function groupRank(type: string, side: Side): number {
   if (side === 'left') {
     const index = LEFT_TYPES.indexOf(type as (typeof LEFT_TYPES)[number]);
     return index === -1 ? LEFT_TYPES.length : index;
@@ -300,12 +280,12 @@ function orderedGroups(
 }
 
 function crossSize(side: Side): number {
-  return side === 'left' || side === 'right' ? GRAPH_NODE_SIZE.width + H_GAP : GRAPH_NODE_SIZE.height + V_GAP;
+  return side === 'left' || side === 'right'
+    ? GRAPH_NODE_SIZE.width + LAYOUT_H_GAP
+    : GRAPH_NODE_SIZE.height + LAYOUT_V_GAP;
 }
 
-/**
- * 子工作项等距排开，奇数条时中间一张对准父卡片。间距取相邻子树所需的最大空隙，避免重叠。
- */
+/** 子项等距排开，中间对准父卡。 */
 function stackChildren(items: StackItem[], along: number): Placed[] {
   let step = 0;
   for (let index = 0; index < items.length - 1; index += 1) {
@@ -373,7 +353,7 @@ function itemsOf(
       const lastGroup = groupIndex === groups.length - 1;
       items.push({
         placed: withSide(arrangeNode(graph, memberId, side, seen, preferred), memberId, side),
-        gapAfter: lastInGroup && !lastGroup ? GROUP_GAP : SIBLING_GAP,
+        gapAfter: lastInGroup && !lastGroup ? LAYOUT_GROUP_GAP : LAYOUT_SIBLING_GAP,
       });
     });
   });
@@ -411,9 +391,7 @@ function mtvPreferred(a: Extent, b: Extent, preferred: Side, pad: number): { dx:
   return { dx: best.dx, dy: best.dy };
 }
 
-/**
- * 重锚子树对齐折叠占位后，相对已有节点做碰撞推开，避免展开盖住原卡。
- */
+/** 重锚子树对齐折叠占位后，碰撞推开避免盖住原卡。 */
 export function settleReanchoredSubtree<T extends { x: number; y: number; side?: Side }>(
   graph: DependencyGraph,
   layout: Map<string, T>,
@@ -444,12 +422,14 @@ export function settleReanchoredSubtree<T extends { x: number; y: number; side?:
     let worst: { dx: number; dy: number; area: number } | null = null;
     for (const id of obstacles) {
       const other = boxOf(nodes.get(id), layout.get(id)!);
-      const overlapX = Math.min(moveBox.right, other.right) - Math.max(moveBox.left, other.left) + SIBLING_GAP;
-      const overlapY = Math.min(moveBox.bottom, other.bottom) - Math.max(moveBox.top, other.top) + SIBLING_GAP;
+      const overlapX =
+        Math.min(moveBox.right, other.right) - Math.max(moveBox.left, other.left) + LAYOUT_SIBLING_GAP;
+      const overlapY =
+        Math.min(moveBox.bottom, other.bottom) - Math.max(moveBox.top, other.top) + LAYOUT_SIBLING_GAP;
       if (overlapX <= 0 || overlapY <= 0) {
         continue;
       }
-      const { dx, dy } = mtvPreferred(moveBox, other, side, SIBLING_GAP);
+      const { dx, dy } = mtvPreferred(moveBox, other, side, LAYOUT_SIBLING_GAP);
       const area = overlapX * overlapY;
       if (!worst || area > worst.area) {
         worst = { dx, dy, area };
@@ -465,11 +445,7 @@ export function settleReanchoredSubtree<T extends { x: number; y: number; side?:
   }
 }
 
-/**
- * 展开/收起：有 pin 且（无明确方位偏好，或 pin 方位与偏好一致）则保位；
- * 明确偏好与留存方位不同 → 按 arrange 在新侧初始展示。
- * 无 pin 时相对父卡按思维导图偏移补位。
- */
+/** 展开/收起保位：有 pin 用 pin；否则按父卡偏移补位。 */
 export function resolvePinnedExpandCollapse<T extends { x: number; y: number; side?: Side }>(
   graph: DependencyGraph,
   arranged: ReadonlyMap<string, T>,
@@ -499,12 +475,12 @@ export function resolvePinnedExpandCollapse<T extends { x: number; y: number; si
     const node = nodeById.get(id);
     const pin = pins.get(id);
     const preferred = preferredByNode?.get(id);
-    if (pin && sideMatchesPreference(pin.side, preferred)) {
+    if (pin) {
       result.set(id, {
         ...arrangedPos,
         x: pin.x,
         y: pin.y,
-        side: preferred ?? pin.side ?? arrangedPos.side,
+        side: pin.side ?? preferred ?? arrangedPos.side,
       });
     } else {
       const parentId = node?.revealedByAnchorId;
@@ -533,16 +509,17 @@ export function resolvePinnedExpandCollapse<T extends { x: number; y: number; si
   return result;
 }
 
-/** 上下分支让开左右两列，同时保持相对根节点水平居中。 */
+/** 上下分支相对左右列顶/底再拉开（含出线带宽）。 */
 function clearVertical(placed: Placed[], side: 'top' | 'bottom', limit: number): Placed[] {
   if (!placed.length) {
     return [];
   }
+  const gap = LAYOUT_V_GAP + LAYOUT_V_BESIDE_ROUTE_CLEAR;
   const extent = unionExtent(placed.map((item) => item.extent));
   const dy =
     side === 'top'
-      ? Math.min(0, limit - V_GAP - extent.bottom)
-      : Math.max(0, limit + V_GAP - extent.top);
+      ? Math.min(0, limit - gap - extent.bottom)
+      : Math.max(0, limit + gap - extent.top);
   return dy === 0 ? placed : placed.map((item) => shiftPlaced(item, 0, dy));
 }
 
@@ -582,15 +559,18 @@ function arrangeNode(
     if (!visible.length) {
       continue;
     }
-    // 同侧关系共轴排列；上侧父与关联等同脊分叉，下侧子项直出
     placedBySide.set(side, stackOnAxis(itemsOf(graph, visible, side, seen, preferred), side));
   }
 
   if (flow === 'cross') {
     const beside = [...(placedBySide.get('left') ?? []), ...(placedBySide.get('right') ?? [])];
     const besideExtent = unionExtent([selfExtent, ...beside.map((item) => item.extent)]);
+    // 上/下相对左右列再拉开，不外推左右
     placedBySide.set('top', clearVertical(placedBySide.get('top') ?? [], 'top', besideExtent.top));
-    placedBySide.set('bottom', clearVertical(placedBySide.get('bottom') ?? [], 'bottom', besideExtent.bottom));
+    placedBySide.set(
+      'bottom',
+      clearVertical(placedBySide.get('bottom') ?? [], 'bottom', besideExtent.bottom),
+    );
   }
 
   const placed = [...placedBySide.values()].flat();
@@ -605,24 +585,27 @@ function arrangeNode(
   };
 }
 
-/**
- * 根在中间。左产品需求/工单，右测试，上父项和其他，下子级。
- * preferredSides 覆盖关系类型默认方位（个人视图跨工作项共用）。
- */
+/** 四向思维导图排布；preferredSides 覆盖默认方位。 */
 export function arrangeGraph(
   graph: DependencyGraph,
   preferredSides?: ReadonlyMap<string, Side> | null,
 ): Map<string, { x: number; y: number; side?: Side }> {
-  const root = arrangeNode(graph, graph.rootId, 'cross', new Set(), preferredSides);
+  return finalizeArrange(graph, arrangeNode(graph, graph.rootId, 'cross', new Set(), preferredSides));
+}
+
+function finalizeArrange(
+  graph: DependencyGraph,
+  root: Placed,
+): Map<string, { x: number; y: number; side?: Side }> {
   const positions = new Map(root.positions);
   const missing = graph.nodes.filter(
     (node) => !positions.has(node.id) && !node.relationHub,
   );
-  let cursor = root.extent.right + H_GAP + GRAPH_NODE_SIZE.width / 2;
+  let cursor = root.extent.right + LAYOUT_H_GAP + GRAPH_NODE_SIZE.width / 2;
   for (const node of missing) {
     const half = isFoldSummaryNode(node) ? FOLD_SUMMARY_SIZE.width / 2 : GRAPH_NODE_SIZE.width / 2;
     positions.set(node.id, { x: cursor, y: 0 });
-    cursor += half * 2 + SIBLING_GAP;
+    cursor += half * 2 + LAYOUT_SIBLING_GAP;
   }
   return positions;
 }

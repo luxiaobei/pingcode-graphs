@@ -15,8 +15,8 @@ const edgeTypeMap: Record<string, KgEdgeType> = {
 
 export const onWorkItemCreatedHandler: EventHandler = async (context, event) => {
     const workitemInfo = (event.payload as any)["data"];
-    const typeId = workitemInfo["type"];
-    const typeRes = await api.invoke(`/v1/pjm/workitem_types/${typeId}`);
+    const typeId = workitemInfo["type"]["id"];
+    const typeRes = await api.invoke(`/v2/pjm/workitem_types/${typeId}`);
     const typeInfo = await typeRes.json();
     const workitemNode = createWorkItemNode({
         refId: workitemInfo["id"],
@@ -46,8 +46,8 @@ export const onWorkItemCreatedHandler: EventHandler = async (context, event) => 
 
 export const onWorkItemUpdatedHandler: EventHandler = async (context, event) => {
     const workitemInfo = (event.payload as any)["data"];
-    const typeId = workitemInfo["type"];
-    const typeRes = await api.invoke(`/v1/pjm/workitem_types/${typeId}`);
+    const typeId = workitemInfo["type"]["id"];
+    const typeRes = await api.invoke(`/v2/pjm/workitem_types/${typeId}`);
     const typeInfo = await typeRes.json();
     const workitemNode = createWorkItemNode({
         refId: workitemInfo["id"],

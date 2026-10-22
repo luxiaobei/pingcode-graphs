@@ -352,6 +352,9 @@ storage:
           type: number
         - name: synced_at
           type: number
+        - name: relations_synced
+          type: boolean
+          default: false
         - name: detail
           type: object
       indexes:

@@ -17,6 +17,7 @@ import {
 import { ThyAvatar, ThyAvatarService, ThyDefaultAvatarService } from 'ngx-tethys/avatar';
 import { ThyIcon } from 'ngx-tethys/icon';
 import { ThyTag } from 'ngx-tethys/tag';
+import { EDGE_LINK_COLOR } from '../constants/graph.constants';
 import type { FoldMark, GraphEntity } from '../entities/graph.entity';
 import { entityAssigneeName } from '../utils/graph.util';
 
@@ -43,6 +44,15 @@ export class WorkItemCard {
   readonly item = input.required<GraphEntity>();
   readonly marks = input<FoldMark[]>([]);
   readonly root = input(false);
+
+  /** 「+ N」底色。默认蓝，彩色模式与线条同色。 */
+  readonly foldColor = input(EDGE_LINK_COLOR);
+
+  /** 悬停阴影：底色加透明度 0x99，默认 #6698ff99。 */
+  protected readonly foldShadow = computed(() => {
+    const color = this.foldColor();
+    return color.startsWith('#') && color.length === 7 ? `${color}99` : '#6698ff99';
+  });
 
   protected readonly assignee = computed(() => entityAssigneeName(this.item()));
   protected readonly fold = computed(() => this.item().foldSummary);
@@ -73,6 +83,10 @@ class WorkItemCardNode extends HTML {
     this.view.setInput('item', item);
     this.view.setInput('marks', this.marksOf());
     this.view.setInput('root', data?.['root'] === true);
+    const foldColor = data?.['foldColor'];
+    if (typeof foldColor === 'string') {
+      this.view.setInput('foldColor', foldColor);
+    }
     this.view.changeDetectorRef.detectChanges();
 
     super.render(

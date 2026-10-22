@@ -163,4 +163,10 @@
   white-space: nowrap;
   cursor: pointer;
   user-select: none;
+  // thy-tag 会写自己的字色
+  color: #fff !important;
+
+  &:hover {
+    box-shadow: 0 2px 5px 1px var(--fold-accent, #6698ff99);
+  }
 }

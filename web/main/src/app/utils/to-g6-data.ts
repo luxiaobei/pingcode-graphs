@@ -5,6 +5,7 @@ import {
   EDGE_COLOR_OPACITY,
   EDGE_LABEL_COLOR,
   EDGE_LABEL_COLOR_OPACITY,
+  EDGE_LINK_COLOR,
   FOLD_SUMMARY_SIZE,
   GRAPH_NODE_SIZE,
   fadeColorOnWhite,
@@ -49,7 +50,7 @@ export function toG6Data(
     painted.sort((a, b) => edgePaintOrder(a) - edgePaintOrder(b));
   }
   return {
-    nodes: cards.map((item) => toG6Node(item, positions, graph.rootId, forks)),
+    nodes: cards.map((item) => toG6Node(item, positions, graph.rootId, forks, colorMode)),
     edges: painted,
   };
 }
@@ -95,12 +96,21 @@ function applyLineColorMode(edge: EdgeData, mode: LineColorMode): EdgeData {
   };
 }
 
+/** 「+ N」底色：默认蓝，彩色模式跟这条关系线同色。 */
+function foldButtonColor(item: GraphEntity, colorMode: boolean): string {
+  if (!colorMode) {
+    return EDGE_LINK_COLOR;
+  }
+  return relationEdgeColor(item.foldSummary?.relationType ?? '');
+}
+
 /** 业务卡片或折叠占位。关系按钮的坐标相对这张卡片。 */
 function toG6Node(
   item: GraphEntity,
   positions: ReadonlyMap<string, GraphNodePosition> | undefined,
   rootId: string,
   forks: ReadonlyMap<string, { x: number; y: number }>,
+  colorMode: boolean,
 ): NodeData {
   const position = positions?.get(item.id) ?? item.position;
   const fold = isFoldSummaryNode(item);
@@ -115,6 +125,7 @@ function toG6Node(
       root: item.id === rootId,
       width: size.width,
       height: size.height,
+      ...(fold ? { foldColor: foldButtonColor(item, colorMode) } : {}),
     },
   };
   if (position) {

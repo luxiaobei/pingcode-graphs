@@ -21,6 +21,7 @@
     "@antv/g6": "^5.1.1",
     "@pc-nexus/bridge": "^0.8.0",
     "@pc-nexus/capabilities": "^0.8.0",
+    "marked": "^18.1.1",
     "ngx-tethys": "^22.0.4",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"

@@ -1,0 +1,116 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.ai-analysis {
+  height: 100%;
+}
+
+.ai-analysis__answer {
+  box-sizing: border-box;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #e6e8eb;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #1f2329;
+  overflow-wrap: anywhere;
+}
+
+/** Markdown 转出来的标题和列表不在模板里，选择器要写到组件外面。 */
+:host ::ng-deep .ai-analysis__answer {
+  > :first-child {
+    margin-top: 0;
+  }
+
+  > :last-child {
+    margin-bottom: 0;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    margin: 16px 0 8px;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  h1 {
+    font-size: 18px;
+  }
+
+  h2 {
+    font-size: 16px;
+  }
+
+  h3,
+  h4 {
+    font-size: 14px;
+  }
+
+  p {
+    margin: 0 0 8px;
+  }
+
+  ul,
+  ol {
+    margin: 0 0 8px;
+    padding-left: 1.4em;
+  }
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    background: #f4f5f7;
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+
+  pre {
+    margin: 0 0 8px;
+    padding: 12px;
+    overflow: auto;
+    background: #f4f5f7;
+    border-radius: 8px;
+
+    code {
+      padding: 0;
+      background: transparent;
+    }
+  }
+}
+
+.ai-analysis__state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 240px;
+  color: #64748b;
+  text-align: center;
+}
+
+.ai-analysis__state p {
+  margin: 0;
+}
+
+.ai-analysis__state--error {
+  color: #b91c1c;
+}
+
+.ai-analysis__state--error pre {
+  max-width: 100%;
+  margin: 0;
+  white-space: pre-wrap;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 12px;
+  color: #7f1d1d;
+}

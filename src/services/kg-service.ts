@@ -3,6 +3,8 @@ import { ces } from "@pc-nexus/storage";
 import { KG_EDGE_ENTITY_NAME, type KgEdge, type KgEdgeType } from "../models/pc-kg-edge.js";
 import { KG_NODE_ENTITY_NAME, isKgNodeId, type KgNode, type KgNodeKind } from "../models/pc-kg-node.js";
 import { KG_VIEW_ENTITY_NAME, kgViewId, type KgView } from "../models/pc-kg-view.js";
+import { ensureGraphNode } from "./node-seed.js";
+import { ensureRelationsSynced, needsRelationSync } from "./relation-sync.js";
 import { isVisible } from "./visibility.js";
 
 /** outgoing：from → to；incoming：to → from；both：不区分存储方向。 */
@@ -189,24 +191,23 @@ export class KgService {
 
         const maxDepth = Math.floor(depth);
         const resolvedDirection = direction ?? "outgoing";
+        await ensureGraphNode(nodeId);
         const depthOf = new Map<string, number>();
         const edges = new Map<string, KgEdge>();
         const rootVisible = isNodeVisible(nodeId);
         let frontier = [nodeId];
 
         for (let level = 0; level < maxDepth && frontier.length > 0; level++) {
-            const foundPromise = findRelationEdges(frontier, types, resolvedDirection);
-            let found: KgEdge[];
             if (level === 0) {
-                const [relationEdges, visible] = await Promise.all([foundPromise, rootVisible]);
-                if (!visible) {
+                if (!(await rootVisible)) {
                     return emptyDeepRelation(nodeId, types, maxDepth, resolvedDirection);
                 }
                 depthOf.set(nodeId, 0);
-                found = relationEdges;
-            } else {
-                found = await foundPromise;
             }
+            if (needsRelationSync(types)) {
+                await ensureRelationsSynced(frontier);
+            }
+            const found = await findRelationEdges(frontier, types, resolvedDirection);
 
             const frontierSet = new Set(frontier);
             const pending: Array<{ edge: KgEdge; nextId: string | undefined }> = [];

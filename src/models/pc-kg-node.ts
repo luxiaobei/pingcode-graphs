@@ -49,6 +49,8 @@ export interface KgNodeBase<K extends KgNodeKind = KgNodeKind, D = unknown> {
     active?: boolean;
     source_updated_at?: number;
     synced_at?: number;
+    /** 该节点的工作项内部关联 / 通用关联已从 OpenAPI 拉过一次。 */
+    relations_synced?: boolean;
     detail?: D;
 }
 

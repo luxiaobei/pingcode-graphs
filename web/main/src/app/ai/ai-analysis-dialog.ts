@@ -4,7 +4,8 @@ import { ThyButtonModule } from 'ngx-tethys/button';
 import { ThyDialogRef } from 'ngx-tethys/dialog';
 import { ThyContent, ThyHeader, ThyLayout } from 'ngx-tethys/layout';
 import { ThyLoading } from 'ngx-tethys/loading';
-import { ANALYSIS_QUESTION, agentErrorMessage, askGraphAgent } from './ask-graph-agent';
+import { ANALYSIS_QUESTION } from './analysis-question';
+import { agentErrorMessage, askGraphAgent } from './ask-graph-agent';
 import { renderAnswerMarkdown } from './render-answer-markdown';
 
 @Component({

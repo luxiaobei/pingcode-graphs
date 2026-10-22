@@ -18,9 +18,6 @@ export interface AskGraphAgentPayload {
   focusNodeId?: string;
 }
 
-/** 打开分析弹窗时直接问这一句，不让用户再填问题。 */
-export const ANALYSIS_QUESTION = '帮我分析当前工作项的进展情况';
-
 /** 向关系图谱助手提问。 */
 export function askGraphAgent(payload: AskGraphAgentPayload): Promise<AgentAnswer> {
   return invoke<AskGraphAgentPayload, AgentAnswer>('askGraphAgent', payload);

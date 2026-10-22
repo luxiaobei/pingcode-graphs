@@ -111,6 +111,8 @@ export class GraphCanvas {
   private traceMenuTimer = 0;
   /** 当前拖拽的节点；仅折叠占位松手时改方位 */
   private draggingNodeId: string | null = null;
+  /** 拖拽开始时的 pin；同侧挪卡时冻结关联共用脊 */
+  private dragFreezePos: GraphNodePosition | null = null;
   /** 拖拽中重算折线，避免边被拉成斜线 */
   private dragEdgeRaf = 0;
   /** 正在悬停的非主卡片。空表示连线用默认色。 */
@@ -279,6 +281,8 @@ export class GraphCanvas {
     this.positions.clear();
     this.hoveredCardId = null;
     this.linkedEdges = [];
+    this.draggingNodeId = null;
+    this.dragFreezePos = null;
     this.clearCardAccent();
     setFullStrokeEdges([]);
     window.clearTimeout(this.traceMenuTimer);
@@ -337,6 +341,8 @@ export class GraphCanvas {
     this.g6.on(NodeEvent.DRAG_START, (event: IElementEvent) => {
       this.g6?.stopLayout();
       this.draggingNodeId = String(event.target.id);
+      const pin = this.positions.pins.get(this.draggingNodeId);
+      this.dragFreezePos = pin ? { ...pin } : null;
       // 拖拽易带出浏览器文字选区，卡住蓝底需再点卡片才消
       window.getSelection()?.removeAllRanges();
     });
@@ -354,6 +360,7 @@ export class GraphCanvas {
         cancelAnimationFrame(this.dragEdgeRaf);
         this.dragEdgeRaf = 0;
       }
+      this.dragFreezePos = null;
       if (!this.g6) {
         return;
       }
@@ -372,6 +379,7 @@ export class GraphCanvas {
 
   /**
    * 拖拽中按当前位置更新 side 并重算正交折点（不写关系偏好；松手后仅折叠占位写偏好）。
+   * 同侧挪卡冻结关联共用脊；换侧则全量跟新方位。
    */
   private syncEdgesWhileDragging(): void {
     const g6 = this.g6;
@@ -381,7 +389,12 @@ export class GraphCanvas {
       return;
     }
     this.positions.snapshot(g6, data, draggedId, false);
-    const next = toG6Data(data, this.positions.pins, this.lineColorMode());
+    const live = this.positions.pins.get(draggedId);
+    const freeze =
+      this.dragFreezePos && live?.side === this.dragFreezePos.side
+        ? { id: draggedId, pos: this.dragFreezePos }
+        : undefined;
+    const next = toG6Data(data, this.positions.pins, this.lineColorMode(), freeze);
     g6.updateEdgeData(
       (next.edges ?? []).map((edge) => ({
         id: edge.id,

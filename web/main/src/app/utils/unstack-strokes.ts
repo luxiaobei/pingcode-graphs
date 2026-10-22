@@ -24,11 +24,7 @@ export function unstackSharedStrokes(
   if (!positions) {
     return;
   }
-  // labelOnly（如「关联」文案干）只挂字，不描线、不占段，避免卸叠后留下游离残段
   const routed = edges.flatMap((edge) => {
-    if (edge.data?.['labelOnly']) {
-      return [];
-    }
     const points = fullPolyline(edge, positions, nodes);
     return points && edge.id ? [{ edge, points }] : [];
   });
@@ -36,20 +32,10 @@ export function unstackSharedStrokes(
     return;
   }
 
-  const pinLabel = (edge: EdgeData, points: Point[]): void => {
-    if (!edge.id) {
-      return;
-    }
-    const label = labelAt(edge, points);
-    // 有文案时始终钉绝对坐标，避免 G6 按整段 path 再偏一次（短臂时会贴到分叉口）
-    if (label) {
-      planStroke(edge.id, points, label);
-    }
-  };
-
   if (routed.length < 2) {
     for (const item of routed) {
-      pinLabel(item.edge, item.points);
+      // 单边也要 plan，避免拖拽帧落入 super.getPoints
+      planStroke(item.edge.id!, item.points, labelAt(item.edge, item.points));
     }
     return;
   }
@@ -68,12 +54,12 @@ export function unstackSharedStrokes(
       continue;
     }
     const label = labelAt(item.edge, item.points);
-    if (start > 0) {
-      planStroke(item.edge.id, strokeFrom(points, start), label);
-    } else if (label) {
-      // 整段自绘也要钉文案，否则短类型臂上 G6 原生 placement 会靠到分叉
-      planStroke(item.edge.id, points, label);
-    }
+    // 一律写入 plan（含整段自绘），拖拽中只用绝对坐标，杜绝斜线
+    planStroke(
+      item.edge.id,
+      start > 0 ? strokeFrom(points, start) : points,
+      label,
+    );
   }
 }
 

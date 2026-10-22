@@ -11,8 +11,19 @@ import {
   relationEdgeColor,
 } from '../constants/graph.constants';
 import type { LineColorMode } from '../settings/display-settings';
-import { isFoldSummaryNode } from './graph.util';
-import { trunkEdges, type GraphNodePosition } from './route-graph-edges';
+import { LAYOUT_LABEL_GAP } from '../constants/layout.constants';
+import {
+  BUNDLE_FOLD_TYPE,
+  isFoldSummaryNode,
+  relationBundleFoldKey,
+  relationBundleLabelKey,
+  relationLabel,
+} from './graph.util';
+import {
+  trunkEdges,
+  type GraphNodePosition,
+  type TrunkDragFreeze,
+} from './route-graph-edges';
 
 export type { GraphNodePosition } from './route-graph-edges';
 
@@ -24,9 +35,13 @@ export function toG6Data(
   graph: DependencyGraph,
   positions?: ReadonlyMap<string, GraphNodePosition>,
   lineColorMode: LineColorMode = 'default',
+  freezeDrag?: TrunkDragFreeze,
 ): GraphData {
   const colorMode = lineColorMode === 'item';
-  const { edges, forks } = trunkEdges(graph, positions, { unstack: !colorMode });
+  const { edges, forks } = trunkEdges(graph, positions, {
+    unstack: !colorMode,
+    freezeDrag,
+  });
   const cards = graph.nodes.filter((item) => !item.relationHub);
   const painted = edges.map((edge) => applyLineColorMode(edge, lineColorMode));
   // 彩色：关联干先画，具体关系后画盖住共用段
@@ -53,9 +68,6 @@ function edgePaintOrder(edge: EdgeData): number {
 
 /** 写入边/文案色；默认色也要覆盖，否则 G6 合并 data 会残留上一模式的彩色。 */
 function applyLineColorMode(edge: EdgeData, mode: LineColorMode): EdgeData {
-  if (edge.data?.['labelOnly'] === true || edge.style?.['stroke'] === 'transparent') {
-    return edge;
-  }
   if (mode === 'item') {
     const solid = relationEdgeColor(String(edge.data?.['relationType'] ?? ''));
     const faded = fadeColorOnWhite(solid, EDGE_COLOR_OPACITY);
@@ -112,7 +124,7 @@ function toG6Node(
 }
 
 /**
- * 仅展开态：在分叉处画「−」。
+ * 仅展开态：在分叉处画「−」；关联整体干额外钉「关联」文案（跟主干走，不跟叶卡边走）。
  * 位置完全跟 trunkEdges 的 forks 走，不用非根 nodeSide 过滤（左拖后否则会挂错）。
  */
 function foldMarks(
@@ -125,6 +137,7 @@ function foldMarks(
     return [];
   }
   const marks: FoldMark[] = [];
+  const bundleKey = relationBundleFoldKey(item.id);
   for (const fold of item.folds ?? []) {
     if (!fold.expanded) {
       continue;
@@ -133,12 +146,36 @@ function foldMarks(
     if (!at) {
       continue;
     }
+    const left = HALF_W + at.x - position.x;
+    const top = HALF_H + at.y - position.y;
     marks.push({
       key: fold.key,
       text: '−',
-      left: HALF_W + at.x - position.x,
-      top: HALF_H + at.y - position.y,
+      left,
+      top,
     });
+    // 「关联」钉在父卡对齐的主干锚点（forks 的 :label），不跟叶卡 hub
+    if (fold.key === bundleKey) {
+      const labelAt = forks.get(relationBundleLabelKey(item.id)) ?? at;
+      const corner = bundleLabelCorner(position.side);
+      marks.push({
+        key: `${fold.key}:label`,
+        text: relationLabel(BUNDLE_FOLD_TYPE),
+        kind: 'label',
+        left: HALF_W + labelAt.x - position.x + corner.dx,
+        top: HALF_H + labelAt.y - position.y + corner.dy,
+      });
+    }
   }
   return marks;
+}
+
+function bundleLabelCorner(side: GraphNodePosition['side']): { dx: number; dy: number } {
+  if (side === 'left' || side === 'bottom') {
+    return { dx: LAYOUT_LABEL_GAP, dy: -LAYOUT_LABEL_GAP };
+  }
+  if (side === 'right') {
+    return { dx: -LAYOUT_LABEL_GAP, dy: -LAYOUT_LABEL_GAP };
+  }
+  return { dx: LAYOUT_LABEL_GAP, dy: LAYOUT_LABEL_GAP };
 }

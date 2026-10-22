@@ -65,12 +65,14 @@ export interface RelationFold {
   expanded: boolean;
 }
 
-/** 画在关系线起点上的展开收起 */
+/** 画在关系分叉上的标记：− 收起，或主干文案（如「关联」） */
 export interface FoldMark {
   key: string;
   text: string;
   left: number;
   top: number;
+  /** 缺省为 fold（可点的 −）；label 为钉在主干上的文案 */
+  kind?: 'fold' | 'label';
 }
 
 export interface GraphEdge {

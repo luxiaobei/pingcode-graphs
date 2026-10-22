@@ -42,13 +42,22 @@
     </div>
 
     @for (mark of marks(); track mark.key) {
-      <thy-icon
-        class="card-badge"
-        thyName="minus-circle"
-        [style.left.px]="mark.left"
-        [style.top.px]="mark.top"
-        [attr.data-fold]="mark.key"
-      ></thy-icon>
+      @if (mark.kind === 'label') {
+        <span
+          class="card-edge-label"
+          [style.left.px]="mark.left"
+          [style.top.px]="mark.top"
+          >{{ mark.text }}</span
+        >
+      } @else {
+        <thy-icon
+          class="card-badge"
+          thyName="minus-circle"
+          [style.left.px]="mark.left"
+          [style.top.px]="mark.top"
+          [attr.data-fold]="mark.key"
+        ></thy-icon>
+      }
     }
   </article>
 }

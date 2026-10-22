@@ -14,6 +14,7 @@ import {
   isFoldSummaryNode,
   relationBetween,
   relationBundleFoldKey,
+  relationBundleLabelKey,
   relationFoldKey,
   relationLabel,
 } from './graph.util';
@@ -79,12 +80,19 @@ function foldOnTypeStem(
   return { x: center, y: at };
 }
 
+/**
+ * 同侧拖卡时冻结关联共用脊的锚点，避免「关联」文案跟着被拖类型跑。
+ * 换侧时不要传；被拖卡自身出线仍用实时坐标。
+ */
+export type TrunkDragFreeze = { id: string; pos: GraphNodePosition };
+
 /** 先沿父卡片走出关系类型，再从类型线另开一条分支接到这组卡片。类型只是线上的名字。 */
 export function trunkEdges(
   graph: DependencyGraph,
   positions?: ReadonlyMap<string, GraphNodePosition>,
-  options?: { unstack?: boolean },
+  options?: { unstack?: boolean; freezeDrag?: TrunkDragFreeze },
 ): { edges: EdgeData[]; forks: Map<string, { x: number; y: number }> } {
+  const freezeDrag = options?.freezeDrag;
   const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
   const groups = new Map<string, TrunkMember[]>();
 
@@ -139,6 +147,17 @@ export function trunkEdges(
 
   const edges: EdgeData[] = loose.map((member) => straightEdge(member));
   const forks = new Map<string, { x: number; y: number }>();
+  /** 同一父卡多方位关联时只保留成员最多的一侧，避免 forks 键被后写覆盖把「关联」拖飞 */
+  const assocForkByParent = new Map<
+    string,
+    {
+      parent: GraphNodePosition;
+      side: Side;
+      count: number;
+      assocHub: number;
+      assocSpine: number;
+    }
+  >();
   for (const lane of lanes.values()) {
     const parent = lane[0]?.parent;
     const side = lane[0]?.side;
@@ -149,38 +168,42 @@ export function trunkEdges(
     skip.add(lane[0]?.members[0]?.parentId ?? '');
     const others = otherNodes(positions, skip);
     // 同侧骨干 → 类型分叉；关联组再走第二脊
-    const allKids = lane.flatMap((group) => group.placed.map((item) => item.child));
+    const allPlaced = lane.flatMap((group) => group.placed);
     const assocGroups = lane.filter((group) =>
       isAssocBundleRelation(group.members[0]?.relationType ?? ''),
     );
-    const assocKids = assocGroups.flatMap((group) => group.placed.map((item) => item.child));
-    const assocHub = assocKids.length ? axisCenter(assocKids, side) : undefined;
+    const assocPlaced = assocGroups.flatMap((group) => group.placed);
+    // 共用枢纽/脊用冻结坐标（同侧拖拽），叶臂仍用实时 child
+    const assocKidsHub = placedPositions(assocPlaced, freezeDrag);
+    const assocHub = assocKidsHub.length ? axisCenter(assocKidsHub, side) : undefined;
     // 公共脊不含父/子；父项单独算脊
-    const nonParentKids = lane
+    const nonParentPlaced = lane
       .filter((group) => {
         const type = group.members[0]?.relationType ?? '';
         return type !== 'parent' && type !== 'child';
       })
-      .flatMap((group) => group.placed.map((item) => item.child));
+      .flatMap((group) => group.placed);
     const parentKidsOnly = lane
       .filter((group) => group.members[0]?.relationType === 'parent')
       .flatMap((group) => group.placed.map((item) => item.child));
-    const spineKids = nonParentKids.length ? nonParentKids : allKids;
+    const spineKids = nonParentPlaced.length
+      ? placedPositions(nonParentPlaced, freezeDrag)
+      : placedPositions(allPlaced, freezeDrag);
     const spine = spineKids.length ? spineAt(parent, spineKids, side, others) : undefined;
     const parentSpine =
-      parentKidsOnly.length && nonParentKids.length
+      parentKidsOnly.length && nonParentPlaced.length
         ? spineAt(parent, parentKidsOnly, side, others)
         : spine;
-    const assocSpineRaw = assocKids.length ? spineAt(parent, assocKids, side, others) : undefined;
+    const assocSpineRaw = assocKidsHub.length
+      ? spineAt(parent, assocKidsHub, side, others)
+      : undefined;
     const assocTypeFork =
-      assocKids.length > 0
+      assocPlaced.length > 0
         ? forkAt(
-            assocGroups.flatMap((group) =>
-              group.placed.map((item) => ({
-                pos: item.child,
-                half: halfOf(nodes.get(item.member.childId)),
-              })),
-            ),
+            assocPlaced.map((item) => ({
+              pos: frozenOrLive(item, freezeDrag),
+              half: halfOf(nodes.get(item.member.childId)),
+            })),
             side,
           )
         : undefined;
@@ -207,14 +230,11 @@ export function trunkEdges(
         ? alignAssocSpine(side, spine, assocSpineRaw, peerAlignFork, assocTypeFork)
         : undefined;
     const useAssocGroup = Boolean(
-      assocKids.length && spine != null && assocHub != null && assocSpine != null,
+      assocKidsHub.length && spine != null && assocHub != null && assocSpine != null,
     );
     const parentId = lane[0]?.members[0]?.parentId ?? '';
     const childAlone =
       lane.length === 1 && lane[0]?.members[0]?.relationType === 'child';
-    const hasBundleFold = assocGroups.some(
-      (group) => group.members[0]?.relationType === BUNDLE_FOLD_TYPE,
-    );
     lane.forEach((group) => {
       const kids = group.placed.map((item) => item.child);
       const foldOnly = group.members.every((member) => isFoldSummaryId(member.childId));
@@ -277,73 +297,23 @@ export function trunkEdges(
         forks.set(relationFoldKey(parentId, relationType), foldAnchor);
       }
     });
-    // 关联文案钉分叉口；labelOnly 不描线
-    if (assocKids.length && !hasBundleFold && useAssocGroup && parentId && spine != null) {
-      const stemOwner = closestMember(
-        parent,
-        assocGroups.flatMap((group) => group.placed),
-        side,
-      );
-      const stemChild = stemOwner ? positions?.get(stemOwner) : undefined;
-      const stemGroup =
-        assocGroups.find((group) =>
-          group.placed.some((item) => item.member.childId === stemOwner),
-        ) ?? assocGroups[0];
-      if (stemOwner && stemChild && stemGroup && assocHub != null && assocSpine != null) {
-        const stemCenter = axisCenter(
-          stemGroup.placed.map((item) => item.child),
-          side,
-        );
-        const stemFork = forkAt(
-          stemGroup.placed.map((item) => ({
-            pos: item.child,
-            half: halfOf(nodes.get(item.member.childId)),
-          })),
-          side,
-        );
-        const controlPoints = routeAssocGroup(
+    if (assocPlaced.length && parentId && useAssocGroup && assocHub != null && assocSpine != null) {
+      const prev = assocForkByParent.get(parentId);
+      if (!prev || assocPlaced.length > prev.count) {
+        assocForkByParent.set(parentId, {
           parent,
-          stemChild,
           side,
-          spine,
+          count: assocPlaced.length,
           assocHub,
           assocSpine,
-          stemFork,
-          stemCenter,
-        );
-        const foldAt = foldAtArmFork(side, assocHub, assocSpine);
-        const corner = labelCorner(side, false);
-        const spot = pointOnPath(
-          [leavePoint(parent, side), ...controlPoints, rootEnterPoint(stemChild, side)],
-          [foldAt.x, foldAt.y],
-        );
-        edges.push({
-          id: `${parentId}:bundle:assoc-stem`,
-          source: parentId,
-          target: stemOwner,
-          data: {
-            relationType: BUNDLE_FOLD_TYPE,
-            label: relationLabel(BUNDLE_FOLD_TYPE),
-            endArrow: false,
-            labelOnly: true,
-          },
-          style: {
-            controlPoints,
-            lineWidth: 0,
-            stroke: 'transparent',
-            labelPlacement: spot.ratio,
-            labelOffsetX: foldAt.x + corner.dx - spot.at[0],
-            labelOffsetY: foldAt.y + corner.dy - spot.at[1],
-            labelTextAlign: corner.align,
-            labelTextBaseline: corner.baseline,
-          },
         });
       }
     }
-    // 关联收起 − 钉第二脊分叉口
-    if (assocKids.length && parentId && useAssocGroup && assocHub != null && assocSpine != null) {
-      forks.set(relationBundleFoldKey(parentId), foldAtArmFork(side, assocHub, assocSpine));
-    }
+  }
+  for (const [parentId, cand] of assocForkByParent) {
+    forks.set(relationBundleFoldKey(parentId), foldAtArmFork(cand.side, cand.assocHub, cand.assocSpine));
+    // 文案只跟父卡 + 方位，不吃 spine/hub（叶卡一动就变）
+    forks.set(relationBundleLabelKey(parentId), assocTrunkLabelAt(cand.parent, cand.side));
   }
   // 彩色模式跳过卸叠，靠绘制顺序分层
   if (options?.unstack !== false) {
@@ -368,6 +338,20 @@ function straightEdge(
     },
     ...(style ? { style } : {}),
   };
+}
+
+function frozenOrLive(
+  item: { member: TrunkMember; child: GraphNodePosition },
+  freeze: TrunkDragFreeze | undefined,
+): GraphNodePosition {
+  return freeze && item.member.childId === freeze.id ? freeze.pos : item.child;
+}
+
+function placedPositions(
+  placed: { member: TrunkMember; child: GraphNodePosition }[],
+  freeze: TrunkDragFreeze | undefined,
+): GraphNodePosition[] {
+  return placed.map((item) => frozenOrLive(item, freeze));
 }
 
 function otherNodes(
@@ -647,6 +631,27 @@ function foldAtArmFork(
   return side === 'left' || side === 'right'
     ? { x: forkSpine, y: arm }
     : { x: arm, y: forkSpine };
+}
+
+/**
+ * 「关联」文案：相对父卡出线方向固定外探，不依赖 spine/hub/叶卡坐标。
+ * 拖提及、结果等只动叶卡时，文案世界坐标必须不变。
+ */
+function assocTrunkLabelAt(
+  parent: GraphNodePosition,
+  side: Side,
+): { x: number; y: number } {
+  const pad = LAYOUT_SPINE_PAD + LAYOUT_LABEL_GAP;
+  if (side === 'right') {
+    return { x: parent.x + HALF_W + pad, y: parent.y };
+  }
+  if (side === 'left') {
+    return { x: parent.x - HALF_W - pad, y: parent.y };
+  }
+  if (side === 'bottom') {
+    return { x: parent.x, y: parent.y + HALF_H + pad };
+  }
+  return { x: parent.x, y: parent.y - HALF_H - pad };
 }
 
 /** 公共脊 → 类型线 → 分叉 → 卡。 */

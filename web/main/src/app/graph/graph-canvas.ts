@@ -802,12 +802,14 @@ export class GraphCanvas {
   }
 }
 
-/** 主卡片、分叉点和「+ N」不染色。 */
+/** 主卡片和分叉点不染色。悬停卡片或「+ N」时，前方连线变蓝或加深。 */
 function hoverCardId(target: EventTarget | null, data: DependencyGraph | null): string | null {
-  const card = target instanceof Element ? target.closest<HTMLElement>('article.card') : null;
-  const id = card?.dataset['nodeId'];
-  const item = id && data ? data.nodes.find((node) => node.id === id) : undefined;
-  if (!data || !item || item.id === data.rootId || item.relationHub || isFoldSummaryNode(item)) {
+  if (!(target instanceof Element) || !data) {
+    return null;
+  }
+  const id = target.closest<HTMLElement>('article.card, .fold-summary')?.dataset['nodeId'];
+  const item = id ? data.nodes.find((node) => node.id === id) : undefined;
+  if (!item || item.id === data.rootId || item.relationHub) {
     return null;
   }
   return item.id;

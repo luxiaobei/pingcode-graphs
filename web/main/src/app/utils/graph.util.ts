@@ -22,6 +22,11 @@ export function relationBundleFoldKey(parentId: string): string {
   return relationFoldKey(parentId, BUNDLE_FOLD_TYPE);
 }
 
+/** 「关联」文案锚点（与 − 分叉可分离，钉在父卡对齐的主干上） */
+export function relationBundleLabelKey(parentId: string): string {
+  return `${relationBundleFoldKey(parentId)}:label`;
+}
+
 /**
  * 非父、非子、非整体收起占位的关系（含左右专属的关联测试/工单/产品需求）。
  * 其中默认可并入「关联」干的子集见 `isAssocBundleRelation`。

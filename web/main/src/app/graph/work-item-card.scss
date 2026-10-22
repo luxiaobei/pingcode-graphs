@@ -139,6 +139,20 @@
   user-select: none;
 }
 
+/** 关联主干文案：与边 label 同色，钉在分叉旁 */
+.card-edge-label {
+  position: absolute;
+  z-index: 2;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: #c0c4cc;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  transform: translate(-50%, -100%);
+}
+
 .fold-summary {
   display: inline-flex;
   align-items: center;

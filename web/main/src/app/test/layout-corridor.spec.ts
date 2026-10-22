@@ -67,9 +67,10 @@ describe('布局出线走廊', () => {
 
     const { edges } = trunkEdges(topOnly, layout);
     const pts =
-      (edges.find((edge) => edge.target === 'm1' && !edge.data?.['labelOnly'])?.style?.[
-        'controlPoints'
-      ] as [number, number][]) ?? [];
+      (edges.find((edge) => edge.target === 'm1')?.style?.['controlPoints'] as [
+        number,
+        number,
+      ][]) ?? [];
     const uniqueYs = [...new Set(pts.map((p) => Math.round(p[1])))].sort((a, b) => b - a);
     expect(uniqueYs.length).toBeGreaterThanOrEqual(2);
     const spineY = uniqueYs[0]!;
@@ -113,9 +114,10 @@ describe('布局出线走廊', () => {
     });
     for (const target of ['m1', 'm2', 'm3'] as const) {
       const pts =
-        (edges.find((edge) => edge.target === target && !edge.data?.['labelOnly'])?.style?.[
-          'controlPoints'
-        ] as [number, number][]) ?? [];
+        (edges.find((edge) => edge.target === target)?.style?.['controlPoints'] as [
+          number,
+          number,
+        ][]) ?? [];
       for (let i = 0; i < pts.length - 1; i += 1) {
         const a = pts[i]!;
         const b = pts[i + 1]!;

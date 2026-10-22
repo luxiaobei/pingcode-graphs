@@ -250,6 +250,8 @@ event:
 functions:
   - key: resolver
     handler: index.resolver
+  - key: graph-agent
+    handler: index.askGraphAgent
   - key: pjm-workitem-created
     handler: index.onWorkItemCreatedHandler
   - key: pjm-workitem-updated
@@ -446,8 +448,31 @@ permissions:
     - pcp:read:testhub:configuration
     - pcp:read:global:team
   external:
+    fetch:
+      backend:
+        - https://api.deepseek.com
     images:
       - https://app-pc-avatar-release-1251945081.cos.ap-shanghai.myqcloud.com
   content:
     styles:
       - unsafe-inline
+environment:
+  variables:
+    - key: DEEPSEEK_API_KEY
+      default: ""
+      description: DeepSeek API key。
+exposer:
+  scopes:
+    - name: ncp:read:graph-agent
+      displayName: 查询关系图谱助手
+      description: 允许向关系图谱助手提问
+  routes:
+    - key: ask-graph-agent
+      method: POST
+      path: /agent/ask
+      accept:
+        - application/json
+      handler:
+        function: graph-agent
+      scopes:
+        - ncp:read:graph-agent

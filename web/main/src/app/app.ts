@@ -10,6 +10,7 @@ import type { DependencyGraph } from './entities/graph.entity';
 import { GraphCanvas } from './graph/graph-canvas';
 import { ENTITY_CHANGED_CHANNEL, type EntityChangedPayload } from './realtime/entity-changed';
 import { getDependencyGraph } from './services/graph.service';
+import { AiAnalysisDialog } from './ai/ai-analysis-dialog';
 import {
   applySavedViewSettings,
   cloneViewSettings,
@@ -36,6 +37,15 @@ const TRACKED_KINDS = new Set(['work_item', 'idea', 'ticket', 'test_case', 'page
 /** 工作项菜单弹窗。只有这个入口保留标题和关闭。 */
 const ACTION_EXTENSION_TARGET = 'pcm:pjm:workitem:action';
 
+/** 分析弹窗贴在关系图右侧，避开顶栏。 */
+const AI_ANALYSIS_PANEL = {
+  width: 'min(440px, calc(100% - 32px))',
+  height: 'calc(100% - 150px)',
+  maxHeight: 'none',
+  position: { top: '114px', right: '16px' },
+  hasBackdrop: false,
+};
+
 /** 三种展示：详情 tab、菜单弹窗、从 tab 打开的全屏。 */
 type GraphSurface = 'pending' | 'tab' | 'dialog' | 'fullscreen';
 
@@ -51,7 +61,8 @@ function graphSurface(
   if (!dialogMode) {
     return 'tab';
   }
-  const openedFromTab = extension?.modal?.hostChrome === true || extension?.data?.hostChrome === true;
+  const openedFromTab =
+    extension?.modal?.hostChrome === true || extension?.data?.hostChrome === true;
   const actionDialog =
     extension?.target === ACTION_EXTENSION_TARGET || extension?.key === 'pingcode-graphs';
   return actionDialog && !openedFromTab ? 'dialog' : 'fullscreen';
@@ -275,6 +286,18 @@ export class App {
     this.collapsedAnchors.update((list) =>
       list.includes(key) ? list.filter((id) => id !== key) : [...list, key],
     );
+  }
+
+  protected openAiAnalysis(): void {
+    const focusNodeId = this.source()?.rootId;
+    if (!focusNodeId) {
+      void notify.warning({ title: '请先加载关系图' });
+      return;
+    }
+    this.dialog.open(AiAnalysisDialog, {
+      ...AI_ANALYSIS_PANEL,
+      initialState: { focusNodeId },
+    });
   }
 
   protected openSettings(): void {

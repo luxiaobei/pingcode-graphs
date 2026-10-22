@@ -61,8 +61,7 @@ function graphSurface(
   if (!dialogMode) {
     return 'tab';
   }
-  const openedFromTab =
-    extension?.modal?.hostChrome === true || extension?.data?.hostChrome === true;
+  const openedFromTab = extension?.modal?.hostChrome === true || extension?.data?.hostChrome === true;
   const actionDialog =
     extension?.target === ACTION_EXTENSION_TARGET || extension?.key === 'pingcode-graphs';
   return actionDialog && !openedFromTab ? 'dialog' : 'fullscreen';

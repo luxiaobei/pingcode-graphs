@@ -18,6 +18,7 @@ import {
   relationFoldKey,
   relationLabel,
 } from './graph.util';
+import { planStroke, resetStrokePlans } from '../graph/flat-polyline';
 import { unstackSharedStrokes } from './unstack-strokes';
 
 export type GraphNodePosition = { x: number; y: number; side?: Side };
@@ -81,7 +82,8 @@ function foldOnTypeStem(
 }
 
 /**
- * 同侧拖卡时冻结关联共用脊的锚点，避免「关联」文案跟着被拖类型跑。
+ * 同侧拖展开的叶卡时冻结关联共用脊，避免「关联」− 跟着被拖类型跑。
+ * 「+ N」是线的终点，不冻结，否则主干留在原地会多出一截竖线。
  * 换侧时不要传；被拖卡自身出线仍用实时坐标。
  */
 export type TrunkDragFreeze = { id: string; pos: GraphNodePosition };
@@ -146,6 +148,7 @@ export function trunkEdges(
   }
 
   const edges: EdgeData[] = loose.map((member) => straightEdge(member));
+  const foldTrunks: { id: string; points: [number, number][] }[] = [];
   const forks = new Map<string, { x: number; y: number }>();
   /** 同一父卡多方位关联时只保留成员最多的一侧，避免 forks 键被后写覆盖把「关联」拖飞 */
   const assocForkByParent = new Map<
@@ -154,8 +157,10 @@ export function trunkEdges(
       parent: GraphNodePosition;
       side: Side;
       count: number;
+      spine: number;
       assocHub: number;
       assocSpine: number;
+      childId: string;
     }
   >();
   for (const lane of lanes.values()) {
@@ -261,22 +266,15 @@ export function trunkEdges(
         isParent && !straight && groupSpine != null
           ? foldOnTypeStem(side, groupSpine, fork, center, PARENT_FOLD_ALONG)
           : foldJunction(parent, side, fork, center, foldMode);
+      const routeTo = (child: GraphNodePosition): [number, number][] =>
+        straight
+          ? layerRoute(parent, child, side, fork)
+          : inAssocGroup && assocHub != null && assocSpine != null && spine != null
+            ? routeAssocGroup(parent, child, side, spine, assocHub, assocSpine, fork, center)
+            : routeOf(parent, child, side, groupSpine, fork, center);
       for (const item of group.placed) {
         const showLabel = item.member.childId === labelOwner;
-        const controlPoints = straight
-          ? layerRoute(parent, item.child, side, fork)
-          : inAssocGroup && assocHub != null && assocSpine != null && spine != null
-            ? routeAssocGroup(
-                parent,
-                item.child,
-                side,
-                spine,
-                assocHub,
-                assocSpine,
-                fork,
-                center,
-              )
-            : routeOf(parent, item.child, side, groupSpine, fork, center);
+        const controlPoints = routeTo(item.child);
         // 文案钉在 − 旁
         const style: EdgeData['style'] = { controlPoints };
         if (showLabel) {
@@ -293,33 +291,167 @@ export function trunkEdges(
         }
         edges.push(straightEdge(item.member, style, showLabel));
       }
+      // 收起按钮前的主干。关联类并进整体干，不单独再描。
+      const sample = group.placed[0];
+      if (sample && parentId && !foldOnly && !(assocOwn && relationType !== BUNDLE_FOLD_TYPE)) {
+        const id = `fold-trunk:${relationFoldKey(parentId, relationType)}`;
+        const points = pathUntil(
+          [leavePoint(parent, side), ...routeTo(sample.child)],
+          foldAnchor,
+        );
+        foldTrunks.push({ id, points });
+        edges.push({
+          id,
+          source: parentId,
+          target: sample.member.childId,
+          data: { relationType, label: '', endArrow: false, trunk: true },
+          style: { controlPoints: points },
+        });
+      }
       if (!(assocOwn && relationType !== BUNDLE_FOLD_TYPE)) {
         forks.set(relationFoldKey(parentId, relationType), foldAnchor);
       }
     });
     if (assocPlaced.length && parentId && useAssocGroup && assocHub != null && assocSpine != null) {
       const prev = assocForkByParent.get(parentId);
+      const childId = assocPlaced[0]?.member.childId;
       if (!prev || assocPlaced.length > prev.count) {
-        assocForkByParent.set(parentId, {
-          parent,
-          side,
-          count: assocPlaced.length,
-          assocHub,
-          assocSpine,
-        });
+        if (childId && spine != null) {
+          assocForkByParent.set(parentId, {
+            parent,
+            side,
+            count: assocPlaced.length,
+            spine,
+            assocHub,
+            assocSpine,
+            childId,
+          });
+        }
       }
     }
   }
+  const trunks: { id: string; points: [number, number][] }[] = [];
   for (const [parentId, cand] of assocForkByParent) {
     forks.set(relationBundleFoldKey(parentId), foldAtArmFork(cand.side, cand.assocHub, cand.assocSpine));
     // 文案只跟父卡 + 方位，不吃 spine/hub（叶卡一动就变）
     forks.set(relationBundleLabelKey(parentId), assocTrunkLabelAt(cand.parent, cand.side));
+    const id = `bundle-trunk:${parentId}`;
+    const points = assocTrunkPoints(cand.parent, cand.side, cand.spine, cand.assocHub, cand.assocSpine);
+    trunks.push({ id, points });
+    edges.push({
+      id,
+      source: parentId,
+      target: cand.childId,
+      data: {
+        relationType: bundleTrunkType(nodes, parentId),
+        label: '',
+        endArrow: false,
+        trunk: true,
+      },
+      style: { controlPoints: points },
+    });
   }
-  // 彩色模式跳过卸叠，靠绘制顺序分层
+  // 彩色模式不卸叠，整段描出后再把关联主干盖在共用段上
   if (options?.unstack !== false) {
     unstackSharedStrokes(edges, positions, nodes);
+  } else {
+    resetStrokePlans();
+  }
+  for (const trunk of [...trunks, ...foldTrunks]) {
+    planStroke(trunk.id, trunk.points);
   }
   return { edges, forks };
+}
+
+/** 与收起时「关联」占位同一关系色。 */
+function bundleTrunkType(nodes: ReadonlyMap<string, GraphEntity>, parentId: string): string {
+  const fold = nodes
+    .get(parentId)
+    ?.folds?.find((item) => item.key === relationBundleFoldKey(parentId));
+  return fold?.relationType ?? BUNDLE_FOLD_TYPE;
+}
+
+/** 父卡到「关联」− 的共用段，不含各关系自己的分叉。 */
+function assocTrunkPoints(
+  parent: GraphNodePosition,
+  side: Side,
+  spine: number,
+  assocHub: number,
+  assocSpine: number,
+): [number, number][] {
+  if (side === 'right') {
+    return dedupePoints([
+      [parent.x + HALF_W, parent.y],
+      [spine, parent.y],
+      [spine, assocHub],
+      [assocSpine, assocHub],
+    ]);
+  }
+  if (side === 'left') {
+    return dedupePoints([
+      [parent.x - HALF_W, parent.y],
+      [spine, parent.y],
+      [spine, assocHub],
+      [assocSpine, assocHub],
+    ]);
+  }
+  const edgeY = side === 'bottom' ? parent.y + HALF_H : parent.y - HALF_H;
+  return dedupePoints([
+    [parent.x, edgeY],
+    [parent.x, spine],
+    [assocHub, spine],
+    [assocHub, assocSpine],
+  ]);
+}
+
+/** 路径裁到收起按钮，按钮之后的分叉不包含在内。 */
+function pathUntil(
+  points: [number, number][],
+  at: { x: number; y: number },
+): [number, number][] {
+  const end: [number, number] = [at.x, at.y];
+  const kept: [number, number][] = [];
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index];
+    if (!point) {
+      break;
+    }
+    if (nearPoint(point, end)) {
+      kept.push(end);
+      break;
+    }
+    kept.push(point);
+    const next = points[index + 1];
+    if (next && segmentHolds(point, next, end)) {
+      kept.push(end);
+      break;
+    }
+  }
+  return dedupePoints(kept.length ? kept : [end]);
+}
+
+function nearPoint(a: [number, number], b: [number, number]): boolean {
+  return Math.abs(a[0] - b[0]) < 1.5 && Math.abs(a[1] - b[1]) < 1.5;
+}
+
+function segmentHolds(
+  a: [number, number],
+  b: [number, number],
+  point: [number, number],
+): boolean {
+  const abx = b[0] - a[0];
+  const aby = b[1] - a[1];
+  const length2 = abx * abx + aby * aby;
+  if (length2 < 1) {
+    return nearPoint(a, [point[0], point[1]]);
+  }
+  const t = ((point[0] - a[0]) * abx + (point[1] - a[1]) * aby) / length2;
+  if (t < -0.02 || t > 1.02) {
+    return false;
+  }
+  const x = a[0] + abx * t;
+  const y = a[1] + aby * t;
+  return Math.abs(x - point[0]) < 2 && Math.abs(y - point[1]) < 2;
 }
 
 function straightEdge(
@@ -344,7 +476,11 @@ function frozenOrLive(
   item: { member: TrunkMember; child: GraphNodePosition },
   freeze: TrunkDragFreeze | undefined,
 ): GraphNodePosition {
-  return freeze && item.member.childId === freeze.id ? freeze.pos : item.child;
+  // 「+ N」被拖走时线必须跟着走。冻在起点会让关联主干竖在旧位置。
+  if (freeze && item.member.childId === freeze.id && !isFoldSummaryId(freeze.id)) {
+    return freeze.pos;
+  }
+  return item.child;
 }
 
 function placedPositions(

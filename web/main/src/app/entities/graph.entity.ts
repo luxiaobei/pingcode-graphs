@@ -73,6 +73,8 @@ export interface FoldMark {
   top: number;
   /** 缺省为 fold（可点的 −）；label 为钉在主干上的文案 */
   kind?: 'fold' | 'label';
+  /** 收起按钮悬停色：默认蓝，彩色模式为这条关系线的颜色 */
+  color?: string;
 }
 
 export interface GraphEdge {

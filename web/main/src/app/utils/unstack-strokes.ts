@@ -25,6 +25,10 @@ export function unstackSharedStrokes(
     return;
   }
   const routed = edges.flatMap((edge) => {
+    // 收起按钮前的覆盖干不参与卸叠，避免把按钮后的分叉裁掉
+    if (edge.data?.['trunk'] === true) {
+      return [];
+    }
     const points = fullPolyline(edge, positions, nodes);
     return points && edge.id ? [{ edge, points }] : [];
   });

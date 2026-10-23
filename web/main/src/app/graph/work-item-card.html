@@ -48,6 +48,7 @@
           class="card-edge-label"
           [style.left.px]="mark.left"
           [style.top.px]="mark.top"
+          [style.color]="mark.color || null"
           >{{ mark.text }}</span
         >
       } @else {
@@ -56,6 +57,7 @@
           thyName="minus-circle"
           [style.left.px]="mark.left"
           [style.top.px]="mark.top"
+          [style.--badge-accent]="mark.color"
           [attr.data-fold]="mark.key"
         ></thy-icon>
       }

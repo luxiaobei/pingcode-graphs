@@ -137,6 +137,10 @@
   color: #ccd0d8;
   cursor: pointer;
   user-select: none;
+
+  &:hover {
+    color: var(--badge-accent, #6698ff);
+  }
 }
 
 /** 关联主干文案：与边 label 同色，钉在分叉旁 */

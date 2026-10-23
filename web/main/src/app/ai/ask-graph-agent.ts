@@ -13,9 +13,16 @@ export interface AgentAnswer {
   steps: AgentStep[];
 }
 
+/** 本轮之前的对话。 */
+export interface AgentHistoryMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface AskGraphAgentPayload {
   question: string;
   focusNodeId?: string;
+  messages?: AgentHistoryMessage[];
 }
 
 /** 向关系图谱助手提问。 */

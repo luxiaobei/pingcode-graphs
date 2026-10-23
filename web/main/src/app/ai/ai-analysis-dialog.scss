@@ -1,18 +1,56 @@
 :host {
   display: block;
   height: 100%;
+  font-family: 'Segoe UI', 'PingFang SC', 'Helvetica Neue', sans-serif;
+  color: #333;
 }
 
 .ai-analysis {
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: #f7f8fa;
+}
+
+thy-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #f7f8fa;
+}
+
+.ai-analysis__thread {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  padding: 16px;
+  overflow: auto;
+}
+
+.ai-analysis__question {
+  align-self: flex-end;
+  max-width: 88%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: #6698ff;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .ai-analysis__answer {
+  align-self: stretch;
   box-sizing: border-box;
-  padding: 12px 16px;
+  padding: 12px 14px;
   background: #fff;
-  border: 1px solid #e6e8eb;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 14px;
   line-height: 1.7;
   color: #333;
@@ -83,36 +121,84 @@
   }
 }
 
-.ai-analysis__state {
+.ai-analysis__pending {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  gap: 12px;
-  min-height: 240px;
-  color: #64748b;
-  text-align: center;
+  gap: 8px;
+  color: #8c8c8c;
 }
 
-.ai-analysis__state p {
-  margin: 0;
+.ai-analysis__spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e6e8eb;
+  border-top-color: #6698ff;
+  border-radius: 50%;
+  animation: ai-analysis-spin 0.8s linear infinite;
 }
 
-.ai-analysis__state--error {
+@keyframes ai-analysis-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ai-analysis__error {
+  margin: 0 0 8px;
   color: #b91c1c;
 }
 
-.ai-analysis__state--error pre {
-  max-width: 100%;
-  margin: 0;
+.ai-analysis__error-detail {
+  margin: 0 0 12px;
   white-space: pre-wrap;
-  text-align: left;
-  background: #fff;
-  border: 1px solid #fecaca;
-  border-radius: 8px;
-  padding: 12px;
-  font-size: 12px;
   color: #7f1d1d;
+  font-size: 12px;
+}
+
+.ai-analysis__stop-row {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: center;
+  padding: 0 16px;
+}
+
+.ai-analysis__stop-row + .ai-analysis__composer {
+  margin-top: 8px;
+}
+
+.ai-analysis__stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid #e6e8eb;
+  border-radius: 999px;
+  background: #fff;
+  color: #8c8c8c;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ai-analysis__stop-icon {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    box-sizing: border-box;
+    width: 6px;
+    height: 6px;
+    border: 1px solid currentColor;
+    border-radius: 1px;
+    transform: translate(-50%, -50%);
+  }
 }
 
 .ai-analysis__composer {
@@ -120,20 +206,49 @@
   flex: 0 0 auto;
   align-items: flex-end;
   gap: 8px;
-  padding: 12px 20px 16px;
-  border-top: 1px solid #e6e8eb;
+  margin: 16px;
+  padding: 8px 8px 8px 14px;
   background: #fff;
+  border: 1px solid #e6e8eb;
+  border-radius: 8px;
 
   textarea {
     flex: 1 1 auto;
     min-width: 0;
-    min-height: 64px;
-    max-height: 140px;
-    resize: vertical;
-    line-height: 1.5;
+    min-height: 22px;
+    max-height: 88px;
+    padding: 4px 0;
+    border: 0;
+    outline: none;
+    resize: none;
+    background: transparent;
+    color: #333;
+    font: inherit;
+    font-size: 14px;
+    line-height: 22px;
   }
 
-  button {
-    flex: 0 0 auto;
+  textarea::placeholder {
+    color: #bfc3c9;
+  }
+}
+
+.ai-analysis__send {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #6698ff;
+  cursor: pointer;
+
+  &:disabled {
+    color: #d0d3d8;
+    cursor: default;
   }
 }

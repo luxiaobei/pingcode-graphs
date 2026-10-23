@@ -76,17 +76,13 @@ describe("normalizeAskInput", () => {
         }), /交替/);
     });
 
-    it("rejects history that overflows the character budget", () => {
-        const chunk = "问".repeat(2000);
-        assert.throws(() => normalizeAskInput({
-            question: chunk,
-            messages: [
-                { role: "user", content: chunk },
-                { role: "assistant", content: chunk },
-                { role: "user", content: chunk },
-                { role: "assistant", content: chunk },
-            ],
-        }), /合计最长/);
+    it("accepts more than eight history messages", () => {
+        const messages = Array.from({ length: 10 }, (_, index) => ({
+            role: index % 2 === 0 ? "user" as const : "assistant" as const,
+            content: index % 2 === 0 ? `问题 ${index}` : `回答 ${index}`,
+        }));
+        const input = normalizeAskInput({ question: "继续", messages });
+        assert.equal(input.messages.length, 10);
     });
 });
 

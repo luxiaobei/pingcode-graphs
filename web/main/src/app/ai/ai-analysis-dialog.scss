@@ -23,6 +23,7 @@ thy-content {
 }
 
 .ai-analysis__thread {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -30,6 +31,12 @@ thy-content {
   min-height: 0;
   padding: 16px;
   overflow: auto;
+}
+
+.ai-analysis__turn {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .ai-analysis__question {

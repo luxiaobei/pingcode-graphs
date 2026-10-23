@@ -130,7 +130,7 @@ export class AiAnalysisDialog implements OnInit {
       return;
     }
     this.mapTurns((turn) => (turn.id === id ? { ...turn, ...patch } : turn));
-    this.scrollToEnd();
+    this.scrollTurnToTop(id);
   }
 
   private saveTurn(next: ChatTurn): void {
@@ -146,10 +146,28 @@ export class AiAnalysisDialog implements OnInit {
   }
 
   private scrollToEnd(): void {
+    this.scrollThread((thread) => {
+      thread.scrollTop = thread.scrollHeight;
+    });
+  }
+
+  /** 结论出来后停在这一轮的问题上，回答紧跟在下面。 */
+  private scrollTurnToTop(id: number): void {
+    this.scrollThread((thread) => {
+      const turn = thread.querySelector<HTMLElement>(`[data-turn-id="${id}"]`);
+      if (!turn) {
+        return;
+      }
+      const padding = Number.parseFloat(getComputedStyle(thread).paddingTop) || 0;
+      thread.scrollTop = Math.max(0, turn.offsetTop - padding);
+    });
+  }
+
+  private scrollThread(place: (thread: HTMLElement) => void): void {
     setTimeout(() => {
-      const node = this.thread()?.nativeElement;
-      if (node) {
-        node.scrollTop = node.scrollHeight;
+      const thread = this.thread()?.nativeElement;
+      if (thread) {
+        place(thread);
       }
     });
   }

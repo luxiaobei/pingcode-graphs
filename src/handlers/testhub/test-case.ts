@@ -30,7 +30,7 @@ export const onTestCaseUpdatedHandler: EventHandler = async (context, event) => 
     const testCaseNode = createTestCaseNode({
         refId: testCaseInfo["id"],
         name: testCaseInfo["title"],
-        identifier: testCaseInfo["identifier"],
+        identifier: testCaseInfo["whole_identifier"],
         typeName: testCaseInfo["type"]?.["name"],
         level: testCaseInfo["level"],
         stateType: testCaseInfo["state"]?.["type"],

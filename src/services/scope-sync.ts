@@ -231,19 +231,21 @@ async function findStructuralEdges(fromIds: string[]): Promise<KgEdge[]> {
             continue;
         }
         const rows = await ces.entity<KgEdge>(KG_EDGE_ENTITY_NAME).find((cb) => {
-            if (chunk.length === 1) {
-                cb.field("from_id").eq(chunk[0]!);
-            } else {
-                cb.or((or) => {
-                    for (const id of chunk) {
-                        or.field("from_id").eq(id);
+            cb.and((and) => {
+                if (chunk.length === 1) {
+                    and.field("from_id").eq(chunk[0]!);
+                } else {
+                    and.or((or) => {
+                        for (const id of chunk) {
+                            or.field("from_id").eq(id);
+                        }
+                    });
+                }
+                and.or((or) => {
+                    for (const type of STRUCTURAL_EDGE_TYPES) {
+                        or.field("type").eq(type);
                     }
                 });
-            }
-            cb.or((or) => {
-                for (const type of STRUCTURAL_EDGE_TYPES) {
-                    or.field("type").eq(type);
-                }
             });
         });
         found.push(...rows);

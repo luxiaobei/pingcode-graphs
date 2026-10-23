@@ -3,6 +3,9 @@ import type { GraphEntity, RelationStyle } from '../entities/graph.entity';
 
 export const GRAPH_MIN_SIZE = 320;
 
+/** 关系图画布固定高度。 */
+export const GRAPH_HEIGHT = 1000;
+
 /** 工具栏每次缩放倍率 */
 export const GRAPH_ZOOM_STEP = 1.2;
 

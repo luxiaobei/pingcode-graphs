@@ -24,6 +24,7 @@ import {
 import { ThyTooltipDirective } from 'ngx-tethys/tooltip';
 import {
   GRAPH_FIT_SETTLE_MS,
+  GRAPH_HEIGHT,
   GRAPH_OPTIONS,
   GRAPH_ZOOM_RANGE,
   GRAPH_ZOOM_STEP,
@@ -250,7 +251,13 @@ export class GraphCanvas {
 
   private initGraph(): void {
     const container = this.host().nativeElement;
-    this.g6 = new Graph({ container, ...graphHostSize(container), ...GRAPH_OPTIONS });
+    const { width, height } = graphHostSize(container);
+    this.g6 = new Graph({
+      container,
+      width,
+      height: this.openInPage() ? GRAPH_HEIGHT : height,
+      ...GRAPH_OPTIONS,
+    });
     // 按下画布即清选区（平移/点选都可能残留蓝底）
     container.addEventListener('pointerdown', () => window.getSelection()?.removeAllRanges(), {
       capture: true,
@@ -430,7 +437,10 @@ export class GraphCanvas {
   }
 
   private readonly onCardHover = (event: MouseEvent): void => {
-    const hit = hoverHit(event.target, untracked(() => this.graph()));
+    const hit = hoverHit(
+      event.target,
+      untracked(() => this.graph()),
+    );
     if (sameHover(hit, this.hoveredCardId, this.hoveredFold)) {
       return;
     }

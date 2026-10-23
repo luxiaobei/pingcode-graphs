@@ -6,8 +6,6 @@ export const SEARCH_LIMIT = 8;
 export const RELATION_NODE_LIMIT = 40;
 export const MAX_TOOL_ROUNDS = 4;
 export const MAX_QUESTION_LENGTH = 2000;
-export const MAX_HISTORY_MESSAGES = 8;
-export const MAX_HISTORY_CHARS = 8_000;
 export const MAX_CONTEXT_TOKENS = 32_768;
 export const MAX_OUTPUT_TOKENS = 2_048;
 export const MAX_TOOL_RESULT_CHARS = 12_000;
@@ -186,15 +184,9 @@ export function normalizeAskInput(raw: unknown): AskInput {
         throw new AgentError(`question 最长 ${MAX_QUESTION_LENGTH} 个字符`, 400);
     }
 
-    const messages = readHistory(raw["messages"]);
-    const historyChars = messages.reduce((sum, message) => sum + message.content.length, 0);
-    if (question.length + historyChars > MAX_HISTORY_CHARS) {
-        throw new AgentError(`question 与 messages 合计最长 ${MAX_HISTORY_CHARS} 个字符`, 400);
-    }
-
     const input: AskInput = {
         question,
-        messages,
+        messages: readHistory(raw["messages"]),
     };
     if (raw["focusNodeId"] !== undefined && raw["focusNodeId"] !== null && raw["focusNodeId"] !== "") {
         if (typeof raw["focusNodeId"] !== "string" || !isKgNodeId(raw["focusNodeId"].trim())) {
@@ -426,9 +418,6 @@ function readHistory(value: unknown): HistoryMessage[] {
     }
     if (!Array.isArray(value)) {
         throw new AgentError("messages 必须是数组", 400);
-    }
-    if (value.length > MAX_HISTORY_MESSAGES) {
-        throw new AgentError(`messages 最多 ${MAX_HISTORY_MESSAGES} 条`, 400);
     }
     const messages = value.map((item, index) => {
         if (!isRecord(item) || (item["role"] !== "user" && item["role"] !== "assistant")) {

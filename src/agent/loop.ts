@@ -60,7 +60,6 @@ export async function runAgentLoop(
 }
 
 async function runTool(name: string, rawArguments: string, runtime: AgentRuntime): Promise<ToolResult> {
-    console.log(name, rawArguments);
     const parsed = parseToolCall(name, rawArguments);
     if ("error" in parsed) {
         return { ok: false, summary: parsed.error, body: { error: parsed.error } };

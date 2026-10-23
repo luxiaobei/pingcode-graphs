@@ -9,7 +9,8 @@ type NodePos = { x: number; y: number };
 
 const EPS = 1;
 const ARROW_TAIL = 6;
-const CORNER = 10;
+/** 与边样式 radius 一致。回描两倍长，G6 圆角才不会缩成一半。 */
+const CORNER_RADIUS = 10;
 
 /**
  * 同一段线只描一次。前后接在一条直线上的也算重合。
@@ -45,6 +46,7 @@ export function unstackSharedStrokes(
   }
 
   const claimed = new Set<string>();
+  const links = new Map<string, Point[]>();
   const vertices = routed.flatMap((item) => item.points);
   const ordered = [...routed].sort((a, b) => {
     const labeled = Number(hasLabel(b.edge)) - Number(hasLabel(a.edge));
@@ -53,17 +55,13 @@ export function unstackSharedStrokes(
   for (const item of ordered) {
     const points = insertSplits(item.points, vertices);
     const start = firstOpenSegment(points, claimed);
-    claimSegments(points.slice(start), claimed);
-    if (!item.edge.id) {
-      continue;
-    }
-    const label = labelAt(item.edge, item.points);
-    // 一律写入 plan（含整段自绘），拖拽中只用绝对坐标，杜绝斜线
+    // 先看已描过的邻接，再占段。直线穿过的拐点不回描。
     planStroke(
-      item.edge.id,
-      start > 0 ? strokeFrom(points, start) : points,
-      label,
+      item.edge.id!,
+      start > 0 ? strokeFrom(points, start, links) : points,
+      labelAt(item.edge, item.points),
     );
+    claimSegments(points.slice(start), claimed, links);
   }
 }
 
@@ -105,26 +103,33 @@ function cardAnchor(node: NodePos, toward: Point, half: { w: number; h: number }
   return [node.x + dx * scale, node.y + dy * scale];
 }
 
-/** 从第一段还没人描过的地方开始。整段都描过时只留箭头。拐角往回搭一个圆角。 */
-function strokeFrom(points: Point[], start: number): Point[] {
+/** 从第一段还没人描过的地方开始。整段都描过时只留箭头。转弯处回搭圆角，直线穿过则不搭。 */
+function strokeFrom(points: Point[], start: number, links: ReadonlyMap<string, Point[]>): Point[] {
   const last = points[points.length - 1];
   const prev = points[points.length - 2];
   if (start >= points.length - 1) {
     return last && prev ? arrowTail(prev, last) : points.slice(-2);
   }
   const sliced = points.slice(start);
-  const before = points[start - 1];
-  const joint = sliced[0];
-  const next = sliced[1];
+  const lead = cornerLead(points[start - 1], sliced[0], sliced[1], links);
+  return lead ? [lead, ...sliced] : sliced;
+}
+
+/** 接到上一段圆弧上的起点。直线已经穿过拐点时返回空，避免在 − 旁多出钩子。 */
+function cornerLead(
+  before: Point | undefined,
+  joint: Point | undefined,
+  next: Point | undefined,
+  links: ReadonlyMap<string, Point[]>,
+): Point | undefined {
   if (!before || !joint || !next || isStraight(before, joint, next)) {
-    return sliced;
+    return undefined;
   }
-  const prevLen = dist(before, joint);
-  const nextLen = dist(joint, next);
-  if (prevLen < 1 || nextLen < 1) {
-    return sliced;
+  if (straightThrough(before, joint, links)) {
+    return undefined;
   }
-  return [step(joint, before, Math.min(CORNER, prevLen, nextLen / 2)), ...sliced];
+  const lead = Math.min(dist(before, joint), dist(joint, next), CORNER_RADIUS * 2);
+  return lead < 1 ? undefined : step(joint, before, lead);
 }
 
 function arrowTail(prev: Point, last: Point): Point[] {
@@ -170,10 +175,22 @@ function firstOpenSegment(points: Point[], claimed: ReadonlySet<string>): number
   return index >= 0 ? index : Math.max(0, points.length - 1);
 }
 
-function claimSegments(points: Point[], claimed: Set<string>): void {
+function claimSegments(points: Point[], claimed: Set<string>, links: Map<string, Point[]>): void {
   for (const [from, to] of pairs(points)) {
     claimed.add(segmentKey(from, to));
+    pushLink(links, from, to);
+    pushLink(links, to, from);
   }
+}
+
+function pushLink(links: Map<string, Point[]>, from: Point, to: Point): void {
+  const key = pointId(from);
+  const list = links.get(key);
+  if (list) {
+    list.push(to);
+    return;
+  }
+  links.set(key, [to]);
 }
 
 function insertSplits(points: Point[], vertices: Point[]): Point[] {
@@ -239,10 +256,13 @@ function hasLabel(edge: EdgeData): boolean {
 }
 
 function segmentKey(from: Point, to: Point): string {
-  const id = (point: Point) => `${Math.round(point[0])},${Math.round(point[1])}`;
-  const a = id(from);
-  const b = id(to);
+  const a = pointId(from);
+  const b = pointId(to);
   return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+function pointId(point: Point): string {
+  return `${Math.round(point[0])},${Math.round(point[1])}`;
 }
 
 function near(a: Point, b: Point): boolean {
@@ -250,8 +270,37 @@ function near(a: Point, b: Point): boolean {
 }
 
 function isStraight(a: Point, b: Point, c: Point): boolean {
-  const cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
-  return dist(a, c) < 1 || Math.abs(cross) <= dist(a, c);
+  const abx = b[0] - a[0];
+  const aby = b[1] - a[1];
+  const span = Math.hypot(abx, aby);
+  if (span < 1) {
+    return true;
+  }
+  const cross = abx * (c[1] - b[1]) - aby * (c[0] - b[0]);
+  return Math.abs(cross) <= EPS * span;
+}
+
+/** 已描过的线是否沿 before → joint 继续穿过去。 */
+function straightThrough(
+  before: Point,
+  joint: Point,
+  links: ReadonlyMap<string, Point[]>,
+): boolean {
+  const nexts = links.get(pointId(joint));
+  return Boolean(nexts?.some((point) => continuesPast(before, joint, point)));
+}
+
+function continuesPast(before: Point, joint: Point, point: Point): boolean {
+  const vx = joint[0] - before[0];
+  const vy = joint[1] - before[1];
+  const wx = point[0] - joint[0];
+  const wy = point[1] - joint[1];
+  const span = Math.hypot(vx, vy);
+  const len = Math.hypot(wx, wy);
+  if (span < 1 || len < 1 || Math.abs(vx * wy - vy * wx) > EPS * len) {
+    return false;
+  }
+  return vx * wx + vy * wy > 0;
 }
 
 function lengthOf(points: Point[]): number {

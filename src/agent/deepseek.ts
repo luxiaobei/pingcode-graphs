@@ -28,7 +28,6 @@ export async function completeChat(
     }
 
     let response: Response;
-    console.log(JSON.stringify(body), apiKey);
     try {
         response = await fetch.request(CHAT_COMPLETIONS_URL, {
             method: "POST",

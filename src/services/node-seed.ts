@@ -598,6 +598,34 @@ function timestamp(value: any): number | undefined {
     return numberField(asRecord(value)?.date);
 }
 
+/** 把 OpenAPI 全量结构转成图谱节点。工作项会带上响应里已经嵌套的项目、迭代、发布。 */
+export async function buildOpenApiGraph(kind: KgNodeKind, detail: unknown): Promise<{ nodes: KgNode[]; edges: KgEdge[] }> {
+    const record = asRecord(detail);
+    if (!record) {
+        return { nodes: [], edges: [] };
+    }
+    if (kind === KG_NODE_KIND.project) {
+        return singleNode(seedProject(record));
+    }
+    if (kind === KG_NODE_KIND.sprint) {
+        return singleNode(seedSprint(record));
+    }
+    if (kind === KG_NODE_KIND.release) {
+        return singleNode(seedRelease(record));
+    }
+    if (kind === KG_NODE_KIND.product) {
+        return singleNode(seedProduct(record));
+    }
+    if (kind === KG_NODE_KIND.library) {
+        return singleNode(seedLibrary(record));
+    }
+    return seedDetail(kind, record);
+}
+
+function singleNode(node: KgNode | undefined): { nodes: KgNode[]; edges: KgEdge[] } {
+    return node ? { nodes: [node], edges: [] } : { nodes: [], edges: [] };
+}
+
 function assignTimestamps(input: { sourceUpdatedAt?: number; syncedAt?: number }, updatedAt: number | undefined): void {
     if (updatedAt !== undefined) {
         input.sourceUpdatedAt = updatedAt;

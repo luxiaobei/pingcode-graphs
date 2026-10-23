@@ -15,6 +15,7 @@ import {
     type GetViewPositionPayload,
     type SaveViewPositionPayload,
 } from "../services/kg-service.js";
+import { syncScope, type SyncScopeResult } from "../services/scope-sync.js";
 
 const resolver = new Resolver();
 
@@ -51,6 +52,10 @@ resolver.define<unknown, void>("saveDisplaySettings", async (context, payload) =
 resolver.define<{ question: string; focusNodeId?: string; }, AgentAnswer>("askGraphAgent", async (context, payload) => {
     const answer = await answerGraphQuestion(context, payload);
     return answer;
+});
+
+resolver.define<unknown, SyncScopeResult>("syncScope", async (_context, payload) => {
+    return syncScope(payload);
 });
 
 export { resolver };

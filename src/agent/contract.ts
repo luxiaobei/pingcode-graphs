@@ -7,6 +7,9 @@ export const RELATION_NODE_LIMIT = 40;
 export const MAX_TOOL_ROUNDS = 4;
 export const MAX_QUESTION_LENGTH = 2000;
 export const MAX_HISTORY_MESSAGES = 8;
+export const MAX_HISTORY_CHARS = 8_000;
+export const MAX_CONTEXT_TOKENS = 32_768;
+export const MAX_OUTPUT_TOKENS = 2_048;
 export const MAX_TOOL_RESULT_CHARS = 12_000;
 
 const USER_CONTACT_KEYS = ["email", "mobile", "employee_number"] as const;
@@ -183,9 +186,15 @@ export function normalizeAskInput(raw: unknown): AskInput {
         throw new AgentError(`question 最长 ${MAX_QUESTION_LENGTH} 个字符`, 400);
     }
 
+    const messages = readHistory(raw["messages"]);
+    const historyChars = messages.reduce((sum, message) => sum + message.content.length, 0);
+    if (question.length + historyChars > MAX_HISTORY_CHARS) {
+        throw new AgentError(`question 与 messages 合计最长 ${MAX_HISTORY_CHARS} 个字符`, 400);
+    }
+
     const input: AskInput = {
         question,
-        messages: readHistory(raw["messages"]),
+        messages,
     };
     if (raw["focusNodeId"] !== undefined && raw["focusNodeId"] !== null && raw["focusNodeId"] !== "") {
         if (typeof raw["focusNodeId"] !== "string" || !isKgNodeId(raw["focusNodeId"].trim())) {
@@ -421,9 +430,13 @@ function readHistory(value: unknown): HistoryMessage[] {
     if (value.length > MAX_HISTORY_MESSAGES) {
         throw new AgentError(`messages 最多 ${MAX_HISTORY_MESSAGES} 条`, 400);
     }
-    return value.map((item) => {
+    const messages = value.map((item, index) => {
         if (!isRecord(item) || (item["role"] !== "user" && item["role"] !== "assistant")) {
             throw new AgentError("messages 只接受 user 和 assistant", 400);
+        }
+        const expected: "user" | "assistant" = index % 2 === 0 ? "user" : "assistant";
+        if (item["role"] !== expected) {
+            throw new AgentError("messages 需要以 user 开头，并与 assistant 交替", 400);
         }
         if (typeof item["content"] !== "string" || !item["content"].trim()) {
             throw new AgentError("messages.content 必须是非空字符串", 400);
@@ -431,8 +444,12 @@ function readHistory(value: unknown): HistoryMessage[] {
         if (item["content"].length > MAX_QUESTION_LENGTH) {
             throw new AgentError(`messages.content 最长 ${MAX_QUESTION_LENGTH} 个字符`, 400);
         }
-        return { role: item["role"], content: item["content"] };
+        return { role: expected, content: item["content"] };
     });
+    if (messages.length % 2 !== 0) {
+        throw new AgentError("messages 需要以 assistant 结尾", 400);
+    }
+    return messages;
 }
 
 function assignOptional<T extends object, K extends keyof T>(target: T, key: K, value: T[K] | undefined): void {

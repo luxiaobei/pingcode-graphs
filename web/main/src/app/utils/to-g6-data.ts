@@ -45,7 +45,7 @@ export function toG6Data(
   });
   const cards = graph.nodes.filter((item) => !item.relationHub);
   const painted = edges.map((edge) => applyLineColorMode(edge, lineColorMode));
-  // 彩色：关联干先画，具体关系后画盖住共用段
+  // 彩色：具体关系先画，关联主干最后盖住共用段
   if (colorMode) {
     painted.sort((a, b) => edgePaintOrder(a) - edgePaintOrder(b));
   }
@@ -57,6 +57,9 @@ export function toG6Data(
 
 /** 越大越后画。 */
 function edgePaintOrder(edge: EdgeData): number {
+  if (edge.data?.['trunk'] === true) {
+    return 3;
+  }
   const type = String(edge.data?.['relationType'] ?? '');
   if (type === 'bundle' || type === 'relate' || type === 'relate:work_item') {
     return 0;
@@ -96,12 +99,12 @@ function applyLineColorMode(edge: EdgeData, mode: LineColorMode): EdgeData {
   };
 }
 
-/** 「+ N」底色：默认蓝，彩色模式跟这条关系线同色。 */
-function foldButtonColor(item: GraphEntity, colorMode: boolean): string {
+/** 展开/收起按钮色：默认蓝，彩色模式为关系实色（不兑白）。 */
+function relationButtonColor(relationType: string, colorMode: boolean): string {
   if (!colorMode) {
     return EDGE_LINK_COLOR;
   }
-  return relationEdgeColor(item.foldSummary?.relationType ?? '');
+  return relationEdgeColor(relationType);
 }
 
 /** 业务卡片或折叠占位。关系按钮的坐标相对这张卡片。 */
@@ -120,12 +123,12 @@ function toG6Node(
     type: 'work-item-card',
     data: {
       // 收起入口只保留「+ N」占位；卡片上仅展示展开态的「−」
-      foldMarks: fold ? [] : foldMarks(item, position, rootId, forks),
+      foldMarks: fold ? [] : foldMarks(item, position, rootId, forks, colorMode),
       item,
       root: item.id === rootId,
       width: size.width,
       height: size.height,
-      ...(fold ? { foldColor: foldButtonColor(item, colorMode) } : {}),
+      ...(fold ? { foldColor: relationButtonColor(item.foldSummary?.relationType ?? '', colorMode) } : {}),
     },
   };
   if (position) {
@@ -142,7 +145,8 @@ function foldMarks(
   item: GraphEntity,
   position: GraphNodePosition | undefined,
   _rootId: string,
-  forks?: ReadonlyMap<string, { x: number; y: number }>,
+  forks: ReadonlyMap<string, { x: number; y: number }> | undefined,
+  colorMode: boolean,
 ): FoldMark[] {
   if (!position || !forks) {
     return [];
@@ -164,6 +168,7 @@ function foldMarks(
       text: '−',
       left,
       top,
+      color: relationButtonColor(fold.relationType, colorMode),
     });
     // 「关联」钉在父卡对齐的主干锚点（forks 的 :label），不跟叶卡 hub
     if (fold.key === bundleKey) {
@@ -175,6 +180,9 @@ function foldMarks(
         kind: 'label',
         left: HALF_W + labelAt.x - position.x + corner.dx,
         top: HALF_H + labelAt.y - position.y + corner.dy,
+        color: colorMode
+          ? fadeColorOnWhite(relationEdgeColor(fold.relationType), EDGE_LABEL_COLOR_OPACITY)
+          : undefined,
       });
     }
   }

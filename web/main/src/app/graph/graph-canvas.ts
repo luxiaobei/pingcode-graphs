@@ -44,6 +44,7 @@ import {
   isWorkItemEntity,
   openPivot,
   relationBetween,
+  relationBundleFoldKey,
 } from '../utils/graph.util';
 import type { SavedNodePosition, SaveLayoutPayload } from '../utils/saved-graph-layout';
 import { tidyGraphLayout } from '../utils/tidy-graph-layout';
@@ -117,6 +118,8 @@ export class GraphCanvas {
   private dragEdgeRaf = 0;
   /** 正在悬停的非主卡片。空表示连线用默认色。 */
   private hoveredCardId: string | null = null;
+  /** 正在悬停的收起按钮（−）。染从目标工作项到按钮的线。 */
+  private hoveredFold: { cardId: string; foldKey: string } | null = null;
   /** 上一轮染过色的边，离开时要清掉。 */
   private linkedEdges: string[] = [];
   /** 写过 --card-accent 的卡片。 */
@@ -280,6 +283,7 @@ export class GraphCanvas {
     this.htmlCameraObserver = null;
     this.positions.clear();
     this.hoveredCardId = null;
+    this.hoveredFold = null;
     this.linkedEdges = [];
     this.draggingNodeId = null;
     this.dragFreezePos = null;
@@ -426,27 +430,26 @@ export class GraphCanvas {
   }
 
   private readonly onCardHover = (event: MouseEvent): void => {
-    const id = hoverCardId(
-      event.target,
-      untracked(() => this.graph()),
-    );
-    if (id === this.hoveredCardId) {
+    const hit = hoverHit(event.target, untracked(() => this.graph()));
+    if (sameHover(hit, this.hoveredCardId, this.hoveredFold)) {
       return;
     }
-    this.hoveredCardId = id;
+    this.hoveredCardId = hit && !hit.foldKey ? hit.cardId : null;
+    this.hoveredFold = hit?.foldKey ? { cardId: hit.cardId, foldKey: hit.foldKey } : null;
     this.paintHoverLink();
   };
 
   private readonly onCardHoverOut = (event: MouseEvent): void => {
     const data = untracked(() => this.graph());
-    if (hoverCardId(event.target, data) !== this.hoveredCardId) {
+    if (!sameHover(hoverHit(event.target, data), this.hoveredCardId, this.hoveredFold)) {
       return;
     }
-    // 滑到另一张卡片上时，交给 mouseover。
-    if (hoverCardId(event.relatedTarget, data)) {
+    // 滑到另一张卡片或收起按钮上时，交给 mouseover。
+    if (hoverHit(event.relatedTarget, data)) {
       return;
     }
     this.hoveredCardId = null;
+    this.hoveredFold = null;
     this.paintHoverLink();
   };
 
@@ -474,14 +477,14 @@ export class GraphCanvas {
     }
     const data = untracked(() => this.graph());
     const live = new Set((graph.getEdgeData() ?? []).map((edge) => String(edge.id)));
-    const next = new Set(
-      (data && this.hoveredCardId ? edgesToRoot(data, this.hoveredCardId) : []).filter((id) =>
-        live.has(id),
-      ),
+    const picked = hoverEdges(data, this.hoveredCardId, this.hoveredFold).filter((edge) =>
+      live.has(edge.id),
     );
+    const next = new Set(picked.map((edge) => edge.id));
     const clear = this.linkedEdges.filter((id) => live.has(id) && !next.has(id));
     this.linkedEdges = [...next];
-    setFullStrokeEdges(next);
+    // 关联主干只描到收起按钮，不要整段拉到子卡
+    setFullStrokeEdges(picked.filter((edge) => !edge.trunk).map((edge) => edge.id));
     const colorMode = this.lineColorMode() === 'item';
     this.syncCardAccent(graph, data, this.hoveredCardId, colorMode);
 
@@ -557,7 +560,10 @@ export class GraphCanvas {
     if (!this.accentCard) {
       return;
     }
-    this.accentCard.style.removeProperty('--card-accent');
+    // 追溯菜单还开着时，选中卡片的边框色要留住
+    if (!this.accentCard.classList.contains('card--active')) {
+      this.accentCard.style.removeProperty('--card-accent');
+    }
     this.accentCard = null;
   }
 
@@ -585,11 +591,47 @@ export class GraphCanvas {
     event.preventDefault();
     const id = this.traceCandidate(card.dataset['nodeId']);
     if (id) {
-      this.host().nativeElement.querySelector('.card--active')?.classList.remove('card--active');
-      card.classList.add('card--active');
+      this.markTraceCard(card, id);
       this.openTraceMenu(id, event.clientX, event.clientY);
     }
   };
+
+  /** 选中卡片：默认蓝边；彩色模式用这条关系线的颜色，菜单关闭前不掉。 */
+  private markTraceCard(card: HTMLElement, cardId: string): void {
+    const previous = this.host().nativeElement.querySelector<HTMLElement>('.card--active');
+    if (previous && previous !== card) {
+      previous.classList.remove('card--active');
+      this.releaseAccent(previous);
+    }
+    card.classList.add('card--active');
+    const solid = this.traceAccent(cardId);
+    if (solid) {
+      card.style.setProperty('--card-accent', solid);
+    } else {
+      card.style.removeProperty('--card-accent');
+    }
+  }
+
+  private releaseAccent(card: HTMLElement): void {
+    if (card.dataset['nodeId'] !== this.hoveredCardId) {
+      card.style.removeProperty('--card-accent');
+    }
+  }
+
+  /** 彩色模式返回关系实色；默认模式不设变量，边框用样式里的蓝。 */
+  private traceAccent(cardId: string): string | null {
+    if (this.lineColorMode() !== 'item') {
+      return null;
+    }
+    const graph = this.liveGraph();
+    const data = untracked(() => this.graph());
+    if (!graph || !data) {
+      return null;
+    }
+    const edgeId = edgesToRoot(data, cardId)[0];
+    const solid = edgeId ? graph.getEdgeData(edgeId)?.data?.['edgeColorSolid'] : null;
+    return typeof solid === 'string' ? solid : null;
+  }
 
   /** 当前中心、分叉点、折叠占位和非工作项不能换根。 */
   private traceCandidate(id: string | undefined): string | null {
@@ -620,9 +662,15 @@ export class GraphCanvas {
   }
 
   protected onTraceMenuActive(active: boolean): void {
-    if (!active) {
-      this.host().nativeElement.querySelector('.card--active')?.classList.remove('card--active');
+    if (active) {
+      return;
     }
+    const card = this.host().nativeElement.querySelector<HTMLElement>('.card--active');
+    if (!card) {
+      return;
+    }
+    card.classList.remove('card--active');
+    this.releaseAccent(card);
   }
 
   /** 菜单跟着画面缩放，最小停在还能点中的尺寸。 */
@@ -802,17 +850,78 @@ export class GraphCanvas {
   }
 }
 
-/** 主卡片和分叉点不染色。悬停卡片或「+ N」时，前方连线变蓝或加深。 */
-function hoverCardId(target: EventTarget | null, data: DependencyGraph | null): string | null {
+interface HoverHit {
+  cardId: string;
+  /** 收起按钮的 fold key。空表示悬停的是卡片或「+ N」。 */
+  foldKey: string | null;
+}
+
+function sameHover(
+  hit: HoverHit | null,
+  cardId: string | null,
+  fold: { cardId: string; foldKey: string } | null,
+): boolean {
+  if (hit?.foldKey) {
+    return fold?.cardId === hit.cardId && fold.foldKey === hit.foldKey;
+  }
+  return !fold && cardId === (hit?.cardId ?? null);
+}
+
+/** 主卡片不染色。悬停收起按钮时单独记 fold key。 */
+function hoverHit(target: EventTarget | null, data: DependencyGraph | null): HoverHit | null {
   if (!(target instanceof Element) || !data) {
     return null;
+  }
+  const badge = target.closest<HTMLElement>('.card-badge');
+  if (badge) {
+    const cardId = badge.closest<HTMLElement>('article.card')?.dataset['nodeId'];
+    const foldKey = badge.dataset['fold'];
+    const item = cardId ? data.nodes.find((node) => node.id === cardId) : undefined;
+    if (!item || !foldKey || item.relationHub) {
+      return null;
+    }
+    return { cardId: item.id, foldKey };
   }
   const id = target.closest<HTMLElement>('article.card, .fold-summary')?.dataset['nodeId'];
   const item = id ? data.nodes.find((node) => node.id === id) : undefined;
   if (!item || item.id === data.rootId || item.relationHub) {
     return null;
   }
-  return item.id;
+  return { cardId: item.id, foldKey: null };
+}
+
+/** 悬停卡片走回主卡片；悬停收起按钮再带上到按钮为止的线。 */
+function hoverEdges(
+  data: DependencyGraph | null,
+  cardId: string | null,
+  fold: { cardId: string; foldKey: string } | null,
+): { id: string; trunk: boolean }[] {
+  if (!data) {
+    return [];
+  }
+  if (fold) {
+    return edgesToFold(data, fold.cardId, fold.foldKey);
+  }
+  if (!cardId) {
+    return [];
+  }
+  return edgesToRoot(data, cardId).map((id) => ({ id, trunk: false }));
+}
+
+/** 目标工作项到这颗收起按钮：沿途边，加上按钮所在的那段主干。 */
+function edgesToFold(
+  data: DependencyGraph,
+  cardId: string,
+  foldKey: string,
+): { id: string; trunk: boolean }[] {
+  const rows = edgesToRoot(data, cardId).map((id) => ({ id, trunk: false }));
+  if (foldKey === relationBundleFoldKey(cardId)) {
+    rows.push({ id: `bundle-trunk:${cardId}`, trunk: true });
+    return rows;
+  }
+  // 只到收起按钮。按钮后的分叉不染色。
+  rows.push({ id: `fold-trunk:${foldKey}`, trunk: true });
+  return rows;
 }
 
 /** 从这张卡片沿展开父级走回主卡片，边 id 与 trunkEdges 一致。 */

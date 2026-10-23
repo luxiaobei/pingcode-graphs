@@ -72,6 +72,18 @@ const graph: DependencyGraph = {
   ],
 };
 
+function verticalRuns(points: [number, number][]): number[] {
+  const xs: number[] = [];
+  for (let index = 1; index < points.length; index += 1) {
+    const from = points[index - 1];
+    const to = points[index];
+    if (from && to && Math.abs(from[0] - to[0]) < 1 && Math.abs(from[1] - to[1]) > 20) {
+      xs.push(from[0]);
+    }
+  }
+  return xs;
+}
+
 function spineOf(
   pts: [number, number][],
   side: 'left' | 'right' | 'top' | 'bottom',
@@ -138,6 +150,92 @@ describe('关联干线', () => {
     expect(
       Math.hypot((liveFold?.x ?? 0) - (baseFold?.x ?? 0), (liveFold?.y ?? 0) - (baseFold?.y ?? 0)),
     ).toBeGreaterThan(30);
+    const trunkPts =
+      (frozen.edges.find((edge) => edge.id === 'bundle-trunk:root')?.style?.['controlPoints'] as
+        | [number, number][]
+        | undefined) ?? [];
+    const trunkEnd = trunkPts[trunkPts.length - 1];
+    expect(trunkEnd?.[0]).toBeCloseTo(frozenFold?.x ?? NaN, 0);
+    expect(trunkEnd?.[1]).toBeCloseTo(frozenFold?.y ?? NaN, 0);
+  });
+
+  it('拖收起的「+ N」时，关联主干不在旧位置留一截竖线', () => {
+    const rootId = 'root';
+    const parentFold = `fold:${rootId}::parent`;
+    const bundleFold = `fold:${rootId}::bundle`;
+    const collapsed: DependencyGraph = {
+      rootId,
+      depth: 1,
+      nodes: [
+        { id: rootId, title: 'root', depth: 0 },
+        {
+          id: parentFold,
+          title: '+ 1',
+          depth: 1,
+          revealedByAnchorId: rootId,
+          foldSummary: {
+            key: `${rootId}::parent`,
+            relationType: 'parent',
+            count: 1,
+            expanded: false,
+          },
+        },
+        {
+          id: bundleFold,
+          title: '+ 10',
+          depth: 1,
+          revealedByAnchorId: rootId,
+          foldSummary: {
+            key: `${rootId}::bundle`,
+            relationType: 'bundle',
+            count: 10,
+            expanded: false,
+          },
+        },
+      ],
+      edges: [
+        {
+          id: 'e-p',
+          source: rootId,
+          target: parentFold,
+          relationType: 'parent',
+          label: '父工作项',
+        },
+        {
+          id: 'e-b',
+          source: rootId,
+          target: bundleFold,
+          relationType: 'bundle',
+          label: '关联',
+        },
+      ],
+    };
+    const start = { x: 180, y: -280, side: 'top' as const };
+    const layout = new Map<string, GraphNodePosition>([
+      [rootId, { x: 0, y: 0 }],
+      [parentFold, { x: -180, y: -280, side: 'top' }],
+      [bundleFold, start],
+    ]);
+    const moved = new Map(layout);
+    moved.set(bundleFold, { ...start, x: start.x + 220 });
+    const { edges } = trunkEdges(collapsed, moved, {
+      freezeDrag: { id: bundleFold, pos: start },
+    });
+    const trunkPts =
+      (edges.find((edge) => edge.id === `bundle-trunk:${rootId}`)?.style?.['controlPoints'] as
+        | [number, number][]
+        | undefined) ?? [];
+    const edgePts =
+      (edges.find((edge) => edge.target === bundleFold && edge.data?.['trunk'] !== true)?.style?.[
+        'controlPoints'
+      ] as [number, number][] | undefined) ?? [];
+    const trunkVerticals = verticalRuns(trunkPts);
+    const edgeVerticals = verticalRuns(edgePts);
+    expect(edgeVerticals.length).toBeGreaterThan(0);
+    expect(trunkVerticals.some((x) => Math.abs(x - start.x) < 2)).toBe(false);
+    expect(
+      trunkVerticals.some((x) => edgeVerticals.some((other) => Math.abs(other - x) < 2)),
+    ).toBe(true);
   });
 
   it('拖关联组内叶卡后，「关联」文案世界坐标不变（无需人工点拖）', () => {

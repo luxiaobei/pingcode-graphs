@@ -1,5 +1,5 @@
 import { fetch } from "@pc-nexus/network";
-import { AgentError, type ChatMessage, type FunctionTool, type ModelMessage } from "./contract.js";
+import { AgentError, MAX_OUTPUT_TOKENS, type ChatMessage, type FunctionTool, type ModelMessage } from "./contract.js";
 
 const CHAT_COMPLETIONS_URL = "https://api.deepseek.com/chat/completions";
 const MODEL = "deepseek-flash";
@@ -19,6 +19,7 @@ export async function completeChat(
         model: MODEL,
         messages,
         temperature: 0.2,
+        max_tokens: MAX_OUTPUT_TOKENS,
         stream: false,
         thinking: { type: "disabled" },
     };

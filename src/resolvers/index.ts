@@ -1,6 +1,6 @@
 import { Resolver } from "@pc-nexus/core";
 import { answerGraphQuestion } from "../agent/service.js";
-import type { AgentAnswer } from "../agent/contract.js";
+import type { AgentAnswer, HistoryMessage } from "../agent/contract.js";
 import {
     getDisplaySettings,
     saveDisplaySettings,
@@ -49,9 +49,11 @@ resolver.define<unknown, void>("saveDisplaySettings", async (context, payload) =
     await saveDisplaySettings(context, payload);
 });
 
-resolver.define<{ question: string; focusNodeId?: string; }, AgentAnswer>("askGraphAgent", async (context, payload) => {
-    const answer = await answerGraphQuestion(context, payload);
-    return answer;
+resolver.define<
+    { question: string; focusNodeId?: string; messages?: HistoryMessage[] },
+    AgentAnswer
+>("askGraphAgent", async (context, payload) => {
+    return answerGraphQuestion(context, payload);
 });
 
 resolver.define<unknown, SyncScopeResult>("syncScope", async (_context, payload) => {

@@ -9,13 +9,15 @@ import {
     presentNode,
     clipToolContent,
     MAX_TOOL_RESULT_CHARS,
+    GRAPH_AGENT_TOOLS,
     type AskInput,
     type ChatMessage,
     type ToolCommand,
     type ToolResult,
 } from "./contract.js";
 import { parseChatCompletion } from "./deepseek.js";
-import { runAgentLoop, type AgentRuntime } from "./loop.js";
+import { GRAPH_AGENT_PROMPT } from "./prompt.js";
+import { contextTokens, runAgentLoop, type AgentRuntime } from "./loop.js";
 
 describe("normalizeAskInput", () => {
     it("requires a question", () => {
@@ -44,6 +46,47 @@ describe("normalizeAskInput", () => {
         });
         assert.equal(input.focusNodeId, "work_item:abc");
         assert.deepEqual(input.messages, []);
+    });
+
+    it("keeps alternating history that ends with assistant", () => {
+        const input = normalizeAskInput({
+            question: "那子项呢？",
+            messages: [
+                { role: "user", content: "父项是谁？" },
+                { role: "assistant", content: "CSZB-3 是父项。" },
+            ],
+        });
+        assert.equal(input.messages[1]?.content, "CSZB-3 是父项。");
+    });
+
+    it("rejects history that does not end with assistant", () => {
+        assert.throws(() => normalizeAskInput({
+            question: "那子项呢？",
+            messages: [{ role: "user", content: "父项是谁？" }],
+        }), /assistant 结尾/);
+    });
+
+    it("rejects history that does not start with user", () => {
+        assert.throws(() => normalizeAskInput({
+            question: "那子项呢？",
+            messages: [
+                { role: "assistant", content: "先说结论。" },
+                { role: "user", content: "父项是谁？" },
+            ],
+        }), /交替/);
+    });
+
+    it("rejects history that overflows the character budget", () => {
+        const chunk = "问".repeat(2000);
+        assert.throws(() => normalizeAskInput({
+            question: chunk,
+            messages: [
+                { role: "user", content: chunk },
+                { role: "assistant", content: chunk },
+                { role: "user", content: chunk },
+                { role: "assistant", content: chunk },
+            ],
+        }), /合计最长/);
     });
 });
 
@@ -231,6 +274,105 @@ describe("runAgentLoop", () => {
         assert.deepEqual(toolCounts, [3, 0]);
         assert.equal(answer.answer, "先停在已查到的关系上。");
         assert.equal(answer.steps.length, 1);
+    });
+
+    it("places history before the current question", async () => {
+        const input = ask("那子项呢？", "work_item:abc");
+        input.messages = [
+            { role: "user", content: "父项是谁？" },
+            { role: "assistant", content: "CSZB-3 是父项。" },
+        ];
+        const seen: ChatMessage[] = [];
+        await runAgentLoop(input, runtime({
+            async complete(messages) {
+                seen.push(...messages);
+                return { content: "子项还没查到。", toolCalls: [] };
+            },
+            async execute() {
+                return okResult();
+            },
+        }));
+        const users = seen.filter((message) => message.role === "user");
+        assert.equal(users[0]?.content, "父项是谁？");
+        assert.match(users[1]?.content ?? "", /work_item:abc/);
+        assert.match(users[1]?.content ?? "", /那子项呢/);
+    });
+
+    it("drops history that does not fit and says so", async () => {
+        const input = ask("父项是谁？");
+        input.messages = [
+            { role: "user", content: "之前问过阻塞" },
+            { role: "assistant", content: "没有阻塞。" },
+        ];
+        const bare: ChatMessage[] = [
+            { role: "system", content: GRAPH_AGENT_PROMPT },
+            { role: "user", content: "父项是谁？" },
+        ];
+        const budget = Math.ceil(contextTokens(bare, GRAPH_AGENT_TOOLS));
+        let sawHistory = false;
+        const answer = await runAgentLoop(input, runtime({
+            async complete(messages) {
+                sawHistory = messages.some((message) => message.role === "user" && message.content === "之前问过阻塞");
+                return { content: "父项是 CSZB-3。", toolCalls: [] };
+            },
+            async execute() {
+                return okResult();
+            },
+        }), undefined, budget);
+        assert.equal(sawHistory, false);
+        assert.match(answer.answer, /CSZB-3/);
+        assert.match(answer.answer, /较早的对话已不在上下文中/);
+    });
+
+    it("drops the oldest tool exchange before history", async () => {
+        const input = ask("继续");
+        input.messages = [
+            { role: "user", content: "父项是谁？" },
+            { role: "assistant", content: "CSZB-3 是父项。" },
+        ];
+        const seeded: ChatMessage[] = [
+            { role: "system", content: GRAPH_AGENT_PROMPT },
+            { role: "user", content: "父项是谁？" },
+            { role: "assistant", content: "CSZB-3 是父项。" },
+            { role: "user", content: "继续" },
+        ];
+        const budget = Math.ceil(contextTokens(seeded, GRAPH_AGENT_TOOLS));
+        const sawTool: boolean[] = [];
+        let round = 0;
+        const answer = await runAgentLoop(input, runtime({
+            async complete(messages) {
+                sawTool.push(messages.some((message) => message.role === "tool"));
+                round += 1;
+                if (round === 1) {
+                    return {
+                        content: null,
+                        toolCalls: [{ id: "call-1", name: "search_nodes", arguments: "{\"query\":\"登录\"}" }],
+                    };
+                }
+                return { content: "沿用上一轮的父项结论。", toolCalls: [] };
+            },
+            async execute() {
+                return { ok: true, summary: "大结果", body: { text: "x".repeat(8000) } };
+            },
+        }), undefined, budget);
+        assert.deepEqual(sawTool, [false, false]);
+        assert.match(answer.answer, /沿用上一轮/);
+        assert.doesNotMatch(answer.answer, /较早的对话/);
+    });
+
+    it("stops when the current question still does not fit", async () => {
+        let calls = 0;
+        const answer = await runAgentLoop(ask("父项是谁？"), runtime({
+            async complete() {
+                calls += 1;
+                return { content: "不会被调用。", toolCalls: [] };
+            },
+            async execute() {
+                return okResult();
+            },
+        }), undefined, 1);
+        assert.equal(calls, 0);
+        assert.equal(answer.answer, "上下文过长，请新开一轮");
     });
 });
 

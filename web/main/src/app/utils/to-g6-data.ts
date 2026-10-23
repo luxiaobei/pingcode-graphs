@@ -93,7 +93,8 @@ function applyLineColorMode(edge: EdgeData, mode: LineColorMode): EdgeData {
       ...edge.data,
       edgeColorSolid: DEFAULT_EDGE_COLOR,
       edgeColorFaded: DEFAULT_EDGE_COLOR,
-      edgeColor: DEFAULT_EDGE_COLOR,
+      // 叶边已卸叠。主干同色再描会在圆角处错开；悬停时 link 再盖成蓝色。
+      edgeColor: edge.data?.['trunk'] === true ? 'transparent' : DEFAULT_EDGE_COLOR,
       labelColor: EDGE_LABEL_COLOR,
     },
   };

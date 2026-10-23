@@ -20,4 +20,18 @@
       <div class="ai-analysis__answer" [innerHTML]="answerHtml()"></div>
     }
   </thy-content>
+
+  <form class="ai-analysis__composer" (ngSubmit)="submit()">
+    <textarea
+      thyInput
+      name="prompt"
+      rows="3"
+      [attr.maxlength]="maxQuestionLength"
+      placeholder="输入问题，Enter 发送"
+      aria-label="分析问题"
+      [(ngModel)]="prompt"
+      (keydown)="onPromptKeydown($event)"
+    ></textarea>
+    <button thyButton="primary" type="submit" [disabled]="!canSubmit()">分析</button>
+  </form>
 </thy-layout>

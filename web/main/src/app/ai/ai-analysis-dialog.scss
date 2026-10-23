@@ -114,3 +114,26 @@
   font-size: 12px;
   color: #7f1d1d;
 }
+
+.ai-analysis__composer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid #e6e8eb;
+  background: #fff;
+
+  textarea {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 64px;
+    max-height: 140px;
+    resize: vertical;
+    line-height: 1.5;
+  }
+
+  button {
+    flex: 0 0 auto;
+  }
+}

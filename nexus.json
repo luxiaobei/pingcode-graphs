@@ -1,4 +1,5 @@
 {
+  "remoteUrl": "https://developer.pingcode.com/",
   "serve": {
     "resources": {
       "main": { "port": 3100 }

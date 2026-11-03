@@ -276,7 +276,7 @@ function withoutActive(node: KgNode): Partial<KgNode> {
 }
 
 async function fetchOne(path: string, notFoundMessage: string): Promise<ApiRecord> {
-    const response = await api.invoke(path);
+    const response = await api.invoke(path, { as: "app" });
     if (response.status === 404) {
         throw new Error(notFoundMessage);
     }
@@ -297,7 +297,7 @@ async function listAll(path: string, errorMessage: string): Promise<ApiRecord[]>
     let pageIndex = 0;
     const joiner = path.includes("?") ? "&" : "?";
     while (pageIndex < MAX_PAGES) {
-        const response = await api.invoke(`${path}${joiner}page_index=${pageIndex}&page_size=${PAGE_SIZE}`);
+        const response = await api.invoke(`${path}${joiner}page_index=${pageIndex}&page_size=${PAGE_SIZE}`, { as: "app" });
         if (!response.ok) {
             const errorBody = await response.text();
             throw new Error(errorBody || errorMessage);

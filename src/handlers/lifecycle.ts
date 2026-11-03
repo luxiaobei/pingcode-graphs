@@ -73,7 +73,7 @@ async function listAll<T extends { id?: string }>(path: string, errorMessage: st
     const joiner = path.includes("?") ? "&" : "?";
 
     while (true) {
-        const response = await api.invoke(`${path}${joiner}page_index=${pageIndex}&page_size=${PAGE_SIZE}`);
+        const response = await api.invoke(`${path}${joiner}page_index=${pageIndex}&page_size=${PAGE_SIZE}`, { as: "app" });
         if (!response.ok) {
             const errorBody = await response.text();
             throw new Error(errorBody || errorMessage);

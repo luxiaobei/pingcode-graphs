@@ -442,7 +442,7 @@ function loadWorkItemType(typeId: string): Promise<ApiObject | undefined> {
 }
 
 async function fetchDetail(path: string): Promise<ApiObject | undefined> {
-    const response = await api.invoke(path);
+    const response = await api.invoke(path, { as: "app" });
     if (response.status === 404) {
         return undefined;
     }

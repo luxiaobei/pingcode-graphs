@@ -240,7 +240,7 @@ async function listPages<T extends { id?: string }>(path: string, errorMessage: 
     let pageIndex = 0;
     const joiner = path.includes("?") ? "&" : "?";
     while (true) {
-        const response = await api.invoke(`${path}${joiner}page_index=${pageIndex}&page_size=${PAGE_SIZE}`);
+        const response = await api.invoke(`${path}${joiner}page_index=${pageIndex}&page_size=${PAGE_SIZE}`, { as: "app" });
         if (!response.ok) {
             const errorBody = await response.text();
             throw new Error(errorBody || errorMessage);
